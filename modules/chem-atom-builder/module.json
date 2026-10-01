@@ -5,7 +5,12 @@
   "title": { "en": "Atom Builder" },
   "subject": "chemistry",
   "kit": "chemistry",
-  "concepts": ["sci.chem.atom.structure", "sci.chem.atom.shells", "sci.chem.atom.ions"],
+  "concepts": [
+    "sci.chem.atom.structure",
+    "sci.chem.atom.shells",
+    "sci.chem.atom.ions",
+    "sci.chem.atom.isotopes"
+  ],
   "boards": ["CBSE", "ICSE", "STATE"],
   "levels": [
     { "id": "class9-10", "classes": [9, 10], "features": ["particles", "shells", "ions"] }
@@ -16,9 +21,67 @@
   "interactions": {
     "manipulate": ["drag-particles", "snap-to-nucleus", "snap-to-shell", "orbit-camera"],
     "simulate": ["update-element", "update-charge", "update-electron-configuration"],
-    "missions": [],
-    "check": []
+    "missions": ["build-carbon-12", "make-na-plus", "build-carbon-14", "make-cl-minus"],
+    "check": [
+      "assess.atom.carbon12.01",
+      "assess.atom.carbon12.02",
+      "assess.atom.sodium-ion.01",
+      "assess.atom.sodium-ion.02",
+      "assess.atom.carbon14.01",
+      "assess.atom.carbon14.02",
+      "assess.atom.chloride-ion.01",
+      "assess.atom.chloride-ion.02"
+    ]
   },
-  "missions": [],
+  "missions": [
+    {
+      "id": "build-carbon-12",
+      "title": "Build carbon-12",
+      "goalText": "Build a neutral carbon atom with 6 protons, 6 neutrons, and 6 electrons.",
+      "goal": { "symbol": "C", "protons": 6, "neutrons": 6, "electrons": 6, "massNumber": 12, "charge": 0 },
+      "hints": [
+        "Start with the proton count.",
+        "Carbon is C. Set 6 protons and 6 neutrons.",
+        "Carbon-12 needs 6 protons and 6 neutrons. Neutral means 6 electrons too."
+      ],
+      "onComplete": { "triggerAssessments": ["assess.atom.carbon12.01", "assess.atom.carbon12.02"] }
+    },
+    {
+      "id": "make-na-plus",
+      "title": "Make Na+",
+      "goalText": "Build Na+ with 11 protons, 12 neutrons, 10 electrons, and configuration 2,8.",
+      "goal": { "symbol": "Na", "protons": 11, "neutrons": 12, "electrons": 10, "charge": 1, "electronConfiguration": [2, 8] },
+      "hints": [
+        "Check what Na+ says about charge.",
+        "Sodium has 11 protons; +1 means one fewer electron.",
+        "Use 11 protons, 12 neutrons, and 10 electrons. Those electrons fill 2,8."
+      ],
+      "onComplete": { "triggerAssessments": ["assess.atom.sodium-ion.01", "assess.atom.sodium-ion.02"] }
+    },
+    {
+      "id": "build-carbon-14",
+      "title": "Build carbon-14",
+      "goalText": "Build carbon-14 with 6 protons, 8 neutrons, 6 electrons, and charge 0.",
+      "goal": { "symbol": "C", "massNumber": 14, "charge": 0, "protons": 6, "neutrons": 8, "electrons": 6 },
+      "hints": [
+        "Compare the mass number with the proton count.",
+        "Carbon has 6 protons. Use mass number 14 to find its neutrons.",
+        "14 - 6 = 8 neutrons. Charge 0 means 6 electrons."
+      ],
+      "onComplete": { "triggerAssessments": ["assess.atom.carbon14.01", "assess.atom.carbon14.02"] }
+    },
+    {
+      "id": "make-cl-minus",
+      "title": "Make Cl-",
+      "goalText": "Build Cl- with 17 protons, 18 neutrons, 18 electrons, and a complete outer shell.",
+      "goal": { "symbol": "Cl", "charge": -1, "protons": 17, "neutrons": 18, "electrons": 18, "electronConfiguration": [2, 8, 8], "outerShellComplete": true },
+      "hints": [
+        "A negative charge means an extra electron.",
+        "Chlorine has 17 protons; add one electron for -1.",
+        "Use 17 protons, 18 neutrons, and 18 electrons. Shells 2,8,8 make a complete outer shell."
+      ],
+      "onComplete": { "triggerAssessments": ["assess.atom.chloride-ion.01", "assess.atom.chloride-ion.02"] }
+    }
+  ],
   "rulesPlugin": "./src/index.ts"
 }

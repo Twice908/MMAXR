@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isKnownConceptId } from "@mma/curriculum";
 
 const identifierSchema = z
   .string()
@@ -74,11 +75,13 @@ const interactionsSchema = z
 const missionSchema = z
   .object({
     id: identifierSchema,
+    title: z.string().min(1),
+    goalText: z.string().min(1),
     goal: z.record(z.string(), z.json()),
     hints: z.array(z.string()),
     onComplete: z
       .object({
-        triggerAssessment: identifierSchema,
+        triggerAssessments: z.array(identifierSchema).min(1),
       })
       .strict()
       .optional(),
@@ -108,6 +111,16 @@ export const moduleManifestSchema = z
   })
   .strict()
   .superRefine((manifest, context) => {
+    for (const [index, conceptId] of manifest.concepts.entries()) {
+      if (!isKnownConceptId(conceptId)) {
+        context.addIssue({
+          code: "custom",
+          path: ["concepts", index],
+          message: `Unknown concept ID: ${conceptId}`,
+        });
+      }
+    }
+
     if (manifest.releaseStatus === "release") {
       if (manifest.interactions.missions.length === 0 || manifest.missions.length === 0) {
         context.addIssue({
@@ -157,13 +170,14 @@ export const moduleManifestSchema = z
 
     const assessmentIds = new Set(manifest.interactions.check);
     for (const [index, mission] of manifest.missions.entries()) {
-      const assessmentId = mission.onComplete?.triggerAssessment;
-      if (assessmentId && !assessmentIds.has(assessmentId)) {
-        context.addIssue({
-          code: "custom",
-          path: ["missions", index, "onComplete", "triggerAssessment"],
-          message: `Assessment "${assessmentId}" is missing from interactions.check`,
-        });
+      for (const assessmentId of mission.onComplete?.triggerAssessments ?? []) {
+        if (!assessmentIds.has(assessmentId)) {
+          context.addIssue({
+            code: "custom",
+            path: ["missions", index, "onComplete", "triggerAssessments"],
+            message: `Assessment "${assessmentId}" is missing from interactions.check`,
+          });
+        }
       }
     }
   });

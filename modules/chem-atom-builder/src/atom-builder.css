@@ -47,7 +47,39 @@
 .eyebrow { color: var(--teal); }
 .builder-title h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 23px; font-weight: 500; }
 .reset-atom { justify-self: end; }
-.builder-content { min-height: calc(100dvh - 76px); display: grid; grid-template-columns: 248px minmax(360px, 1fr) 280px; }
+.builder-content { min-height: calc(100dvh - 190px); display: grid; grid-template-columns: 248px minmax(360px, 1fr) 280px; }
+.lesson-panel { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 24px; align-items: center; padding: 15px 24px; border-bottom: 1px solid var(--line); background: #fff; }
+.lesson-copy { min-width: 0; }
+.lesson-step { margin: 0 0 4px; color: var(--teal); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; }
+.lesson-copy h2, .assessment-card h2, .lesson-summary h2 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 21px; font-weight: 500; }
+.lesson-copy > p:not(.lesson-step):not(.mission-progress) { margin: 5px 0 0; font-size: 13px; line-height: 1.45; }
+.mission-progress { margin: 6px 0 0; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.lesson-controls { display: flex; align-items: center; gap: 8px; }
+.lesson-controls button, .assessment-continue { min-height: 38px; padding: 0 14px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: #fff; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.lesson-controls button:hover:not(:disabled), .assessment-continue:hover { border-color: var(--teal); }
+.lesson-controls button:disabled { opacity: .5; cursor: not-allowed; }
+.lesson-controls [data-command="lesson:check"] { border-color: var(--teal); color: white; background: var(--teal); }
+.lesson-controls [data-command="lesson:check"]:disabled { color: var(--ink); background: #fff; }
+.hint-feedback, .mission-feedback { grid-column: 1 / -1; margin: 0; font-size: 13px; line-height: 1.45; }
+.hint-feedback { color: var(--teal); }
+.mission-feedback { color: #7c3225; }
+.assessment-card { padding: 18px 24px; border-bottom: 1px solid var(--line); background: #fffaf0; }
+.assessment-card h2 { max-width: 900px; margin: 3px 0 14px; font-size: 19px; line-height: 1.35; }
+.assessment-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; max-width: 1000px; }
+.assessment-options button { min-height: 44px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: white; text-align: left; font: inherit; font-size: 13px; line-height: 1.35; cursor: pointer; }
+.assessment-options button:hover:not(:disabled) { border-color: var(--teal); }
+.assessment-options button:disabled { cursor: default; }
+.assessment-options button.is-correct, .assessment-options button.is-answer { border-color: var(--teal); background: #edf8f2; }
+.assessment-options button.is-incorrect { border-color: var(--coral); background: #fff1ed; }
+.assessment-feedback { max-width: 1000px; margin: 12px 0 0; font-size: 13px; line-height: 1.5; }
+.assessment-continue { margin-top: 12px; color: white; border-color: var(--teal); background: var(--teal); }
+.lesson-summary { padding: 18px 24px; border-bottom: 1px solid var(--line); background: #edf8f2; }
+.lesson-summary p { margin: 7px 0 0; font-size: 13px; line-height: 1.45; }
+.free-play-status { margin: 0; padding: 10px 24px; border-bottom: 1px solid var(--line); color: var(--muted); background: #fff; font-size: 12px; font-weight: 700; }
+.dev-event-log { position: fixed; z-index: 10; right: 12px; bottom: 12px; width: min(440px, calc(100vw - 24px)); max-height: min(45vh, 360px); overflow: auto; padding: 10px 12px; border: 1px solid #607274; border-radius: 6px; color: #eff8f5; background: #1e292dee; font: 11px/1.4 ui-monospace, monospace; }
+.dev-event-log summary { cursor: pointer; font-weight: 700; }
+.dev-event-log ol { display: grid; gap: 5px; padding-left: 22px; overflow-wrap: anywhere; }
+[hidden] { display: none !important; }
 .particle-rail, .atom-inspector { background: #ffffffdc; }
 .particle-rail { padding: 24px 18px; border-right: 1px solid var(--line); }
 .rail-heading { gap: 10px; color: var(--muted); }
@@ -93,6 +125,7 @@
 
 @media (max-width: 920px) {
   .builder-content { grid-template-columns: 210px minmax(0, 1fr); }
+  .lesson-panel { padding: 14px 18px; }
   .atom-inspector { grid-column: 1 / -1; border-top: 1px solid var(--line); border-left: 0; padding: 18px 22px; }
   .element-summary { padding-bottom: 14px; }
   .property-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; }
@@ -106,10 +139,17 @@
   .builder-title h1 { font-size: 21px; }
   .reset-atom { grid-column: 2; grid-row: 1 / 3; }
   .builder-content { display: flex; flex-direction: column; }
+  .lesson-panel { grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 14px; }
+  .lesson-controls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .lesson-controls button { min-width: 0; padding: 0 7px; }
+  .assessment-card, .lesson-summary { padding: 16px 14px; }
+  .assessment-options { grid-template-columns: 1fr; }
+  .free-play-status { padding: 10px 14px; }
   .particle-rail { order: 2; padding: 14px; border-top: 1px solid var(--line); border-right: 0; }
   .atom-workspace { order: 1; padding: 12px 12px 0; }
   .scene-viewport { min-height: 43vh; min-height: min(45vh, 400px); }
   .atom-inspector { order: 3; padding: 16px 14px; }
+  .builder-content { min-height: auto; }
   .particle-row { min-height: 62px; }
   .rail-footer { margin-top: 12px; }
   .property-list { grid-template-columns: 1fr 1fr; column-gap: 14px; }

@@ -42,6 +42,57 @@ test("lazy-loads Atom Builder and mounts the screen canvas", async ({ page }) =>
   await expectCanvasHasRenderedPixels(page, canvas);
 });
 
+test("completes M2 and answers its linked questions", async ({ page }) => {
+  await page.goto("http://127.0.0.1:5174");
+  await expect(page.getByRole("heading", { name: "Build carbon-12" })).toBeVisible();
+  await expect(page.locator("#mission-progress")).toHaveText("Progress 1/4");
+
+  await addParticles(page, "Add proton", 5);
+  await addParticles(page, "Add neutron", 6);
+  await addParticles(page, "Add electron", 5);
+  await page.getByRole("button", { name: "Check", exact: true }).click();
+  await expect(page.locator("#mission-feedback")).toContainText("Goal met");
+  await page.getByRole("button", { name: "B. 6", exact: true }).click();
+  await expect(page.locator("#assessment-feedback")).toContainText("Correct.");
+  await page.getByRole("button", { name: "Next question" }).click();
+  await page.getByRole("button", { name: "D. 6", exact: true }).click();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+
+  await expect(page.getByRole("heading", { name: "Make Na+" })).toBeVisible();
+  await page.getByRole("button", { name: "Reset atom" }).click();
+  await addParticles(page, "Add proton", 10);
+  await addParticles(page, "Add neutron", 12);
+  await addParticles(page, "Add electron", 9);
+  await expect(page.locator("#element-symbol")).toHaveText("Na");
+  await expect(page.locator("#atom-charge")).toHaveText("+1");
+  await expect(page.locator("#electron-configuration")).toHaveText("2,8");
+  await page.getByRole("button", { name: "Check", exact: true }).click();
+  await expect(page.locator("#mission-feedback")).toContainText("Goal met");
+  await page.getByRole("button", { name: "A. 10", exact: true }).click();
+  await expect(page.locator("#assessment-feedback")).toContainText("Correct.");
+  await page.getByRole("button", { name: "Next question" }).click();
+  await page.getByRole("button", { name: "C. 2,8", exact: true }).click();
+  await expect(page.locator("#assessment-feedback")).toContainText("Correct.");
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Build carbon-14" })).toBeVisible();
+
+  const eventLog = page.locator("#dev-event-log");
+  await expect(eventLog).toBeVisible();
+  await eventLog.locator("summary").click();
+  await expect(eventLog).toContainText("mission_completed");
+  await expect(eventLog).toContainText("assessment_answered");
+});
+
+async function addParticles(
+  page: import("@playwright/test").Page,
+  buttonName: string,
+  count: number,
+): Promise<void> {
+  for (let index = 0; index < count; index += 1) {
+    await page.getByRole("button", { name: buttonName, exact: true }).click();
+  }
+}
+
 async function expectCanvasHasRenderedPixels(
   page: import("@playwright/test").Page,
   canvas: import("@playwright/test").Locator,

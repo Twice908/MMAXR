@@ -8,7 +8,8 @@ MMA-XR (working title): an interactive WebXR learning platform for Math Maam Aca
 
 Current status (update this block as work completes):
 - Done: Phase 0 tasks 1-4 (monorepo + CI, `packages/schema`, `packages/engine-core`, `packages/kits/chemistry`).
-- Next: Phase 1, screen-mode Atom Builder scene (no missions yet).
+- Done: Phase 1 task 6 lesson flow (screen-mode missions, assessments, and local-only learning events); Atom Builder remains `draft` pending assessment review.
+- Next: Review the eight assessment items, then flip `releaseStatus` to `release` in `modules/chem-atom-builder/module.json`.
 - Not started: audio/voice (Phase 2), AR/VR (Phase 3), portal link (Phase 4).
 
 ## 2. Phase gates (do not build ahead)

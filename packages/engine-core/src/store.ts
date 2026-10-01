@@ -174,5 +174,8 @@ function emitLearningEvent(
     case "hint_used":
       events.emit("hint_used", event);
       break;
+    case "assessment_answered":
+      events.emit("assessment_answered", event);
+      break;
   }
 }

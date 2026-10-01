@@ -1,0 +1,18 @@
+{
+  "sci.chem.atom.structure": {
+    "classes": [9, 10],
+    "boards": ["CBSE", "ICSE", "STATE"]
+  },
+  "sci.chem.atom.shells": {
+    "classes": [9, 10],
+    "boards": ["CBSE", "ICSE", "STATE"]
+  },
+  "sci.chem.atom.ions": {
+    "classes": [9, 10],
+    "boards": ["CBSE", "ICSE", "STATE"]
+  },
+  "sci.chem.atom.isotopes": {
+    "classes": [9, 10],
+    "boards": ["CBSE", "ICSE", "STATE"]
+  }
+}

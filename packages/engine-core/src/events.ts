@@ -10,7 +10,7 @@ export interface LearningEventPayloads {
     missionId: string;
     attempts: number;
     hintsUsed: number;
-    assessmentId?: string;
+    assessmentIds?: readonly string[];
   };
   mission_failed: {
     missionId: string;
@@ -22,6 +22,11 @@ export interface LearningEventPayloads {
     missionId: string;
     hintLevel: HintLevel;
     hintIndex: number;
+  };
+  assessment_answered: {
+    assessmentId: string;
+    selectedOptionIndex: number;
+    correct: boolean;
   };
 }
 

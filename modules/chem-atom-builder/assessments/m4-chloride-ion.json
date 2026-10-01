@@ -1,0 +1,30 @@
+[
+  {
+    "id": "assess.atom.chloride-ion.01",
+    "prompt": "The Cl- build has 17 protons. How many electrons should it have?",
+    "options": [
+      { "id": "a", "text": "17" },
+      { "id": "b", "text": "1" },
+      { "id": "c", "text": "18" },
+      { "id": "d", "text": "16" }
+    ],
+    "correctOptionIndex": 2,
+    "explanation": "Cl- has 18 electrons. You may have confused the 17 protons with the electron count; the -1 charge means one extra electron.",
+    "conceptIds": ["sci.chem.atom.ions"],
+    "reviewStatus": "pending"
+  },
+  {
+    "id": "assess.atom.chloride-ion.02",
+    "prompt": "Which description matches the Cl- build?",
+    "options": [
+      { "id": "a", "text": "Configuration 2,8,8; complete outer shell" },
+      { "id": "b", "text": "Configuration 2,8; complete outer shell" },
+      { "id": "c", "text": "Configuration 2,8,8; incomplete outer shell" },
+      { "id": "d", "text": "Configuration 17,18; complete outer shell" }
+    ],
+    "correctOptionIndex": 0,
+    "explanation": "Cl- has configuration 2,8,8 and a complete outer shell. You may have stopped at 17 electrons or counted the total without checking how the electrons are arranged in shells.",
+    "conceptIds": ["sci.chem.atom.shells", "sci.chem.atom.ions"],
+    "reviewStatus": "pending"
+  }
+]

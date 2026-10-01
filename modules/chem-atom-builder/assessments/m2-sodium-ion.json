@@ -1,0 +1,30 @@
+[
+  {
+    "id": "assess.atom.sodium-ion.01",
+    "prompt": "The Na+ build has 11 protons. How many electrons should it have?",
+    "options": [
+      { "id": "a", "text": "10" },
+      { "id": "b", "text": "11" },
+      { "id": "c", "text": "12" },
+      { "id": "d", "text": "1" }
+    ],
+    "correctOptionIndex": 0,
+    "explanation": "Na+ has 10 electrons. You may have treated +1 as one electron, or kept the 11 electrons of a neutral atom; here the positive charge means one fewer electron than protons.",
+    "conceptIds": ["sci.chem.atom.ions"],
+    "reviewStatus": "pending"
+  },
+  {
+    "id": "assess.atom.sodium-ion.02",
+    "prompt": "Which electron configuration matches the Na+ build?",
+    "options": [
+      { "id": "a", "text": "2,8,1" },
+      { "id": "b", "text": "10" },
+      { "id": "c", "text": "2,8" },
+      { "id": "d", "text": "2,8,8" }
+    ],
+    "correctOptionIndex": 2,
+    "explanation": "The Na+ build has configuration 2,8. You may have used the proton count to add a third-shell electron, instead of accounting for the +1 charge and 10 electrons.",
+    "conceptIds": ["sci.chem.atom.shells", "sci.chem.atom.ions"],
+    "reviewStatus": "pending"
+  }
+]

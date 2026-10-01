@@ -29,9 +29,11 @@ const validManifest = {
   missions: [
     {
       id: "make-na-ion",
+      title: "Make Na+",
+      goalText: "Build a sodium ion with a +1 charge.",
       goal: { symbol: "Na", charge: 1 },
       hints: ["A +1 ion has lost one electron."],
-      onComplete: { triggerAssessment: "assess.atom.ions.02" },
+      onComplete: { triggerAssessments: ["assess.atom.ions.02"] },
     },
   ],
   rulesPlugin: "./rules/index.ts",
@@ -114,12 +116,24 @@ describe("moduleManifestSchema", () => {
       missions: [
         {
           ...validManifest.missions[0],
-          onComplete: { triggerAssessment: "assess.atom.missing.01" },
+          onComplete: { triggerAssessments: ["assess.atom.missing.01"] },
         },
       ],
     });
 
     expect(result.success).toBe(false);
+  });
+
+  it("rejects unknown curriculum concept IDs", () => {
+    const result = moduleManifestSchema.safeParse({
+      ...validManifest,
+      concepts: ["sci.chem.atom.not-registered"],
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.message.includes("Unknown concept ID"))).toBe(true);
+    }
   });
 
   it("rejects interactions that name an undefined mission", () => {

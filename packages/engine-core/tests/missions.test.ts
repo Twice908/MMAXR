@@ -10,9 +10,11 @@ import {
 
 const mission: MissionDefinition = {
   id: "make-na-ion",
+  title: "Make Na+",
+  goalText: "Build a sodium ion with a +1 charge.",
   goal: { symbol: "Na", charge: 1 },
   hints: ["Think about sodium's electrons.", "A +1 ion has lost an electron.", "Remove one electron."],
-  onComplete: { triggerAssessment: "assess.atom.ions.02" },
+  onComplete: { triggerAssessments: ["assess.atom.ions.02", "assess.atom.ions.03"] },
 };
 
 describe("mission evaluation", () => {
@@ -29,14 +31,14 @@ describe("mission evaluation", () => {
       payload: { missionId: mission.id },
     });
     expect(result.progress).toEqual({ status: "completed", attempts: 1, hintsUsed: 0 });
-    expect(result.assessmentId).toBe("assess.atom.ions.02");
+    expect(result.assessmentIds).toEqual(["assess.atom.ions.02", "assess.atom.ions.03"]);
     expect(result.event).toEqual({
       type: "mission_completed",
       payload: {
         missionId: mission.id,
         attempts: 1,
         hintsUsed: 0,
-        assessmentId: "assess.atom.ions.02",
+        assessmentIds: ["assess.atom.ions.02", "assess.atom.ions.03"],
       },
     });
   });

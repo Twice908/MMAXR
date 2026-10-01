@@ -23,7 +23,7 @@ export interface MissionTransition {
     readonly index: number;
     readonly text: string;
   };
-  readonly assessmentId?: string;
+  readonly assessmentIds?: readonly string[];
 }
 
 /** Create the initial serializable state for a mission. */
@@ -65,18 +65,18 @@ export function evaluateMission(
     return { progress: { ...progress, attempts } };
   }
 
-  const assessmentId = mission.onComplete?.triggerAssessment;
+  const assessmentIds = mission.onComplete?.triggerAssessments;
   const payload = {
     missionId: mission.id,
     attempts,
     hintsUsed: progress.hintsUsed,
-    ...(assessmentId ? { assessmentId } : {}),
+    ...(assessmentIds ? { assessmentIds } : {}),
   };
 
   return {
     progress: { ...progress, status: "completed", attempts },
     event: { type: "mission_completed", payload },
-    ...(assessmentId ? { assessmentId } : {}),
+    ...(assessmentIds ? { assessmentIds } : {}),
   };
 }
 

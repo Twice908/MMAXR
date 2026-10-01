@@ -10,6 +10,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@mma/engine-assess": "workspace:*",
     "@mma/engine-core": "workspace:*",
     "@mma/engine-render": "workspace:*",
     "@mma/kit-chemistry": "workspace:*",
