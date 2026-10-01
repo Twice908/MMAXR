@@ -1,4 +1,10 @@
-import { createStore, type EngineAction, type LearningEventMap } from "@mma/engine-core";
+import {
+  createStore,
+  createIdGenerator,
+  type EngineAction,
+  type LearningEventMap,
+  type TelemetryContext,
+} from "@mma/engine-core";
 import {
   assessmentItemSchema,
   resolveTriggeredAssessmentItems,
@@ -16,7 +22,12 @@ import {
   ScreenSceneRenderer,
   type InputAction,
 } from "@mma/engine-render";
-import { moduleManifestSchema } from "@mma/schema";
+import {
+  NarrationPlayer,
+  type NarrationTelemetryDraft,
+  type NarrationViewState,
+} from "@mma/engine-voice";
+import { moduleManifestSchema, telemetryEventSchema } from "@mma/schema";
 import carbon12Items from "../assessments/m1-carbon-12.json";
 import sodiumItems from "../assessments/m2-sodium-ion.json";
 import carbon14Items from "../assessments/m3-carbon-14.json";
@@ -31,6 +42,32 @@ import {
 } from "./learning.js";
 import { layoutAtom } from "./layout.js";
 import "./atom-builder.css";
+
+interface LocalEventEntry {
+  readonly type: string;
+  readonly timestamp: string;
+  readonly missionId: string;
+}
+
+const narrationAudioUrls = {
+  ...import.meta.glob("../narration/en/generated/*.wav.gz", {
+    eager: true,
+    query: "?inline",
+    import: "default",
+  }),
+  ...(import.meta.env.DEV
+    ? import.meta.glob("../narration/en/generated/audible-test/*.wav.gz", {
+        eager: true,
+        query: "?inline",
+        import: "default",
+      })
+    : {}),
+} as Record<string, string>;
+const narrationCaptionFiles = import.meta.glob("../narration/en/generated/*.vtt", {
+  eager: true,
+  query: "?raw",
+  import: "default",
+}) as Record<string, string>;
 
 /** Validated manifest for the screen-mode Atom Builder module. */
 export const manifest = moduleManifestSchema.parse(rawManifest);
@@ -70,6 +107,23 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
         </div>
         <p class="hint-feedback" id="hint-feedback" aria-live="polite"></p>
         <p class="mission-feedback" id="mission-feedback" aria-live="polite"></p>
+      </section>
+      <section class="narration-hud" aria-label="Narration controls">
+        <p class="narration-caption" id="narration-caption" aria-live="polite" hidden></p>
+        <div class="narration-controls">
+          <button type="button" data-narration-action="enable">Tap to enable sound</button>
+          <button type="button" data-narration-action="mute" aria-pressed="false">Mute</button>
+          <button type="button" data-narration-action="replay">Replay last cue</button>
+          <label>Speed
+            <select id="narration-speed" aria-label="Narration speed">
+              <option value="0.75">0.75x</option>
+              <option value="1" selected>1x</option>
+              <option value="1.25">1.25x</option>
+            </select>
+          </label>
+          <button type="button" data-narration-action="captions" aria-pressed="true">Captions on</button>
+          <span class="narration-audio-status" id="narration-audio-status" role="status"></span>
+        </div>
       </section>
       <section class="assessment-card" id="assessment-card" aria-label="Question" hidden>
         <p class="lesson-step" id="assessment-step"></p>
@@ -121,48 +175,77 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
         </aside>
       </div>
       <div class="drag-ghost" id="drag-ghost" aria-hidden="true"></div>
-      <details class="dev-event-log" id="dev-event-log" hidden>
-        <summary>Local learning events</summary>
+      <button class="dev-events-toggle" id="dev-events-toggle" type="button" data-dev-events-action="toggle" aria-expanded="false" hidden>Events</button>
+      <aside class="dev-event-panel" id="dev-event-panel" aria-label="Recent local events" hidden>
+        <header class="dev-event-header"><h2>Local events</h2><button type="button" data-dev-events-action="close">Close</button></header>
         <ol id="dev-event-list"></ol>
-      </details>
+      </aside>
     </section>
   `;
 
   const sceneHost = requiredElement<HTMLElement>(root, "#atom-scene");
   const feedback = requiredElement<HTMLOutputElement>(root, "#chemistry-feedback");
   const ghost = requiredElement<HTMLElement>(root, "#drag-ghost");
+  const narrationControls = requiredElement<HTMLElement>(root, ".narration-controls");
+  const narrationSpeed = requiredElement<HTMLSelectElement>(root, "#narration-speed");
   const renderer = new ScreenSceneRenderer({
     host: sceneHost,
     ...(options.diagnostics === undefined ? {} : { diagnostics: options.diagnostics }),
   });
   const reducer = createAtomBuilderLearningReducer(manifest.missions, assessmentItems);
+  const idGenerator = createIdGenerator({
+    crypto: globalThis.crypto,
+    now: Date.now,
+  });
+  const telemetryContext = {
+    studentRef: idGenerator(),
+    sessionId: idGenerator(),
+    moduleId: manifest.id,
+    moduleVersion: "0.0.0",
+    device: { mode: "screen", tier: "mid" },
+  } satisfies TelemetryContext;
+  const clock = (): string => new Date().toISOString();
   const store = createStore(reducer, createAtomBuilderLearningState(manifest.missions), {
     telemetry: {
-      context: {
-        studentRef: crypto.randomUUID(),
-        sessionId: crypto.randomUUID(),
-        moduleId: manifest.id,
-        moduleVersion: "0.0.0",
-        device: { mode: "screen", tier: "mid" },
-      },
-      clock: () => new Date().toISOString(),
-      idGenerator: () => crypto.randomUUID(),
+      context: telemetryContext,
+      clock,
+      idGenerator,
       projectEvents: (action, previousState, nextState) =>
         projectAtomBuilderLearningEvents(manifest.missions, action, previousState, nextState),
     },
   });
   let activeParticle: string | null = null;
   let lastHintText = "";
-  const localEvents: LearningEventMap[keyof LearningEventMap][] = [];
+  const localEvents: LocalEventEntry[] = [];
   const recordLocalEvent = (event: LearningEventMap[keyof LearningEventMap]): void => {
-    localEvents.push(event);
+    const payload = event.payload as { readonly missionId?: unknown; readonly cueId?: unknown };
+    const narrationCue = typeof payload.cueId === "string"
+      ? manifest.narration?.cues.find((cue) => cue.id === payload.cueId)
+      : undefined;
+    localEvents.push({
+      type: event.type,
+      timestamp: "ts" in event && typeof event.ts === "string" ? event.ts : clock(),
+      missionId: typeof payload.missionId === "string"
+        ? payload.missionId
+        : narrationCue?.missionId ?? "-",
+    });
     renderLocalEvents();
   };
   function renderLocalEvents(): void {
     const list = requiredElement<HTMLOListElement>(root, "#dev-event-list");
-    list.replaceChildren(...localEvents.slice(-20).map((event) => {
+    list.replaceChildren(...localEvents.slice(-20).reverse().map((event) => {
       const entry = document.createElement("li");
-      entry.textContent = `${event.type} ${JSON.stringify(event.payload)}`;
+      entry.dataset.eventType = event.type;
+      const time = document.createElement("time");
+      time.dateTime = event.timestamp;
+      time.textContent = new Date(event.timestamp).toLocaleTimeString();
+      const type = document.createElement("span");
+      type.className = "dev-event-type";
+      type.textContent = event.type;
+      const mission = document.createElement("span");
+      mission.className = "dev-event-mission";
+      mission.textContent = event.missionId;
+      entry.append(time, type, mission);
       return entry;
     }));
   }
@@ -170,7 +253,87 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   store.events.subscribe("mission_completed", recordLocalEvent);
   store.events.subscribe("hint_used", recordLocalEvent);
   store.events.subscribe("assessment_answered", recordLocalEvent);
-  requiredElement<HTMLElement>(root, "#dev-event-log").hidden = !options.diagnostics;
+  store.events.subscribe("module_started", recordLocalEvent);
+  store.events.subscribe("invalid_placement", recordLocalEvent);
+  store.events.subscribe("idle", recordLocalEvent);
+  store.events.subscribe("narration_played", recordLocalEvent);
+  store.events.subscribe("narration_skipped", recordLocalEvent);
+  store.events.subscribe("voice_fallback_used", recordLocalEvent);
+  const eventsToggle = requiredElement<HTMLButtonElement>(root, "#dev-events-toggle");
+  const eventsPanel = requiredElement<HTMLElement>(root, "#dev-event-panel");
+  const setEventsPanelOpen = (open: boolean): void => {
+    eventsPanel.hidden = !open;
+    eventsToggle.setAttribute("aria-expanded", String(open));
+  };
+  const onEventsAction = (event: MouseEvent): void => {
+    const action = (event.target as Element | null)?.closest<HTMLElement>("[data-dev-events-action]")?.dataset.devEventsAction;
+    if (action === "toggle") {
+      setEventsPanelOpen(eventsPanel.hidden === true);
+    } else if (action === "close") {
+      setEventsPanelOpen(false);
+    }
+  };
+  eventsToggle.hidden = !options.diagnostics;
+  root.addEventListener("click", onEventsAction);
+
+  const narrationPlayer = new NarrationPlayer({
+    cues: manifest.narration?.cues ?? [],
+    events: store.events,
+    moduleId: manifest.id,
+    activityTarget: root,
+    loadAudio: async (assetPath) => {
+      const useAudibleTest = import.meta.env.DEV &&
+        new URLSearchParams(window.location.search).get("narrationAudio") === "audible-test";
+      const selectedAssetPath = useAudibleTest
+        ? assetPath.replace("/generated/", "/generated/audible-test/")
+        : assetPath;
+      const assetUrl = narrationAudioUrls[`../${selectedAssetPath}`];
+      if (!assetUrl) {
+        throw new Error(`Narration audio asset is missing: ${assetPath}`);
+      }
+      const encodedAudio = assetUrl.split(",", 2)[1];
+      if (!assetUrl.startsWith("data:") || !encodedAudio) {
+        throw new Error(`Narration audio is not bundled inline: ${assetPath}`);
+      }
+      const binaryAudio = atob(encodedAudio);
+      const bytes = new Uint8Array(binaryAudio.length);
+      for (let index = 0; index < binaryAudio.length; index += 1) {
+        bytes[index] = binaryAudio.charCodeAt(index);
+      }
+      return bytes.buffer;
+    },
+    loadCaptions: async (assetPath) => {
+      const captionText = narrationCaptionFiles[`../${assetPath}`];
+      if (!captionText) {
+        throw new Error(`Narration captions are missing: ${assetPath}`);
+      }
+      return captionText;
+    },
+    onViewChange: (state) => renderNarrationView(root, state),
+    onTelemetry: (event) => publishNarrationTelemetry(event, store.events, telemetryContext, clock, idGenerator),
+  });
+  const onNarrationAction = (event: MouseEvent): void => {
+    const button = (event.target as Element | null)?.closest<HTMLButtonElement>("[data-narration-action]");
+    switch (button?.dataset.narrationAction) {
+      case "enable":
+        void narrationPlayer.enableSound();
+        break;
+      case "mute":
+        narrationPlayer.toggleMuted();
+        break;
+      case "replay":
+        narrationPlayer.replayLastCue();
+        break;
+      case "captions":
+        narrationPlayer.toggleCaptions();
+        break;
+    }
+  };
+  const onNarrationSpeedChange = (): void => {
+    narrationPlayer.setSpeed(Number(narrationSpeed.value) as 0.75 | 1 | 1.25);
+  };
+  narrationControls.addEventListener("click", onNarrationAction);
+  narrationSpeed.addEventListener("change", onNarrationSpeedChange);
 
   const renderState = (state: Readonly<AtomBuilderLearningState>): void => {
     const chemistry = state.chemistry;
@@ -196,13 +359,40 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     renderLearningState(root, state, assessmentItems, assessmentsById, lastHintText);
   };
 
-  const dispatchLearningAction = (action: EngineAction): void => store.dispatch(action);
+  const dispatchLearningAction = (action: EngineAction): void => {
+    store.dispatch(action);
+    if (action.type === "particle/place") {
+      const message = store.getState().chemistry.validationMessages[0];
+      const payload = asPayload(action.payload);
+      const particle = payload.particle;
+      if (
+        message &&
+        (particle === "proton" || particle === "neutron" || particle === "electron") &&
+        (payload.target === "shell" || payload.target === "nucleus")
+      ) {
+        const target = payload.target === "shell"
+          ? `shell:${payload.shell ?? 0}`
+          : "nucleus";
+        store.events.emit("invalid_placement", {
+          type: "invalid_placement",
+          payload: {
+            missionId: store.getState().activeMissionId,
+            particle,
+            target,
+          },
+        });
+      }
+    }
+  };
 
   const onInput = (action: InputAction): void => {
     const payload = asPayload(action.payload);
     switch (action.type) {
       case "grab": {
         activeParticle = typeof payload.source === "string" ? payload.source : null;
+        if (activeParticle?.startsWith("tray:")) {
+          renderer.beginDrag(activeParticle.replace("tray:", ""));
+        }
         ghost.textContent = activeParticle?.replace("tray:", "") ?? "";
         ghost.classList.toggle("is-visible", activeParticle !== null);
         break;
@@ -219,6 +409,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
         ghost.classList.remove("is-visible");
         applyDrop(activeParticle, typeof payload.target === "string" ? payload.target : null, dispatchLearningAction);
         activeParticle = null;
+        renderer.endDrag();
         break;
       case "rotate":
         if (typeof payload.deltaX === "number" && typeof payload.deltaY === "number") {
@@ -267,14 +458,27 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   const input = new ScreenInputAdapter({
     root,
     dispatch: onInput,
-    pickTarget: (x, y) => renderer.pickTarget(x, y),
+    pickTarget: (x, y, source, pointerType) => renderer.pickTarget(x, y, source, pointerType),
+    onDragEnd: () => {
+      activeParticle = null;
+      ghost.classList.remove("is-visible");
+      renderer.endDrag();
+    },
   });
   renderState(store.getState());
+  store.events.emit("module_started", {
+    type: "module_started",
+    payload: { moduleId: manifest.id },
+  });
   store.dispatch({ type: "mission/start", payload: { missionId: manifest.missions[0]?.id ?? "" } });
 
   return () => {
     input.dispose();
     unsubscribe();
+    narrationControls.removeEventListener("click", onNarrationAction);
+    narrationSpeed.removeEventListener("change", onNarrationSpeedChange);
+    root.removeEventListener("click", onEventsAction);
+    narrationPlayer.dispose();
     renderer.dispose();
     root.replaceChildren();
   };
@@ -465,6 +669,65 @@ function nextElectronShell(shells: readonly number[], count: number): number {
 
 function formatCharge(charge: number): string {
   return charge > 0 ? `+${charge}` : String(charge);
+}
+
+function publishNarrationTelemetry(
+  draft: NarrationTelemetryDraft,
+  events: ReturnType<typeof createStore<AtomBuilderLearningState, EngineAction>>["events"],
+  context: TelemetryContext,
+  clock: () => string,
+  idGenerator: () => string,
+): void {
+  const event = telemetryEventSchema.parse({
+    ...context,
+    eventId: idGenerator(),
+    ts: clock(),
+    type: draft.type,
+    payload: draft.payload,
+  });
+  switch (draft.type) {
+    case "narration_played":
+      events.emit("narration_played", event as LearningEventMap["narration_played"]);
+      break;
+    case "narration_skipped":
+      events.emit("narration_skipped", event as LearningEventMap["narration_skipped"]);
+      break;
+    case "voice_fallback_used":
+      events.emit("voice_fallback_used", event as LearningEventMap["voice_fallback_used"]);
+      break;
+  }
+}
+
+function renderNarrationView(root: HTMLElement, state: NarrationViewState): void {
+  const caption = requiredElement<HTMLElement>(root, "#narration-caption");
+  caption.textContent = state.captionText;
+  caption.hidden = !state.settings.captionsEnabled || state.captionText.length === 0;
+
+  const enableButton = requiredElement<HTMLButtonElement>(root, '[data-narration-action="enable"]');
+  enableButton.hidden = state.audioEnabled;
+  enableButton.disabled = state.audioUnavailable;
+  enableButton.textContent = state.audioUnavailable ? "Sound unavailable" : "Tap to enable sound";
+
+  const muteButton = requiredElement<HTMLButtonElement>(root, '[data-narration-action="mute"]');
+  muteButton.textContent = state.settings.muted ? "Unmute" : "Mute";
+  muteButton.setAttribute("aria-pressed", String(state.settings.muted));
+  requiredElement<HTMLSelectElement>(root, "#narration-speed").value = String(state.settings.speed);
+
+  const captionsButton = requiredElement<HTMLButtonElement>(root, '[data-narration-action="captions"]');
+  captionsButton.textContent = state.settings.captionsEnabled ? "Captions on" : "Captions off";
+  captionsButton.setAttribute("aria-pressed", String(state.settings.captionsEnabled));
+
+  setText(
+    root,
+    "#narration-audio-status",
+    state.soundBlocked
+      ? "Sound blocked. Tap to try again."
+      : state.audioUnavailable
+      ? "Captions remain available."
+      : state.audioEnabled
+        ? state.settings.muted ? "Sound muted" : "Sound enabled"
+        : "Sound waits for your tap.",
+  );
 }
 
 function asPayload(payload: InputAction["payload"]): Record<string, string | number | null> {

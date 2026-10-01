@@ -177,5 +177,14 @@ function emitLearningEvent(
     case "assessment_answered":
       events.emit("assessment_answered", event);
       break;
+    case "narration_played":
+      events.emit("narration_played", event);
+      break;
+    case "narration_skipped":
+      events.emit("narration_skipped", event);
+      break;
+    case "voice_fallback_used":
+      events.emit("voice_fallback_used", event);
+      break;
   }
 }

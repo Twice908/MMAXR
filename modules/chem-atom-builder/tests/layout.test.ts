@@ -48,4 +48,12 @@ describe("atom view layout", () => {
     expect(Math.hypot(electronPositions[2]!.x, electronPositions[2]!.y))
       .toBeCloseTo(layout.rings[1]!.radius);
   });
+
+  it("derives faint-slot positions and occupancy without changing electron counts", () => {
+    const layout = layoutAtom(createChemistryState(2, 0, 1));
+
+    expect(layout.rings[0]?.slots).toHaveLength(2);
+    expect(layout.rings[0]?.slots.filter((slot) => slot.occupied)).toHaveLength(1);
+    expect(layout.rings[0]?.slots.find((slot) => !slot.occupied)?.position.y).toBeGreaterThan(0);
+  });
 });

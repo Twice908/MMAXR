@@ -50,6 +50,7 @@ describe("moduleManifestSchema", () => {
             id: "intro",
             trigger: "module_started",
             script: "narration/en/intro.txt",
+            captionText: "Welcome to the lesson.",
             target: "entity:nucleus",
             interruptible: true,
           },
@@ -142,6 +143,42 @@ describe("moduleManifestSchema", () => {
       interactions: {
         ...validManifest.interactions,
         missions: ["undefined-mission"],
+      },
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it("requires cue captions and keeps the reserved guide disabled", () => {
+    const narration = {
+      languages: ["en"],
+      cues: [{ id: "intro", trigger: "module_started", script: "narration/en/intro.json" }],
+      guide: { enabled: false, allowedActions: [], groundingDocs: [] },
+    };
+    expect(moduleManifestSchema.safeParse({ ...validManifest, narration }).success).toBe(false);
+    expect(moduleManifestSchema.safeParse({
+      ...validManifest,
+      narration: {
+        ...narration,
+        cues: [{ ...narration.cues[0], captionText: "Welcome." }],
+        guide: { ...narration.guide, enabled: true },
+      },
+    }).success).toBe(false);
+  });
+
+  it("validates mission-specific narration cue references", () => {
+    const result = moduleManifestSchema.safeParse({
+      ...validManifest,
+      narration: {
+        languages: ["en"],
+        cues: [{
+          id: "sodium-start",
+          trigger: "mission_started",
+          missionId: "missing-mission",
+          script: "narration/en/sodium-start.json",
+          captionText: "Start the mission.",
+        }],
+        guide: { enabled: false, allowedActions: [], groundingDocs: [] },
       },
     });
 

@@ -179,10 +179,10 @@ Is it possible? Yes, in the browser. It is deliberately **not** part of P0 or P1
 
 #### Stage 2a: Scripted narration (deterministic)
 
-- Narration **cues** are declared in the module manifest and fire on events (`module_started`, `mission_started`, `invalid_placement`, `mission_completed`, `idle`, first time a concept appears).
-- Audio is **generated at build time** from reviewed scripts via a TTS pipeline and shipped as compressed audio files plus caption files, per language. No per-student runtime cost, works offline once cached, and a teacher can review every line.
-- Playback uses the Web Audio API. In AR/VR it is **positional**, so the voice seems to come from the object being explained.
-- Controls: mute, replay, speed, captions on/off, language. Narration is always interruptible and never blocks interaction.
+- Narration **cues** are declared in the module manifest and fire on events (`module_started`, `mission_started`, `invalid_placement`, `mission_completed`, `hint_used`, `idle`). Mission cues identify their mission so shared triggers remain unambiguous.
+- Audio is **generated at build time** from scripts and shipped as compressed audio files plus caption files, per language. Reviewed scripts are required for release; pending scripts may use the silent/mock adapter for development. CI defaults to silence; local audible test tones are generated to an ignored directory and are available only from the Vite development server with `?narrationAudio=audible-test`.
+- Screen playback uses the Web Audio API after a user gesture. Captions work while muted, and playback never blocks interaction. Positional AR/VR playback is deferred.
+- Controls: sound enable/mute, replay, speed, and captions on/off. Preferences are stored locally; audio still requires a new user gesture after each page load. To generate local audible test tones, run `pnpm generate:narration -- --audible-test` and open the Vite development server with `?narrationAudio=audible-test`.
 
 #### Stage 2b: Live voice guide (conversational)
 
@@ -206,7 +206,7 @@ Pipeline: push-to-talk -> speech-to-text -> guide brain (LLM, via the API bridge
 
 1. The event bus already emits all learning events (section 6.6 rule).
 2. The manifest schema accepts an optional `narration` block and ignores it (section 7.1).
-3. An empty `engine-voice` package stub exists.
+3. `engine-voice` subscribes to the `engine-core` event bus; it must not become a dependency of `engine-core`.
 4. Actions are typed so the guide can reuse them later.
 
 ## 7. Module manifest
@@ -260,8 +260,8 @@ Draft manifests may omit the mission and check layers while a module is being bu
 "narration": {
   "languages": ["en"],
   "cues": [
-    { "id": "intro", "trigger": "module_started", "script": "narration/en/intro.txt", "target": "entity:nucleus", "interruptible": true },
-    { "id": "bad-shell", "trigger": "invalid_placement", "script": "narration/en/bad-shell.txt" }
+    { "id": "intro", "trigger": "module_started", "script": "narration/en/intro.json", "audio": "narration/en/generated/intro.wav.gz", "captions": "narration/en/generated/intro.vtt", "captionText": "Welcome to the lesson.", "target": "entity:nucleus", "interruptible": true },
+    { "id": "na-start", "trigger": "mission_started", "missionId": "make-na-ion", "script": "narration/en/na-start.json", "captionText": "Start the sodium mission." }
   ],
   "guide": {
     "enabled": false,
@@ -314,7 +314,7 @@ All events share an envelope and are batched to the API.
 
 Core event types: `session_started`, `session_ended`, `mode_selected`, `mission_started`, `mission_completed`, `mission_failed`, `hint_used`, `assessment_answered`, `comfort_break_shown`, `error`.
 
-Phase 2 adds: `narration_played`, `narration_skipped`, `voice_query_asked`, `guide_action_dispatched`, `voice_fallback_used`. Voice events never contain audio; transcripts are off by default (section 15).
+Phase 2a adds: `narration_played`, `narration_skipped`, and `voice_fallback_used`. Phase 2b may add `voice_query_asked` and `guide_action_dispatched`. Voice events never contain audio; transcripts are off by default (section 15).
 
 Rules: events are append-only, versioned, and batched; the app works offline-tolerantly (queue and retry); failures never block the learning experience.
 
@@ -397,7 +397,7 @@ Rules: events are append-only, versioned, and batched; the app works offline-tol
 |---|---|---|
 | 0. Foundation | Monorepo, engine-core skeleton, manifest schema, CI | Empty module loads from a manifest in `screen` mode |
 | 1. Atom Builder (screen) | Full atom module in 3D screen mode, with missions and checks | A student completes all missions on a mid phone |
-| 2. Audio + voice guide | 2a: scripted narration with captions. 2b: live voice guide that explains, answers, and helps navigate | Atom Builder fully completable muted; narration and guide work with guardrails; no API keys in the client |
+| 2. Audio + voice guide | 2a: screen-mode scripted narration with captions and mock-only TTS generation. 2b: live voice guide that explains, answers, and helps navigate | Atom Builder fully completable muted; reviewed scripts and narration work with guardrails; no API keys in the client |
 | 3. XR modes | AR on phones, VR on a headset, capability detection, comfort features | Same module runs in all three modes; device matrix filled |
 | 4. Portal link | Token auth, telemetry, concept-linked deep links | Portal question opens the right module; events visible in DB |
 | 5. Pilot | One batch uses modules for a month vs a comparison batch | Compare concept-level test scores, usage, and feedback |

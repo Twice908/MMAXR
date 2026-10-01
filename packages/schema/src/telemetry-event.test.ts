@@ -43,4 +43,12 @@ describe("telemetryEventSchema", () => {
 
     expect(result.success).toBe(false);
   });
+
+  it.each(["narration_played", "narration_skipped", "voice_fallback_used"])(
+    "accepts local narration telemetry type %s",
+    (type) => {
+      expect(telemetryEventSchema.safeParse({ ...validEvent, type, payload: { cueId: "intro" } }).success)
+        .toBe(true);
+    },
+  );
 });

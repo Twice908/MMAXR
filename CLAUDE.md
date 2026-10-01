@@ -9,12 +9,13 @@ MMA-XR (working title): an interactive WebXR learning platform for Math Maam Aca
 Current status (update this block as work completes):
 - Done: Phase 0 tasks 1-4 (monorepo + CI, `packages/schema`, `packages/engine-core`, `packages/kits/chemistry`).
 - Done: Phase 1 task 6 lesson flow (screen-mode missions, assessments, and local-only learning events); Atom Builder remains `draft` pending assessment review.
-- Next: Review the eight assessment items, then flip `releaseStatus` to `release` in `modules/chem-atom-builder/module.json`.
-- Not started: audio/voice (Phase 2), AR/VR (Phase 3), portal link (Phase 4).
+- Done: Phase 2a screen-mode scripted narration player and silent/mock generator; ten English scripts are `pending` review and no real TTS provider is selected.
+- Next: Review the eight assessment items and ten narration scripts; compare the same three scripts across TTS options before choosing a provider.
+- Not started: Phase 2b live voice guide, AR/VR (Phase 3), portal link (Phase 4).
 
 ## 2. Phase gates (do not build ahead)
 
-- P0 and P1: NO audio, voice, speech, WebXR/AR/VR, multiplayer, or authoring UI. Reserved hooks only (optional `narration` block in the schema, an empty `engine-voice` stub).
+- P0 and P1: NO audio, voice, speech, WebXR/AR/VR, multiplayer, or authoring UI. Phase 2a is limited to the approved screen-mode scripted player and mock TTS generator; no live guide, microphone, STT, LLM, external TTS, or network calls.
 - Build only the task you were given. If you see useful extra work, list it in your summary; do not do it.
 - Never add a feature, dependency, or package that the task did not ask for without approval.
 
@@ -50,6 +51,7 @@ pnpm install --frozen-lockfile     # install exactly from the lockfile
 pnpm typecheck                     # all packages
 pnpm lint                          # includes dependency-boundary rules
 pnpm test                          # Vitest
+pnpm generate:narration             # generate local mock audio and captions
 pnpm --filter @mma/web dev         # dev server (http://localhost:5173)
 pnpm --filter @mma/web build       # production build
 pnpm validate:manifests            # once the validator tool exists
@@ -85,6 +87,7 @@ Also: new logic has unit tests; public APIs have TSDoc; no leftover debug code; 
 - Schemas: `packages/schema` (`module-manifest.ts`, `telemetry-event.ts`).
 - Engine: `packages/engine-core` (store, actions, events, missions).
 - Chemistry rules: `packages/kits/chemistry`.
+- Narration: `packages/engine-voice`; mock asset generator: `tools/generate-narration`.
 - Decisions: `docs/adr/`.
 - Device testing record: `docs/device-matrix.md`.
 

@@ -11,7 +11,13 @@ import {
 export interface ScreenInputOptions {
   readonly root: HTMLElement;
   readonly dispatch: (action: InputAction) => void;
-  readonly pickTarget: (clientX: number, clientY: number) => string | null;
+  readonly pickTarget: (
+    clientX: number,
+    clientY: number,
+    source?: string,
+    pointerType?: string,
+  ) => string | null;
+  readonly onDragEnd?: () => void;
 }
 
 /**
@@ -25,12 +31,14 @@ export class ScreenInputAdapter {
   private readonly root: HTMLElement;
   private readonly dispatch: ScreenInputOptions["dispatch"];
   private readonly pickTarget: ScreenInputOptions["pickTarget"];
+  private readonly onDragEnd: ScreenInputOptions["onDragEnd"];
 
   /** Attach delegated screen input listeners to a module root. */
   constructor(options: ScreenInputOptions) {
     this.root = options.root;
     this.dispatch = options.dispatch;
     this.pickTarget = options.pickTarget;
+    this.onDragEnd = options.onDragEnd;
     this.root.addEventListener("pointerdown", this.onPointerDown);
     this.root.addEventListener("pointermove", this.onPointerMove);
     this.root.addEventListener("pointerup", this.onPointerUp);
@@ -54,7 +62,7 @@ export class ScreenInputAdapter {
   }
 
   private readonly onPointerDown = (event: PointerEvent): void => {
-    if ((event.target as Element | null)?.closest("[data-command]")) {
+    if ((event.target as Element | null)?.closest("[data-command], .narration-controls, [data-dev-events-action]")) {
       return;
     }
     this.pointerPositions.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -103,7 +111,12 @@ export class ScreenInputAdapter {
       return;
     }
     const target = !this.gesture || this.gesture.mode === "drag"
-      ? this.pickTarget(event.clientX, event.clientY)
+      ? this.pickTarget(
+          event.clientX,
+          event.clientY,
+          this.gesture?.source ?? undefined,
+          event.pointerType,
+        )
       : null;
     const result = mapPointerSample({
       phase: "move",
@@ -117,12 +130,13 @@ export class ScreenInputAdapter {
   };
 
   private readonly onPointerUp = (event: PointerEvent): void => {
+    const endedDrag = this.gesture?.mode === "drag" && this.gesture.pointerId === event.pointerId;
     this.pointerPositions.delete(event.pointerId);
     if (this.pointerPositions.size < 2) {
       this.pinchDistance = null;
     }
     const target = this.gesture?.mode === "drag"
-      ? this.pickTarget(event.clientX, event.clientY)
+      ? this.pickTarget(event.clientX, event.clientY, this.gesture.source ?? undefined, event.pointerType)
       : null;
     const result = mapPointerSample({
       phase: "up",
@@ -133,12 +147,16 @@ export class ScreenInputAdapter {
     }, this.gesture);
     this.gesture = result.gesture;
     this.emit(result.actions);
+    if (endedDrag) {
+      this.onDragEnd?.();
+    }
     if (this.root.hasPointerCapture(event.pointerId)) {
       this.root.releasePointerCapture(event.pointerId);
     }
   };
 
   private readonly onPointerCancel = (event: PointerEvent): void => {
+    const endedDrag = this.gesture?.mode === "drag" && this.gesture.pointerId === event.pointerId;
     this.pointerPositions.delete(event.pointerId);
     this.pinchDistance = null;
     const result = mapPointerSample({
@@ -150,6 +168,9 @@ export class ScreenInputAdapter {
     }, this.gesture);
     this.gesture = result.gesture;
     this.emit(result.actions);
+    if (endedDrag) {
+      this.onDragEnd?.();
+    }
   };
 
   private readonly onClick = (event: MouseEvent): void => {
@@ -161,7 +182,7 @@ export class ScreenInputAdapter {
   };
 
   private readonly onWheel = (event: WheelEvent): void => {
-    if ((event.target as Element | null)?.closest("button")) {
+    if ((event.target as Element | null)?.closest("button, select")) {
       return;
     }
     event.preventDefault();

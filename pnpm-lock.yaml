@@ -54,6 +54,9 @@ importers:
       '@mma/engine-render':
         specifier: workspace:*
         version: link:../../packages/engine-render
+      '@mma/engine-voice':
+        specifier: workspace:*
+        version: link:../../packages/engine-voice
       '@mma/kit-chemistry':
         specifier: workspace:*
         version: link:../../packages/kits/chemistry
@@ -94,6 +97,15 @@ importers:
         specifier: 0.186.0
         version: 0.186.0
 
+  packages/engine-voice:
+    dependencies:
+      '@mma/engine-core':
+        specifier: workspace:*
+        version: link:../engine-core
+      '@mma/schema':
+        specifier: workspace:*
+        version: link:../schema
+
   packages/kits/chemistry:
     dependencies:
       '@mma/engine-core':
@@ -108,6 +120,12 @@ importers:
       zod:
         specifier: 4.6.5
         version: 4.6.5
+
+  tools/generate-narration:
+    dependencies:
+      '@mma/schema':
+        specifier: workspace:*
+        version: link:../../packages/schema
 
 packages:
 

@@ -20,6 +20,14 @@ export interface SphereGroup {
 export interface RingLayout {
   readonly shell: number;
   readonly radius: number;
+  readonly slots: readonly ElectronSlotLayout[];
+}
+
+/** View-only placeholder position for one possible electron placement. */
+export interface ElectronSlotLayout {
+  readonly id: string;
+  readonly position: Point3;
+  readonly occupied: boolean;
 }
 
 /** Complete view-only geometry derived from chemistry state. */
@@ -45,10 +53,25 @@ export function layoutAtom(state: ChemistryState): AtomLayout {
   const electronCount = state.shells.reduce((total, count) => total + count, 0);
   const previewNextShell = electronCount < 20 ? 1 : 0;
   const shellCount = Math.min(4, Math.max(1, state.shells.length + previewNextShell));
-  const rings = Array.from({ length: shellCount }, (_, index) => ({
-    shell: index + 1,
-    radius: nucleusRadius + 0.65 + index * 0.68,
-  }));
+  const rings = Array.from({ length: shellCount }, (_, index) => {
+    const shell = index + 1;
+    const radius = nucleusRadius + 0.65 + index * 0.68;
+    const electronCountInShell = state.shells[index] ?? 0;
+    const visualSlotCount = shell === 1 ? 2 : 8;
+    const occupiedAngles = Array.from({ length: electronCountInShell }, (_, electronIndex) =>
+      (2 * Math.PI * electronIndex) / electronCountInShell - Math.PI / 2,
+    );
+    const slots = Array.from({ length: visualSlotCount }, (_, slotIndex) => {
+      const angle = (2 * Math.PI * slotIndex) / visualSlotCount - Math.PI / 2;
+      const position = { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius, z: 0 };
+      const occupied = occupiedAngles.some((occupiedAngle) =>
+        Math.abs(Math.atan2(Math.sin(angle - occupiedAngle), Math.cos(angle - occupiedAngle))) <
+        (Math.PI / visualSlotCount) * 0.9,
+      );
+      return { id: `${shell}:${slotIndex}`, position, occupied };
+    });
+    return { shell, radius, slots };
+  });
   const electrons: Point3[] = [];
   state.shells.forEach((count, shellIndex) => {
     const ring = rings[shellIndex];

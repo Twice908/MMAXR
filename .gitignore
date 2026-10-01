@@ -3,4 +3,5 @@ dist/
 coverage/
 playwright-report/
 test-results/
+modules/chem-atom-builder/narration/en/generated/audible-test/
 .DS_Store

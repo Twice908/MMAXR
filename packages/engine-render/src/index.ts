@@ -12,6 +12,15 @@ export {
 export { ScreenInputAdapter, type ScreenInputOptions } from "./screen-input.js";
 export { selectSnapTarget, type SnapCandidate } from "./snap-target.js";
 export {
+  screenDropTolerancePx,
+  screenPixelsToWorldUnits,
+  selectProjectedSnapTarget,
+  type ProjectedDropSlot,
+  type ProjectedDropZone,
+  type ProjectedSnapSelection,
+  type ScreenPoint,
+} from "./screen-snap.js";
+export {
   ScreenSceneRenderer,
   selectQualityTier,
   type Position3,

@@ -1,0 +1,12 @@
+{
+  "name": "@mma/generate-narration",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "tsc -p tsconfig.build.json && node dist/cli.js"
+  },
+  "dependencies": {
+    "@mma/schema": "workspace:*"
+  }
+}

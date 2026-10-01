@@ -28,13 +28,31 @@ export interface LearningEventPayloads {
     selectedOptionIndex: number;
     correct: boolean;
   };
+  narration_played: { cueId: string; trigger: string };
+  narration_skipped: { cueId: string; reason: string };
+  voice_fallback_used: { reason: string };
 }
 
-/** Learning event envelopes, narrowed by event type and payload. */
-export type LearningEventMap = {
+/** Telemetry event envelopes, narrowed by event type and payload. */
+type TelemetryLearningEventMap = {
   [Type in keyof LearningEventPayloads]: Omit<TelemetryEvent, "type" | "payload"> & {
     type: Type;
     payload: LearningEventPayloads[Type];
+  };
+};
+
+/** Local-only module signals used to trigger scripted narration. */
+export interface LearningSignalPayloads {
+  module_started: { moduleId: string };
+  invalid_placement: { missionId: string | null; particle: string; target: string };
+  idle: { moduleId: string; idleForMs: number };
+}
+
+/** Telemetry envelopes and local trigger signals published on the core event bus. */
+export type LearningEventMap = TelemetryLearningEventMap & {
+  [Type in keyof LearningSignalPayloads]: {
+    type: Type;
+    payload: LearningSignalPayloads[Type];
   };
 };
 

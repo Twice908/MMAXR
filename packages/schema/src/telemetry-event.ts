@@ -16,6 +16,9 @@ const coreEventTypeSchema = z.enum([
   "assessment_answered",
   "comfort_break_shown",
   "error",
+  "narration_played",
+  "narration_skipped",
+  "voice_fallback_used",
 ]);
 
 export const telemetryEventSchema = z

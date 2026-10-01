@@ -7,11 +7,17 @@ export type {
   Reducer,
 } from "./actions.js";
 export {
+  createIdGenerator,
+  type IdGeneratorCrypto,
+  type IdGeneratorOptions,
+} from "./id-generator.js";
+export {
   EventBus,
   type HintLevel,
   type LearningEventDraft,
   type LearningEventMap,
   type LearningEventPayloads,
+  type LearningSignalPayloads,
 } from "./events.js";
 export {
   createMissionProgress,

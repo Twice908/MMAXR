@@ -11,8 +11,8 @@ const narrationTriggerSchema = z.enum([
   "mission_started",
   "invalid_placement",
   "mission_completed",
+  "hint_used",
   "idle",
-  "concept_first_seen",
 ]);
 
 const guideActionSchema = z.enum([
@@ -28,10 +28,17 @@ const narrationCueSchema = z
     id: identifierSchema,
     trigger: narrationTriggerSchema,
     script: z.string().min(1),
+    missionId: identifierSchema.optional(),
     target: z.string().min(1).optional(),
     interruptible: z.boolean().optional(),
+    audio: z.string().min(1).optional(),
+    captions: z.string().min(1).optional(),
+    captionText: z.string().min(1).optional(),
   })
-  .strict();
+  .strict()
+  .refine((cue) => cue.captions !== undefined || cue.captionText !== undefined, {
+    message: "Every narration cue must define a captions file or caption text",
+  });
 
 const narrationSchema = z
   .object({
@@ -39,7 +46,7 @@ const narrationSchema = z
     cues: z.array(narrationCueSchema),
     guide: z
       .object({
-        enabled: z.boolean(),
+        enabled: z.literal(false),
         allowedActions: z.array(guideActionSchema),
         groundingDocs: z.array(z.string().min(1)),
       })
@@ -143,6 +150,33 @@ export const moduleManifestSchema = z
     const levelIds = manifest.levels.map((level) => level.id);
     const missionIds = manifest.missions.map((mission) => mission.id);
     const interactionMissionIds = manifest.interactions.missions;
+
+    if (manifest.narration) {
+      const cueIds = manifest.narration.cues.map((cue) => cue.id);
+      if (new Set(cueIds).size !== cueIds.length) {
+        context.addIssue({
+          code: "custom",
+          path: ["narration", "cues"],
+          message: "Narration cue IDs must be unique",
+        });
+      }
+      for (const [index, cue] of manifest.narration.cues.entries()) {
+        if (cue.missionId && !missionIds.includes(cue.missionId)) {
+          context.addIssue({
+            code: "custom",
+            path: ["narration", "cues", index, "missionId"],
+            message: `Narration cue references missing mission "${cue.missionId}"`,
+          });
+        }
+        if (cue.missionId && cue.trigger !== "mission_started" && cue.trigger !== "mission_completed") {
+          context.addIssue({
+            code: "custom",
+            path: ["narration", "cues", index, "missionId"],
+            message: "missionId is only valid for mission start or completion cues",
+          });
+        }
+      }
+    }
 
     for (const [label, ids] of [
       ["asset", assetIds],

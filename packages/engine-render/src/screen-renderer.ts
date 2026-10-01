@@ -1,5 +1,12 @@
 import * as THREE from "three";
 import { selectSnapTarget } from "./snap-target.js";
+import {
+  screenDropTolerancePx,
+  screenPixelsToWorldUnits,
+  selectProjectedSnapTarget,
+  type ProjectedDropZone,
+  type ScreenPoint,
+} from "./screen-snap.js";
 
 /** A world-space position used by the declarative screen scene. */
 export interface Position3 {
@@ -21,6 +28,11 @@ export interface SphereBatch {
 export interface SceneRing {
   readonly shell: number;
   readonly radius: number;
+  readonly slots: readonly {
+    readonly id: string;
+    readonly position: Position3;
+    readonly occupied: boolean;
+  }[];
 }
 
 /** Declarative, subject-neutral geometry consumed by the Three.js adapter. */
@@ -73,9 +85,17 @@ export class ScreenSceneRenderer {
   private readonly nucleonGeometry = new THREE.SphereGeometry(1, 16, 12);
   private readonly materials = new Map<number, THREE.MeshStandardMaterial>();
   private readonly sphereMeshes: THREE.InstancedMesh[] = [];
-  private readonly ringMeshes: THREE.Mesh[] = [];
+  private readonly ringMeshes = new Map<number, THREE.Mesh>();
+  private readonly slotMarkers: {
+    readonly shell: number;
+    readonly id: string;
+    readonly position: THREE.Vector3;
+    readonly occupied: boolean;
+    readonly element: HTMLSpanElement;
+  }[] = [];
   private readonly interactiveMeshes: THREE.Object3D[] = [];
   private readonly nucleusPickMesh: THREE.Mesh;
+  private readonly slotLayer: HTMLDivElement;
   private readonly resizeObserver: ResizeObserver;
   private readonly reducedMotion: MediaQueryList;
   private readonly diagnosticsElement: HTMLElement | null;
@@ -85,6 +105,8 @@ export class ScreenSceneRenderer {
   private yaw = 0;
   private pitch = 0;
   private distance = 14;
+  private nucleusRadius = 0.2;
+  private dragParticle: string | null = null;
   private disposed = false;
 
   /** Create a WebGL canvas inside a host element and configure quality limits. */
@@ -105,6 +127,10 @@ export class ScreenSceneRenderer {
     );
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.host.append(this.canvas);
+    this.slotLayer = document.createElement("div");
+    this.slotLayer.className = "drop-slot-layer";
+    this.slotLayer.setAttribute("aria-hidden", "true");
+    this.host.append(this.slotLayer);
     this.scene.background = new THREE.Color(0xf4f4ee);
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x5c6870, 2));
     const keyLight = new THREE.DirectionalLight(0xffffff, 2.4);
@@ -113,8 +139,10 @@ export class ScreenSceneRenderer {
     this.camera.position.set(0, 0, this.distance);
 
     const pickMaterial = new THREE.MeshBasicMaterial({
+      color: 0xf0b323,
       transparent: true,
       opacity: 0,
+      wireframe: true,
       depthWrite: false,
     });
     this.nucleusPickMesh = new THREE.Mesh(new THREE.SphereGeometry(1), pickMaterial);
@@ -145,6 +173,7 @@ export class ScreenSceneRenderer {
   update(frame: ScreenSceneFrame): void {
     this.clearSphereMeshes();
     this.clearRingMeshes();
+    this.nucleusRadius = Math.max(frame.nucleusRadius, 0.2);
 
     for (const batch of frame.spheres) {
       if (batch.positions.length === 0) {
@@ -172,7 +201,7 @@ export class ScreenSceneRenderer {
       }
     }
 
-    this.nucleusPickMesh.scale.setScalar(Math.max(frame.nucleusRadius, 0.2));
+    this.nucleusPickMesh.scale.setScalar(this.nucleusRadius);
     for (const ring of frame.rings) {
       const geometry = new THREE.TorusGeometry(ring.radius, 0.035, 6, 96);
       const material = new THREE.MeshBasicMaterial({
@@ -183,18 +212,55 @@ export class ScreenSceneRenderer {
       const mesh = new THREE.Mesh(geometry, material);
       mesh.userData.interactionTarget = `shell:${ring.shell}`;
       this.scene.add(mesh);
-      this.ringMeshes.push(mesh);
+      this.ringMeshes.set(ring.shell, mesh);
       this.interactiveMeshes.push(mesh);
+      for (const slot of ring.slots) {
+        const element = document.createElement("span");
+        element.className = "drop-slot-marker";
+        element.dataset.slotId = slot.id;
+        this.slotLayer.append(element);
+        this.slotMarkers.push({
+          shell: ring.shell,
+          id: slot.id,
+          position: new THREE.Vector3(slot.position.x, slot.position.y, slot.position.z),
+          occupied: slot.occupied,
+          element,
+        });
+      }
     }
+    this.positionSlotMarkers();
     this.render();
   }
 
   /** Find the closest interactive scene surface under viewport coordinates. */
-  pickTarget(clientX: number, clientY: number): string | null {
+  pickTarget(
+    clientX: number,
+    clientY: number,
+    source?: string,
+    pointerType = "mouse",
+  ): string | null {
     const bounds = this.canvas.getBoundingClientRect();
     if (bounds.width === 0 || bounds.height === 0) {
       return null;
     }
+    if (source?.startsWith("tray:")) {
+      const pointer = { x: clientX - bounds.left, y: clientY - bounds.top };
+      const tolerance = screenDropTolerancePx(pointerType, bounds.width);
+      if (source === "tray:electron") {
+        const zones = this.projectedRingZones(bounds);
+        const selection = selectProjectedSnapTarget(pointer, zones, tolerance);
+        this.updateDropHighlight(selection?.target ?? null, selection?.slotId ?? null);
+        return selection?.target ?? null;
+      }
+      if (source === "tray:proton" || source === "tray:neutron") {
+        const target = this.isNearNucleus(pointer, tolerance, bounds.height)
+          ? "nucleus"
+          : this.pickTarget(clientX, clientY);
+        this.updateDropHighlight(target, null);
+        return target;
+      }
+    }
+
     this.pointer.set(
       ((clientX - bounds.left) / bounds.width) * 2 - 1,
       -((clientY - bounds.top) / bounds.height) * 2 + 1,
@@ -207,6 +273,20 @@ export class ScreenSceneRenderer {
         ? [{ target, distance: hit.distance, priority: target === "nucleus" ? 1 : 0 }]
         : [];
     }));
+  }
+
+  /** Show electron slot markers while a particle is being dragged. */
+  beginDrag(particle: string): void {
+    this.dragParticle = particle;
+    this.slotLayer.classList.toggle("is-visible", particle === "electron");
+    this.positionSlotMarkers();
+  }
+
+  /** Clear transient drop-zone highlights after a drag ends or is cancelled. */
+  endDrag(): void {
+    this.dragParticle = null;
+    this.slotLayer.classList.remove("is-visible");
+    this.updateDropHighlight(null, null);
   }
 
   /** Rotate the view without changing atom state. */
@@ -251,6 +331,7 @@ export class ScreenSceneRenderer {
     this.materials.clear();
     this.renderer.dispose();
     this.canvas.remove();
+    this.slotLayer.remove();
     this.diagnosticsElement?.remove();
   }
 
@@ -260,6 +341,7 @@ export class ScreenSceneRenderer {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height, false);
+    this.positionSlotMarkers();
     this.render();
   };
 
@@ -303,6 +385,90 @@ export class ScreenSceneRenderer {
       horizontalDistance * Math.cos(this.yaw),
     );
     this.camera.lookAt(0, 0, 0);
+    this.positionSlotMarkers();
+    this.render();
+  }
+
+  private projectedRingZones(bounds: DOMRect): ProjectedDropZone[] {
+    return [...this.ringMeshes.entries()].map(([shell, mesh]) => {
+      const radius = (mesh.geometry as THREE.TorusGeometry).parameters.radius;
+      const outline = Array.from({ length: 96 }, (_, index) => {
+        const angle = (2 * Math.PI * index) / 96;
+        return this.projectToCanvas(
+          new THREE.Vector3(Math.cos(angle) * radius, Math.sin(angle) * radius, 0),
+          bounds,
+        );
+      });
+      const slots = this.slotMarkers
+        .filter((slot) => slot.shell === shell && !slot.occupied)
+        .map((slot) => ({
+          id: slot.id,
+          point: this.projectToCanvas(slot.position, bounds),
+        }));
+      return { target: `shell:${shell}`, outline, slots };
+    });
+  }
+
+  private isNearNucleus(pointer: ScreenPoint, tolerancePx: number, viewportHeight: number): boolean {
+    const bounds = this.canvas.getBoundingClientRect();
+    const center = this.projectToCanvas(new THREE.Vector3(), bounds);
+    this.camera.updateMatrixWorld();
+    const cameraRight = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion);
+    const toleranceWorld = screenPixelsToWorldUnits(
+      tolerancePx,
+      Math.max(0.1, this.distance - this.nucleusRadius),
+      this.camera.fov,
+      viewportHeight,
+    );
+    const edge = this.projectToCanvas(
+      cameraRight.multiplyScalar(this.nucleusRadius + toleranceWorld),
+      bounds,
+    );
+    const projectedRadius = Math.hypot(edge.x - center.x, edge.y - center.y);
+    const near = Math.hypot(pointer.x - center.x, pointer.y - center.y) <= projectedRadius;
+    const material = this.nucleusPickMesh.material as THREE.MeshBasicMaterial;
+    material.opacity = near && this.dragParticle !== "electron" ? 0.34 : 0;
+    return near;
+  }
+
+  private projectToCanvas(point: THREE.Vector3, bounds: DOMRect): ScreenPoint {
+    const projected = point.clone().project(this.camera);
+    return {
+      x: (projected.x * 0.5 + 0.5) * bounds.width,
+      y: (-projected.y * 0.5 + 0.5) * bounds.height,
+    };
+  }
+
+  private positionSlotMarkers(): void {
+    if (this.slotMarkers.length === 0) {
+      return;
+    }
+    const bounds = this.canvas.getBoundingClientRect();
+    for (const slot of this.slotMarkers) {
+      const point = this.projectToCanvas(slot.position, bounds);
+      slot.element.style.left = `${point.x}px`;
+      slot.element.style.top = `${point.y}px`;
+      slot.element.hidden = slot.occupied;
+    }
+  }
+
+  private updateDropHighlight(target: string | null, slotId: string | null): void {
+    for (const [shell, mesh] of this.ringMeshes) {
+      const material = mesh.material as THREE.MeshBasicMaterial;
+      const active = target === `shell:${shell}`;
+      material.color.set(active ? 0xf0b323 : shell % 2 === 0 ? 0x178b87 : 0x5b6e9b);
+      material.opacity = this.dragParticle && !active ? 0.42 : active ? 0.95 : 0.72;
+    }
+    for (const slot of this.slotMarkers) {
+      slot.element.classList.toggle(
+        "is-active",
+        target === `shell:${slot.shell}` && slot.id === slotId,
+      );
+    }
+    const nucleusMaterial = this.nucleusPickMesh.material as THREE.MeshBasicMaterial;
+    if (target !== "nucleus") {
+      nucleusMaterial.opacity = 0;
+    }
     this.render();
   }
 
@@ -324,12 +490,16 @@ export class ScreenSceneRenderer {
   }
 
   private clearRingMeshes(): void {
-    for (const mesh of this.ringMeshes) {
+    for (const mesh of this.ringMeshes.values()) {
       this.scene.remove(mesh);
       mesh.geometry.dispose();
       (mesh.material as THREE.Material).dispose();
     }
-    this.ringMeshes.length = 0;
+    this.ringMeshes.clear();
+    for (const slot of this.slotMarkers) {
+      slot.element.remove();
+    }
+    this.slotMarkers.length = 0;
     this.interactiveMeshes.splice(0, this.interactiveMeshes.length, this.nucleusPickMesh);
   }
 }
