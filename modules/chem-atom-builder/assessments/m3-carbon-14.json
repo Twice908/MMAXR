@@ -1,0 +1,30 @@
+[
+  {
+    "id": "assess.atom.carbon14.01",
+    "prompt": "Carbon-14 has a mass number of 14 and 6 protons. How many neutrons does it have?",
+    "options": [
+      { "id": "a", "text": "6" },
+      { "id": "b", "text": "14" },
+      { "id": "c", "text": "20" },
+      { "id": "d", "text": "8" }
+    ],
+    "correctOptionIndex": 3,
+    "explanation": "Carbon-14 has 8 neutrons. You may have mistaken the mass number 14 for the neutron count, or carried over carbon-12's 6 neutrons.",
+    "conceptIds": ["sci.chem.atom.isotopes", "sci.chem.atom.structure"],
+    "reviewStatus": "pending"
+  },
+  {
+    "id": "assess.atom.carbon14.02",
+    "prompt": "The carbon-14 build has charge 0 and 6 protons. How many electrons should it have?",
+    "options": [
+      { "id": "a", "text": "14" },
+      { "id": "b", "text": "6" },
+      { "id": "c", "text": "8" },
+      { "id": "d", "text": "0" }
+    ],
+    "correctOptionIndex": 1,
+    "explanation": "With charge 0, this carbon-14 build has 6 electrons. You may have used the mass number or neutron count instead of matching electrons to protons for a neutral atom.",
+    "conceptIds": ["sci.chem.atom.isotopes", "sci.chem.atom.ions"],
+    "reviewStatus": "pending"
+  }
+]

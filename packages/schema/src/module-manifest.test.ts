@@ -3,6 +3,7 @@ import { moduleManifestSchema } from "./module-manifest.js";
 
 const validManifest = {
   schemaVersion: "1.0",
+  releaseStatus: "release",
   id: "chem.atom-builder",
   title: { en: "Atom Builder" },
   subject: "chemistry",
@@ -28,9 +29,11 @@ const validManifest = {
   missions: [
     {
       id: "make-na-ion",
+      title: "Make Na+",
+      goalText: "Build a sodium ion with a +1 charge.",
       goal: { symbol: "Na", charge: 1 },
       hints: ["A +1 ion has lost one electron."],
-      onComplete: { triggerAssessment: "assess.atom.ions.02" },
+      onComplete: { triggerAssessments: ["assess.atom.ions.02"] },
     },
   ],
   rulesPlugin: "./rules/index.ts",
@@ -71,18 +74,66 @@ describe("moduleManifestSchema", () => {
     expect(result.success).toBe(false);
   });
 
+  it("allows a draft manifest with empty mission and check layers", () => {
+    const result = moduleManifestSchema.safeParse({
+      ...validManifest,
+      releaseStatus: "draft",
+      interactions: {
+        ...validManifest.interactions,
+        missions: [],
+        check: [],
+      },
+      missions: [],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects release manifests with empty mission and check layers", () => {
+    const result = moduleManifestSchema.safeParse({
+      ...validManifest,
+      interactions: {
+        ...validManifest.interactions,
+        missions: [],
+        check: [],
+      },
+      missions: [],
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it("defaults an omitted release status to release", () => {
+    const manifestWithoutStatus: Record<string, unknown> = { ...validManifest };
+    delete manifestWithoutStatus.releaseStatus;
+
+    expect(moduleManifestSchema.parse(manifestWithoutStatus).releaseStatus).toBe("release");
+  });
+
   it("rejects missions that reference an assessment absent from interactions.check", () => {
     const result = moduleManifestSchema.safeParse({
       ...validManifest,
       missions: [
         {
           ...validManifest.missions[0],
-          onComplete: { triggerAssessment: "assess.atom.missing.01" },
+          onComplete: { triggerAssessments: ["assess.atom.missing.01"] },
         },
       ],
     });
 
     expect(result.success).toBe(false);
+  });
+
+  it("rejects unknown curriculum concept IDs", () => {
+    const result = moduleManifestSchema.safeParse({
+      ...validManifest,
+      concepts: ["sci.chem.atom.not-registered"],
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.message.includes("Unknown concept ID"))).toBe(true);
+    }
   });
 
   it("rejects interactions that name an undefined mission", () => {

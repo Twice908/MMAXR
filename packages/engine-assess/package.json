@@ -1,0 +1,17 @@
+{
+  "name": "@mma/engine-assess",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@mma/curriculum": "workspace:*",
+    "@mma/schema": "workspace:*",
+    "zod": "4.6.5"
+  }
+}

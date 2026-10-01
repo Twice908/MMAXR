@@ -1,0 +1,15 @@
+:root {
+  color: #1e292d;
+  background: #f4f4ee;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* { box-sizing: border-box; }
+html, body, #app { min-width: 0; min-height: 100%; margin: 0; }
+body { min-height: 100dvh; }
+.app-shell { min-height: 100dvh; }
+.shell-loading, .shell-error { min-height: 100dvh; display: grid; place-items: center; padding: 24px; font-family: "Avenir Next", "Trebuchet MS", sans-serif; }
+.shell-error { color: #7c3225; }

@@ -1,0 +1,30 @@
+[
+  {
+    "id": "assess.atom.carbon12.01",
+    "prompt": "In the carbon-12 build, how many protons should the atom have?",
+    "options": [
+      { "id": "a", "text": "12" },
+      { "id": "b", "text": "6" },
+      { "id": "c", "text": "0" },
+      { "id": "d", "text": "14" }
+    ],
+    "correctOptionIndex": 1,
+    "explanation": "Carbon-12 has 6 protons. You may have mixed up the mass number 12 with the proton count, or swapped protons and neutrons.",
+    "conceptIds": ["sci.chem.atom.structure", "sci.chem.atom.isotopes"],
+    "reviewStatus": "pending"
+  },
+  {
+    "id": "assess.atom.carbon12.02",
+    "prompt": "A neutral carbon-12 atom has 6 protons. How many electrons does it have?",
+    "options": [
+      { "id": "a", "text": "12" },
+      { "id": "b", "text": "0" },
+      { "id": "c", "text": "8" },
+      { "id": "d", "text": "6" }
+    ],
+    "correctOptionIndex": 3,
+    "explanation": "A neutral carbon-12 atom has 6 electrons. You may have used the mass number or neutron count instead of matching the electron count to the proton count.",
+    "conceptIds": ["sci.chem.atom.structure"],
+    "reviewStatus": "pending"
+  }
+]

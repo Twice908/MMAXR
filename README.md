@@ -105,9 +105,10 @@ A module's manifest is validated for the presence of all four.
  |  kits/*              chemistry, biology, physics, ...    |  <- subject logic
  +----------------------------------------------------------+
  |  engine-ui     engine-assess     engine-telemetry        |
+ |  engine-render (screen Three.js adapter + input mapping)  |
  |  engine-voice (Phase 2: narration + voice guide)         |
  |  engine-xr (sessions, input, comfort)                    |
- |  engine-core (scene, entities, rules, missions, events)  |
+ |  engine-core (state, actions, rules, missions, events)    |
  +----------------------------------------------------------+
  |  Three.js / WebXR / browser                              |
  +----------------------------------------------------------+
@@ -215,6 +216,7 @@ A module is described by `module.json`, validated by schema at build time and at
 ```json
 {
   "schemaVersion": "1.0",
+  "releaseStatus": "release",
   "id": "chem.atom-builder",
   "title": { "en": "Atom Builder" },
   "subject": "chemistry",
@@ -249,6 +251,8 @@ A module is described by `module.json`, validated by schema at build time and at
 ```
 
 Validation must fail the build if: a concept ID is unknown, an asset exceeds its budget, a mission references a missing assessment, or any of the four interaction layers is empty.
+
+Draft manifests may omit the mission and check layers while a module is being built. The status defaults to `release`; a publishing validator must refuse every `draft` manifest.
 
 ### 7.1 Reserved `narration` block (Phase 2, ignored before then)
 
@@ -351,6 +355,7 @@ Rules: events are append-only, versioned, and batched; the app works offline-tol
 │  └─ api/                       # Portal bridge: events, progress, catalogue
 ├─ packages/
 │  ├─ engine-core/               # scene, entities, actions, rules, missions, event bus
+│  ├─ engine-render/             # Three.js screen renderer and device input adapters
 │  ├─ engine-xr/                 # WebXR sessions, input adapters, comfort, capability detect
 │  ├─ engine-ui/                 # in-world + overlay UI components
 │  ├─ engine-assess/             # assessment items, triggers, scoring
@@ -362,7 +367,7 @@ Rules: events are append-only, versioned, and batched; the app works offline-tol
 │     ├─ chemistry/
 │     └─ biology/
 ├─ modules/
-│  ├─ chem-atom-builder/         # module.json, assets/, rules/, assessments/
+│  ├─ chem-atom-builder/         # module.json and screen-mode Atom Builder
 │  └─ bio-cell-explorer/         # (later)
 ├─ tools/
 │  ├─ validate-manifests/
