@@ -16,6 +16,14 @@ export interface ChemistryState {
 /** Actions that change particle counts or place/remove an electron. */
 export type ChemistryAction =
   | {
+      readonly type: "particle/place";
+      readonly payload: {
+        readonly particle: "proton" | "neutron" | "electron";
+        readonly target: "nucleus" | "shell";
+        readonly shell?: number;
+      };
+    }
+  | {
       readonly type: "particle/add";
       readonly payload: { readonly particle: "proton" | "neutron" };
     }
@@ -31,6 +39,7 @@ export type ChemistryAction =
       readonly type: "electron/remove";
       readonly payload: { readonly shell: number };
     }
+  | { readonly type: "atom/reset"; readonly payload: null }
   | { readonly type: "validation/clear"; readonly payload: null };
 
 /** Create a neutral atom state, or an ion state when an electron count is supplied. */
@@ -63,6 +72,35 @@ export const chemistryReducer: Reducer<ChemistryState, ChemistryAction> = (
   action,
 ) => {
   switch (action.type) {
+    case "particle/place": {
+      if (action.payload.particle === "electron") {
+        if (action.payload.target !== "shell") {
+          return reject(state, "Electrons belong on a shell, not in the nucleus.");
+        }
+        const shell = action.payload.shell ?? 0;
+        const validation = validateElectronPlacement(state.shells, shell);
+        if (!validation.valid) {
+          return reject(state, validation.message);
+        }
+        const shells = [...state.shells];
+        while (shells.length < shell) {
+          shells.push(0);
+        }
+        shells[shell - 1] = (shells[shell - 1] ?? 0) + 1;
+        return { ...state, shells, validationMessages: [] };
+      }
+
+      if (action.payload.target !== "nucleus") {
+        return reject(state, "Protons and neutrons belong in the nucleus, not on an electron shell.");
+      }
+      if (action.payload.particle === "proton") {
+        if (state.protons >= 20) {
+          return reject(state, "This kit supports elements 1 to 20.");
+        }
+        return { ...state, protons: state.protons + 1, validationMessages: [] };
+      }
+      return { ...state, neutrons: state.neutrons + 1, validationMessages: [] };
+    }
     case "particle/add": {
       if (action.payload.particle === "proton") {
         if (state.protons >= 20) {
@@ -108,6 +146,8 @@ export const chemistryReducer: Reducer<ChemistryState, ChemistryAction> = (
       }
       return { ...state, shells, validationMessages: [] };
     }
+    case "atom/reset":
+      return createChemistryState(1, 0);
     case "validation/clear":
       return state.validationMessages.length > 0
         ? { ...state, validationMessages: [] }

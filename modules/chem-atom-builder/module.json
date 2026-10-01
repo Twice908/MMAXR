@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "1.0",
+  "releaseStatus": "draft",
+  "id": "chem.atom-builder",
+  "title": { "en": "Atom Builder" },
+  "subject": "chemistry",
+  "kit": "chemistry",
+  "concepts": ["sci.chem.atom.structure", "sci.chem.atom.shells", "sci.chem.atom.ions"],
+  "boards": ["CBSE", "ICSE", "STATE"],
+  "levels": [
+    { "id": "class9-10", "classes": [9, 10], "features": ["particles", "shells", "ions"] }
+  ],
+  "modes": ["screen"],
+  "estimatedMinutes": 8,
+  "assets": [],
+  "interactions": {
+    "manipulate": ["drag-particles", "snap-to-nucleus", "snap-to-shell", "orbit-camera"],
+    "simulate": ["update-element", "update-charge", "update-electron-configuration"],
+    "missions": [],
+    "check": []
+  },
+  "missions": [],
+  "rulesPlugin": "./src/index.ts"
+}

@@ -3,6 +3,7 @@ import { moduleManifestSchema } from "./module-manifest.js";
 
 const validManifest = {
   schemaVersion: "1.0",
+  releaseStatus: "release",
   id: "chem.atom-builder",
   title: { en: "Atom Builder" },
   subject: "chemistry",
@@ -69,6 +70,42 @@ describe("moduleManifestSchema", () => {
     });
 
     expect(result.success).toBe(false);
+  });
+
+  it("allows a draft manifest with empty mission and check layers", () => {
+    const result = moduleManifestSchema.safeParse({
+      ...validManifest,
+      releaseStatus: "draft",
+      interactions: {
+        ...validManifest.interactions,
+        missions: [],
+        check: [],
+      },
+      missions: [],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects release manifests with empty mission and check layers", () => {
+    const result = moduleManifestSchema.safeParse({
+      ...validManifest,
+      interactions: {
+        ...validManifest.interactions,
+        missions: [],
+        check: [],
+      },
+      missions: [],
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it("defaults an omitted release status to release", () => {
+    const manifestWithoutStatus: Record<string, unknown> = { ...validManifest };
+    delete manifestWithoutStatus.releaseStatus;
+
+    expect(moduleManifestSchema.parse(manifestWithoutStatus).releaseStatus).toBe("release");
   });
 
   it("rejects missions that reference an assessment absent from interactions.check", () => {

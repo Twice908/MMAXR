@@ -37,4 +37,32 @@ describe("chemistry reducer", () => {
       "Remove electrons from the outer shell first.",
     ]);
   });
+
+  it("rejects particles dropped on the wrong atom target with an explanation", () => {
+    const state = createChemistryState(2, 2);
+
+    const protonOnShell = chemistryReducer(state, {
+      type: "particle/place",
+      payload: { particle: "proton", target: "shell", shell: 1 },
+    });
+    const electronInNucleus = chemistryReducer(state, {
+      type: "particle/place",
+      payload: { particle: "electron", target: "nucleus" },
+    });
+
+    expect(protonOnShell.validationMessages).toEqual([
+      "Protons and neutrons belong in the nucleus, not on an electron shell.",
+    ]);
+    expect(electronInNucleus.validationMessages).toEqual([
+      "Electrons belong on a shell, not in the nucleus.",
+    ]);
+  });
+
+  it("resets atom data through a reducer action", () => {
+    const state = createChemistryState(11, 12, 10);
+
+    expect(chemistryReducer(state, { type: "atom/reset", payload: null })).toEqual(
+      createChemistryState(1, 0),
+    );
+  });
 });

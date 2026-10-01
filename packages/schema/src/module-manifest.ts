@@ -66,8 +66,8 @@ const interactionsSchema = z
   .object({
     manipulate: z.array(identifierSchema).min(1),
     simulate: z.array(identifierSchema).min(1),
-    missions: z.array(identifierSchema).min(1),
-    check: z.array(identifierSchema).min(1),
+    missions: z.array(identifierSchema),
+    check: z.array(identifierSchema),
   })
   .strict();
 
@@ -88,6 +88,7 @@ const missionSchema = z
 export const moduleManifestSchema = z
   .object({
     schemaVersion: z.string().min(1),
+    releaseStatus: z.enum(["draft", "release"]).default("release"),
     id: identifierSchema,
     title: z
       .record(z.string().min(2), z.string().min(1))
@@ -101,12 +102,30 @@ export const moduleManifestSchema = z
     estimatedMinutes: z.number().int().positive(),
     assets: z.array(assetSchema),
     interactions: interactionsSchema,
-    missions: z.array(missionSchema).min(1),
+    missions: z.array(missionSchema),
     rulesPlugin: z.string().min(1),
     narration: narrationSchema.optional(),
   })
   .strict()
   .superRefine((manifest, context) => {
+    if (manifest.releaseStatus === "release") {
+      if (manifest.interactions.missions.length === 0 || manifest.missions.length === 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["interactions", "missions"],
+          message: "Release modules must define a non-empty mission layer",
+        });
+      }
+
+      if (manifest.interactions.check.length === 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["interactions", "check"],
+          message: "Release modules must define a non-empty check layer",
+        });
+      }
+    }
+
     const assetIds = manifest.assets.map((asset) => asset.id);
     const levelIds = manifest.levels.map((level) => level.id);
     const missionIds = manifest.missions.map((mission) => mission.id);

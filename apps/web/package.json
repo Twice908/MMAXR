@@ -6,6 +6,9 @@
     "dev": "vite",
     "build": "tsc -p tsconfig.json && vite build"
   },
+  "dependencies": {
+    "@mma/chem-atom-builder": "workspace:*"
+  },
   "devDependencies": {
     "vite": "8.3.1"
   }
