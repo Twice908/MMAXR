@@ -36,6 +36,18 @@ importers:
         specifier: 8.3.1
         version: 8.3.1(@types/node@24.19.0)
 
+  packages/engine-core:
+    dependencies:
+      '@mma/schema':
+        specifier: workspace:*
+        version: link:../schema
+
+  packages/kits/chemistry:
+    dependencies:
+      '@mma/engine-core':
+        specifier: workspace:*
+        version: link:../../engine-core
+
   packages/schema:
     dependencies:
       zod:
