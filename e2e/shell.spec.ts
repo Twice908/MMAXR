@@ -83,6 +83,42 @@ test("completes M2 and answers its linked questions", async ({ page }) => {
   await expect(eventLog).toContainText("assessment_answered");
 });
 
+test("shows the next electron shell and keeps the drag label off the drop point", async ({ page }) => {
+  await page.goto("http://127.0.0.1:5174");
+  const canvas = page.locator("#atom-scene canvas");
+  await expect(canvas).toBeVisible();
+  await page.getByRole("button", { name: "Add electron" }).click();
+  await expect(page.locator("#electron-count")).toHaveText("2");
+  await expect(page.locator("#electron-configuration")).toHaveText("2");
+
+  const trayElectron = await page.locator('[data-particle="electron"]').boundingBox();
+  const canvasBounds = await canvas.boundingBox();
+  if (!trayElectron || !canvasBounds) {
+    throw new Error("Electron drag surfaces are missing");
+  }
+  const shellTwoRadius = 1.51;
+  const pixelsPerUnit = canvasBounds.height / (2 * Math.tan(42 * Math.PI / 360) * 14);
+  const start = {
+    x: trayElectron.x + trayElectron.width / 2,
+    y: trayElectron.y + trayElectron.height / 2,
+  };
+  const drop = {
+    x: canvasBounds.x + canvasBounds.width / 2 + shellTwoRadius * pixelsPerUnit,
+    y: canvasBounds.y + canvasBounds.height / 2,
+  };
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(drop.x, drop.y, { steps: 8 });
+  const dragLabel = await page.locator("#drag-ghost").boundingBox();
+  expect(dragLabel).not.toBeNull();
+  expect(dragLabel!.x).toBeGreaterThanOrEqual(drop.x);
+  expect(dragLabel!.y + dragLabel!.height).toBeLessThan(drop.y);
+  await page.mouse.up();
+
+  await expect(page.locator("#electron-count")).toHaveText("3");
+  await expect(page.locator("#electron-configuration")).toHaveText("2,1");
+});
+
 async function addParticles(
   page: import("@playwright/test").Page,
   buttonName: string,

@@ -9,7 +9,15 @@ describe("atom view layout", () => {
     expect(layout.spheres[0]?.positions).toHaveLength(2);
     expect(layout.spheres[1]?.positions).toHaveLength(1);
     expect(layout.spheres[0]?.color).not.toBe(layout.spheres[1]?.color);
-    expect(layout.rings.map((ring) => ring.shell)).toEqual([1]);
+    expect(layout.rings.map((ring) => ring.shell)).toEqual([1, 2]);
+  });
+
+  it("previews the next shell as an electron drop target until the kit limit", () => {
+    const twoElectrons = layoutAtom(createChemistryState(2, 0, 2));
+    const maxElectrons = layoutAtom(createChemistryState(20, 0, 20));
+
+    expect(twoElectrons.rings.map((ring) => ring.shell)).toEqual([1, 2]);
+    expect(maxElectrons.rings.map((ring) => ring.shell)).toEqual([1, 2, 3, 4]);
   });
 
   it("keeps nucleons separated while the packed nucleus grows with count", () => {

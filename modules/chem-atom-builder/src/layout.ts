@@ -42,7 +42,9 @@ export function layoutAtom(state: ChemistryState): AtomLayout {
     (radius, point) => Math.max(radius, Math.hypot(point.x, point.y, point.z) + NUCLEON_RADIUS),
     NUCLEON_RADIUS,
   );
-  const shellCount = Math.max(1, state.shells.length);
+  const electronCount = state.shells.reduce((total, count) => total + count, 0);
+  const previewNextShell = electronCount < 20 ? 1 : 0;
+  const shellCount = Math.min(4, Math.max(1, state.shells.length + previewNextShell));
   const rings = Array.from({ length: shellCount }, (_, index) => ({
     shell: index + 1,
     radius: nucleusRadius + 0.65 + index * 0.68,

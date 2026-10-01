@@ -118,7 +118,7 @@
 .inspector-foot { gap: 8px; margin-top: auto; padding-top: 24px; color: var(--muted); }
 .live-indicator { width: 7px; height: 7px; border-radius: 50%; background: #3c9c77; }
 .render-diagnostics { position: absolute; top: 10px; left: 10px; padding: 5px 8px; border-radius: 4px; color: white; background: #17262dcc; font: 11px/1.2 ui-monospace, monospace; pointer-events: none; }
-.drag-ghost { position: absolute; z-index: 5; display: none; padding: 7px 10px; border: 1px solid #ffffffa0; border-radius: 20px; color: white; background: var(--teal); font-size: 12px; text-transform: capitalize; pointer-events: none; transform: translate(-50%, -50%); }
+.drag-ghost { position: absolute; z-index: 5; display: none; padding: 7px 10px; border: 1px solid #ffffffa0; border-radius: 20px; color: white; background: var(--teal); font-size: 12px; text-transform: capitalize; pointer-events: none; transform: translate(16px, calc(-100% - 14px)); }
 .drag-ghost.is-visible { display: block; }
 .tray-particle.is-rejected { animation: particle-bounce 320ms ease-out; }
 @keyframes particle-bounce { 35% { transform: translateY(-9px) scale(1.12); } 70% { transform: translateY(2px) scale(.96); } }
