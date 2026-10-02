@@ -401,6 +401,65 @@ test("shows the next electron shell and keeps the drag label off the drop point"
   await expect(page.locator("#electron-configuration")).toHaveText("2,1");
 });
 
+test("hides AR entry and explains unsupported devices", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "xr", {
+      configurable: true,
+      value: { isSessionSupported: async () => false },
+    });
+  });
+  await page.goto("http://127.0.0.1:5174");
+
+  await expect(page.getByRole("button", { name: "View in AR" })).toBeHidden();
+  await expect(page.locator("#ar-support-message")).toContainText(
+    "does not support immersive AR",
+  );
+  await expect(page.locator("#atom-scene canvas")).toBeVisible();
+});
+
+test("explains camera use before permission and returns cleanly after denial", async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") {
+      browserErrors.push(message.text());
+    }
+  });
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "xr", {
+      configurable: true,
+      value: {
+        isSessionSupported: async () => true,
+        requestSession: async () => {
+          document.documentElement.dataset.arRequest = "requested";
+          throw new DOMException("Camera permission denied", "NotAllowedError");
+        },
+      },
+    });
+  });
+  await page.goto("http://127.0.0.1:5174");
+
+  const viewInAr = page.getByRole("button", { name: "View in AR" });
+  await expect(viewInAr).toBeVisible();
+  await viewInAr.click();
+  const explanation = page.getByRole("dialog", { name: "View the atom in AR?" });
+  await expect(explanation).toContainText("Nothing is recorded or uploaded.");
+  expect(await page.locator("html").getAttribute("data-ar-request")).toBeNull();
+
+  await explanation.getByRole("button", { name: "Start AR" }).click();
+  await expect(page.locator("#ar-status")).toContainText("Camera access was not allowed");
+  await expect(page.locator("#atom-scene canvas")).toBeVisible();
+  await expect(page.locator("#atomic-number")).toHaveText("1");
+  await expect(page.locator("#proton-count")).toHaveText("1");
+  await expect(page.locator("#neutron-count")).toHaveText("0");
+
+  await page.getByRole("button", { name: "Events" }).click();
+  await expect(page.locator('#dev-event-list [data-event-type="ar_error"]')).toContainText(
+    "permission_denied",
+  );
+  expect(browserErrors).toEqual([]);
+});
+
 async function addParticles(
   page: import("@playwright/test").Page,
   buttonName: string,

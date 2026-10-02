@@ -13,6 +13,7 @@
     "@mma/engine-assess": "workspace:*",
     "@mma/engine-core": "workspace:*",
     "@mma/engine-render": "workspace:*",
+    "@mma/engine-xr": "workspace:*",
     "@mma/engine-voice": "workspace:*",
     "@mma/kit-chemistry": "workspace:*",
     "@mma/schema": "workspace:*"

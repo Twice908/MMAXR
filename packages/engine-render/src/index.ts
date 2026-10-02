@@ -22,6 +22,7 @@ export {
 } from "./screen-snap.js";
 export {
   ScreenSceneRenderer,
+  arContentScale,
   selectQualityTier,
   type Position3,
   type QualityTier,

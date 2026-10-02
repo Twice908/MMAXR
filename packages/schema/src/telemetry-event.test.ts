@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { telemetryEventSchema } from "./telemetry-event.js";
+import { arTelemetryEventSchema, telemetryEventSchema } from "./telemetry-event.js";
 
 const validEvent = {
   eventId: "550e8400-e29b-41d4-a716-446655440000",
@@ -51,4 +51,27 @@ describe("telemetryEventSchema", () => {
         .toBe(true);
     },
   );
+
+  it.each([
+    { type: "ar_session_started", payload: { grantedFeatures: ["hit-test"] } },
+    { type: "ar_session_ended", payload: { durationSec: 125 } },
+    { type: "ar_placement", payload: {} },
+    { type: "ar_error", payload: { reasonCode: "tracking_lost" } },
+  ])("validates AR telemetry type $type", (event) => {
+    expect(telemetryEventSchema.safeParse({ ...validEvent, ...event }).success).toBe(true);
+    expect(arTelemetryEventSchema.safeParse({ ...validEvent, ...event }).success).toBe(true);
+  });
+
+  it("requires a nonnegative duration and a known AR error reason", () => {
+    expect(arTelemetryEventSchema.safeParse({
+      ...validEvent,
+      type: "ar_session_ended",
+      payload: { durationSec: -1 },
+    }).success).toBe(false);
+    expect(arTelemetryEventSchema.safeParse({
+      ...validEvent,
+      type: "ar_error",
+      payload: { reasonCode: "camera_upload_failed" },
+    }).success).toBe(false);
+  });
 });

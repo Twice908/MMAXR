@@ -119,6 +119,22 @@
 .color-key { width: 8px; height: 8px; border-radius: 50%; }
 .atom-workspace { min-width: 0; padding: 18px 22px 20px; display: flex; flex-direction: column; }
 .scene-heading { min-height: 36px; justify-content: space-between; color: var(--muted); }
+.scene-actions { display: flex; align-items: center; gap: 7px; }
+.ar-start { min-height: 36px; padding: 0 12px; border: 1px solid var(--teal); border-radius: 6px; color: #fff; background: var(--teal); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.ar-start:hover { background: #20696d; }
+.ar-support-message { margin: 0 0 8px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.ar-confirmation { width: min(420px, calc(100vw - 32px)); padding: 22px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: #fff; font: inherit; }
+.ar-confirmation::backdrop { background: #101c20a8; }
+.ar-confirmation h2 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 21px; font-weight: 500; }
+.ar-confirmation p { margin: 12px 0 18px; font-size: 14px; line-height: 1.5; }
+.ar-confirmation-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.ar-confirmation-actions button { min-height: 40px; padding: 0 14px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: #fff; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.ar-confirmation-actions [data-ar-action="start"] { border-color: var(--teal); color: white; background: var(--teal); }
+.ar-status { position: fixed; z-index: 29; right: 12px; bottom: max(62px, env(safe-area-inset-bottom)); left: 12px; width: fit-content; max-width: min(540px, calc(100vw - 24px)); padding: 10px 14px; border: 1px solid #607274; border-radius: 6px; color: #eff8f5; background: #1e292df2; font-size: 13px; line-height: 1.4; }
+.ar-exit { position: fixed; z-index: 30; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); min-height: 44px; padding: 0 16px; border: 2px solid #fff; border-radius: 6px; color: #fff; background: #8c2d20; box-shadow: 0 2px 8px #101c2066; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.ar-exit:disabled { opacity: .8; cursor: wait; }
+.is-ar { background-color: transparent; background-image: none; }
+.is-ar .scene-viewport { border-color: transparent; background: transparent; }
 .scene-viewport { position: relative; flex: 1; min-height: min(64vh, 620px); overflow: hidden; border: 1px solid #d7dfdb; border-radius: 8px; background: #f4f4ee; touch-action: none; }
 .atom-canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 .drop-slot-layer { position: absolute; inset: 0; z-index: 2; visibility: hidden; pointer-events: none; }
