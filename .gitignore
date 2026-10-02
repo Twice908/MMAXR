@@ -1,7 +1,11 @@
 node_modules/
+.env
+.env.*
+!.env.example
 dist/
 coverage/
 playwright-report/
 test-results/
 modules/chem-atom-builder/narration/en/generated/audible-test/
+modules/**/.mock-narration/
 .DS_Store

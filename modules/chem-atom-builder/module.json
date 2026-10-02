@@ -90,9 +90,9 @@
         "id": "module-started",
         "trigger": "module_started",
         "script": "narration/en/module-started.json",
-        "audio": "narration/en/generated/module-started.wav.gz",
+        "audio": "narration/en/generated/module-started.mp3",
+        "fallbackAudio": "narration/en/generated/module-started.wav.gz",
         "captions": "narration/en/generated/module-started.vtt",
-        "captionText": "Welcome to Atom Builder. Add particles to build each atom or ion, then check your model. You can follow the captions with sound off.",
         "interruptible": true
       },
       {
@@ -100,9 +100,9 @@
         "trigger": "mission_started",
         "missionId": "build-carbon-12",
         "script": "narration/en/build-carbon-12-start.json",
-        "audio": "narration/en/generated/build-carbon-12-start.wav.gz",
+        "audio": "narration/en/generated/build-carbon-12-start.mp3",
+        "fallbackAudio": "narration/en/generated/build-carbon-12-start.wav.gz",
         "captions": "narration/en/generated/build-carbon-12-start.vtt",
-        "captionText": "Build carbon-12. Start with six protons and six neutrons. Add six electrons too, because the atom is neutral.",
         "interruptible": true
       },
       {
@@ -110,9 +110,9 @@
         "trigger": "mission_completed",
         "missionId": "build-carbon-12",
         "script": "narration/en/build-carbon-12-complete.json",
-        "audio": "narration/en/generated/build-carbon-12-complete.wav.gz",
+        "audio": "narration/en/generated/build-carbon-12-complete.mp3",
+        "fallbackAudio": "narration/en/generated/build-carbon-12-complete.wav.gz",
         "captions": "narration/en/generated/build-carbon-12-complete.vtt",
-        "captionText": "Carbon-12 is ready: six protons, six neutrons, and six electrons. Continue to the questions when you are ready.",
         "interruptible": true
       },
       {
@@ -120,9 +120,9 @@
         "trigger": "mission_started",
         "missionId": "make-na-plus",
         "script": "narration/en/make-na-plus-start.json",
-        "audio": "narration/en/generated/make-na-plus-start.wav.gz",
+        "audio": "narration/en/generated/make-na-plus-start.mp3",
+        "fallbackAudio": "narration/en/generated/make-na-plus-start.wav.gz",
         "captions": "narration/en/generated/make-na-plus-start.vtt",
-        "captionText": "Now make Na plus. Sodium has eleven protons. A plus-one charge means it has lost one electron.",
         "interruptible": true
       },
       {
@@ -130,9 +130,9 @@
         "trigger": "mission_completed",
         "missionId": "make-na-plus",
         "script": "narration/en/make-na-plus-complete.json",
-        "audio": "narration/en/generated/make-na-plus-complete.wav.gz",
+        "audio": "narration/en/generated/make-na-plus-complete.mp3",
+        "fallbackAudio": "narration/en/generated/make-na-plus-complete.wav.gz",
         "captions": "narration/en/generated/make-na-plus-complete.vtt",
-        "captionText": "Na plus has eleven protons, twelve neutrons, and ten electrons. Its electron configuration is two, eight.",
         "interruptible": true
       },
       {
@@ -140,9 +140,9 @@
         "trigger": "mission_started",
         "missionId": "build-carbon-14",
         "script": "narration/en/build-carbon-14-start.json",
-        "audio": "narration/en/generated/build-carbon-14-start.wav.gz",
+        "audio": "narration/en/generated/build-carbon-14-start.mp3",
+        "fallbackAudio": "narration/en/generated/build-carbon-14-start.wav.gz",
         "captions": "narration/en/generated/build-carbon-14-start.vtt",
-        "captionText": "Build carbon-14. It has six protons. Compare mass number fourteen with the proton count to find its neutrons.",
         "interruptible": true
       },
       {
@@ -150,9 +150,9 @@
         "trigger": "mission_completed",
         "missionId": "build-carbon-14",
         "script": "narration/en/build-carbon-14-complete.json",
-        "audio": "narration/en/generated/build-carbon-14-complete.wav.gz",
+        "audio": "narration/en/generated/build-carbon-14-complete.mp3",
+        "fallbackAudio": "narration/en/generated/build-carbon-14-complete.wav.gz",
         "captions": "narration/en/generated/build-carbon-14-complete.vtt",
-        "captionText": "Carbon-14 has six protons, eight neutrons, and six electrons. Its charge is zero.",
         "interruptible": true
       },
       {
@@ -160,9 +160,9 @@
         "trigger": "mission_started",
         "missionId": "make-cl-minus",
         "script": "narration/en/make-cl-minus-start.json",
-        "audio": "narration/en/generated/make-cl-minus-start.wav.gz",
+        "audio": "narration/en/generated/make-cl-minus-start.mp3",
+        "fallbackAudio": "narration/en/generated/make-cl-minus-start.wav.gz",
         "captions": "narration/en/generated/make-cl-minus-start.vtt",
-        "captionText": "Make Cl minus. Chlorine has seventeen protons. A negative charge means one extra electron.",
         "interruptible": true
       },
       {
@@ -170,18 +170,18 @@
         "trigger": "mission_completed",
         "missionId": "make-cl-minus",
         "script": "narration/en/make-cl-minus-complete.json",
-        "audio": "narration/en/generated/make-cl-minus-complete.wav.gz",
+        "audio": "narration/en/generated/make-cl-minus-complete.mp3",
+        "fallbackAudio": "narration/en/generated/make-cl-minus-complete.wav.gz",
         "captions": "narration/en/generated/make-cl-minus-complete.vtt",
-        "captionText": "Cl minus has seventeen protons, eighteen neutrons, and electron configuration two, eight, eight, with a complete outer shell.",
         "interruptible": true
       },
       {
         "id": "invalid-placement",
         "trigger": "invalid_placement",
         "script": "narration/en/invalid-placement.json",
-        "audio": "narration/en/generated/invalid-placement.wav.gz",
+        "audio": "narration/en/generated/invalid-placement.mp3",
+        "fallbackAudio": "narration/en/generated/invalid-placement.wav.gz",
         "captions": "narration/en/generated/invalid-placement.vtt",
-        "captionText": "That spot does not work for this particle or shell. Check the feedback and try another position.",
         "interruptible": true
       }
     ],

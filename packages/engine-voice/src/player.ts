@@ -4,7 +4,7 @@ import {
   type LearningEventMap,
 } from "@mma/engine-core";
 import type { ModuleManifest } from "@mma/schema";
-import { createBrowserNarrationAudioEngine } from "./web-audio.js";
+import { createBrowserNarrationAudioEngine } from "./media-audio.js";
 
 /** A narration cue after manifest validation. */
 export type NarrationCue = NonNullable<ModuleManifest["narration"]>["cues"][number];
@@ -28,7 +28,9 @@ export interface SettingsStorage {
 
 /** Handle for one active Web Audio source. */
 export interface NarrationPlayback {
+  readonly started: Promise<void>;
   setSpeed(speed: NarrationSpeed): void;
+  currentTimeMs?(): number;
   stop(): void;
 }
 
@@ -58,6 +60,7 @@ export interface NarrationViewState {
   readonly settings: NarrationSettings;
   readonly audioEnabled: boolean;
   readonly audioUnavailable: boolean;
+  readonly audioError: string | null;
   readonly soundBlocked: boolean;
   readonly currentCueId: string | null;
 }
@@ -88,13 +91,20 @@ interface QueuedCue {
 interface ActiveCue extends QueuedCue {
   readonly token: number;
   playback?: NarrationPlayback;
+  captionTimer?: ReturnType<typeof setInterval>;
+}
+
+interface TimedCaption {
+  readonly startMs: number;
+  readonly endMs: number;
+  readonly text: string;
 }
 
 const SETTINGS_KEY = "mma.narration.settings.v1";
 const PRIORITY: Record<NarrationCue["trigger"], number> = {
   mission_completed: 5,
-  mission_started: 4,
-  module_started: 3,
+  module_started: 4,
+  mission_started: 3,
   hint_used: 2,
   invalid_placement: 1,
   idle: 0,
@@ -117,9 +127,11 @@ export class NarrationPlayer {
   private audioEngine: NarrationAudioEngine | null = null;
   private audioEnabled = false;
   private audioUnavailable = false;
+  private audioError: string | null = null;
   private soundBlocked = false;
   private captionText = "";
   private captionCueId: string | null = null;
+  private timedCaptionCueId: string | null = null;
   private lastCue: NarrationCue | null = null;
   private current: ActiveCue | null = null;
   private readonly queue: QueuedCue[] = [];
@@ -160,6 +172,7 @@ export class NarrationPlayer {
       settings: { ...this.settingsValue },
       audioEnabled: this.audioEnabled,
       audioUnavailable: this.audioUnavailable,
+      audioError: this.audioError,
       soundBlocked: this.soundBlocked,
       currentCueId: this.current?.cue.id ?? null,
     };
@@ -171,6 +184,7 @@ export class NarrationPlayer {
       return;
     }
     try {
+      this.audioError = null;
       if (!this.audioEngine) {
         const factory = this.options.audioEngineFactory ?? createBrowserNarrationAudioEngine;
         this.audioEngine = factory();
@@ -180,7 +194,7 @@ export class NarrationPlayer {
       if (!running || !this.audioEngine.isRunning()) {
         this.audioEnabled = false;
         this.soundBlocked = true;
-        console.warn("Narration sound is blocked: AudioContext remains suspended after the user gesture.");
+        console.warn("Narration sound is blocked: HTML audio remained unavailable after the user gesture.");
         this.publishTelemetry({ type: "voice_fallback_used", payload: { reason: "audio_context_suspended" } });
         this.publishView();
         return;
@@ -193,6 +207,7 @@ export class NarrationPlayer {
       this.playNextQueued();
     } catch (error) {
       this.audioUnavailable = true;
+      this.audioError = `Narration sound could not be enabled: ${errorMessage(error)}`;
       this.audioEnabled = false;
       console.warn("Narration audio could not be enabled after the user gesture.", error);
       this.publishTelemetry({ type: "voice_fallback_used", payload: { reason: "audio_unavailable" } });
@@ -256,6 +271,7 @@ export class NarrationPlayer {
     if (this.idleTimer !== undefined) {
       clearTimeout(this.idleTimer);
     }
+    this.clearCaptionTimer(this.current);
     this.stopCurrent("disposed");
     this.queue.length = 0;
     void this.audioEngine?.close();
@@ -332,7 +348,10 @@ export class NarrationPlayer {
       return;
     }
     void this.options.loadCaptions(cue.captions).then((captions) => {
-      if (this.captionCueId === cue.id && !this.disposed) {
+      if (
+        this.captionCueId === cue.id && !this.disposed &&
+        this.timedCaptionCueId !== cue.id
+      ) {
         this.captionText = textFromVtt(captions);
         this.publishView();
       }
@@ -381,6 +400,7 @@ export class NarrationPlayer {
   }
 
   private startCue(queued: QueuedCue): void {
+    this.audioError = null;
     if (!queued.cue.audio || !this.audioEngine) {
       this.publishTelemetry({ type: "voice_fallback_used", payload: { reason: "audio_asset_missing" } });
       this.publishSkipped(queued.cue, "audio_unavailable");
@@ -389,24 +409,64 @@ export class NarrationPlayer {
     }
     const active: ActiveCue = { ...queued, token: ++this.playToken };
     this.current = active;
+    this.timedCaptionCueId = queued.cue.id;
     this.showCaption(queued.cue);
     void this.loadAndPlay(active);
   }
 
   private async loadAndPlay(active: ActiveCue): Promise<void> {
     try {
-      const compressedAudio = await this.options.loadAudio(active.cue.audio!);
-      const decoded = await this.audioEngine!.decode(compressedAudio);
-      if (this.current?.token !== active.token || this.disposed || this.documentRef?.hidden) {
-        return;
-      }
-      active.playback = this.audioEngine!.play(decoded, this.settingsValue.speed, () => {
-        if (this.current?.token === active.token) {
-          this.current = null;
-          this.publishView();
-          this.playNextQueued();
+      const timedCaptions = active.cue.captions && this.options.loadCaptions
+        ? parseTimedVtt(await this.options.loadCaptions(active.cue.captions))
+        : [];
+      const audioPaths = [
+        active.cue.audio!,
+        ...(active.cue.fallbackAudio && active.cue.fallbackAudio !== active.cue.audio
+          ? [active.cue.fallbackAudio]
+          : []),
+      ];
+      let lastError: unknown;
+      let started = false;
+      for (const audioPath of audioPaths) {
+        try {
+          const compressedAudio = await this.options.loadAudio(audioPath);
+          const decoded = await this.audioEngine!.decode(compressedAudio);
+          if (this.current?.token !== active.token || this.disposed || this.documentRef?.hidden) {
+            return;
+          }
+          active.playback = this.audioEngine!.play(decoded, this.settingsValue.speed, () => {
+            this.clearCaptionTimer(active);
+            if (this.current?.token === active.token) {
+              this.current = null;
+              this.timedCaptionCueId = null;
+              this.publishView();
+              this.playNextQueued();
+            }
+          });
+          await active.playback.started;
+          if (this.current?.token !== active.token || this.disposed || this.documentRef?.hidden) {
+            return;
+          }
+          started = true;
+          break;
+        } catch (error) {
+          lastError = error;
+          if (this.current?.token !== active.token || this.disposed || this.documentRef?.hidden) {
+            this.audioError = `Narration playback was interrupted before it started: ${errorMessage(error)}`;
+            this.publishView();
+            return;
+          }
+          active.playback?.stop();
+          delete active.playback;
         }
-      });
+      }
+      if (!started) {
+        throw new Error(`Narration could not be played: ${errorMessage(lastError)}`, { cause: lastError });
+      }
+      if (timedCaptions.length > 0) {
+        active.captionTimer = setInterval(() => this.syncCaption(active, timedCaptions), 50);
+        this.syncCaption(active, timedCaptions);
+      }
       this.publishTelemetry({
         type: "narration_played",
         payload: { cueId: active.cue.id, trigger: active.cue.trigger },
@@ -419,7 +479,9 @@ export class NarrationPlayer {
         if (this.soundBlocked) {
           this.audioEnabled = false;
         }
-        console.warn(`Narration playback failed for cue "${active.cue.id}".`, error);
+        this.audioUnavailable = true;
+        this.audioError = `Narration playback failed for cue "${active.cue.id}": ${errorMessage(error)}`;
+        console.warn(this.audioError, error);
         this.publishTelemetry({ type: "voice_fallback_used", payload: { reason: "audio_decode_failed" } });
         this.publishSkipped(active.cue, "audio_unavailable");
         this.publishView();
@@ -435,9 +497,30 @@ export class NarrationPlayer {
     }
     this.current = null;
     this.playToken += 1;
+    this.timedCaptionCueId = null;
+    this.clearCaptionTimer(active);
     active.playback?.stop();
     this.publishSkipped(active.cue, reason);
     this.publishView();
+  }
+
+  private syncCaption(active: ActiveCue, captions: readonly TimedCaption[]): void {
+    if (this.current?.token !== active.token || !active.playback) {
+      return;
+    }
+    const elapsedMs = active.playback.currentTimeMs?.() ?? 0;
+    const caption = captions.find((item) => elapsedMs >= item.startMs && elapsedMs < item.endMs);
+    if (caption && caption.text !== this.captionText) {
+      this.captionText = caption.text;
+      this.publishView();
+    }
+  }
+
+  private clearCaptionTimer(active: ActiveCue | null): void {
+    if (active?.captionTimer !== undefined) {
+      clearInterval(active.captionTimer);
+      delete active.captionTimer;
+    }
   }
 
   private updateSettings(patch: Partial<NarrationSettings>): void {
@@ -527,6 +610,35 @@ function textFromVtt(value: string): string {
     .map((line) => line.trim())
     .filter((line) => line.length > 0 && line !== "WEBVTT" && !/^\d+$/.test(line) && !line.includes(" --> "))
     .join(" ");
+}
+
+function parseTimedVtt(value: string): TimedCaption[] {
+  const lines = value.split(/\r?\n/);
+  const captions: TimedCaption[] = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const timing = lines[index]?.match(/^(\d{2}:\d{2}:\d{2}\.\d{3})\s+-->\s+(\d{2}:\d{2}:\d{2}\.\d{3})$/);
+    if (!timing) {
+      continue;
+    }
+    const text = lines[index + 1]?.trim();
+    if (text) {
+      captions.push({
+        startMs: parseVttTime(timing[1]!),
+        endMs: parseVttTime(timing[2]!),
+        text,
+      });
+    }
+  }
+  return captions;
+}
+
+function parseVttTime(value: string): number {
+  const [hours, minutes, seconds] = value.split(":");
+  return Math.round(Number(hours) * 3_600_000 + Number(minutes) * 60_000 + Number(seconds!.replace(":", ".")) * 1_000);
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "unknown media playback error";
 }
 
 function getBrowserStorage(): SettingsStorage | undefined {

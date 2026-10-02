@@ -3,6 +3,8 @@ import { gzipSync } from "node:zlib";
 /** Input passed to a build-time text-to-speech adapter. */
 export interface TtsInput {
   readonly text: string;
+  readonly displayText?: string;
+  readonly spokenText?: string;
   readonly language: string;
   readonly cueType: string;
 }
@@ -12,6 +14,8 @@ export interface TtsOutput {
   readonly audioBytes: Uint8Array;
   readonly captionsVtt: string;
   readonly durationMs: number;
+  readonly peak?: number;
+  readonly rms?: number;
 }
 
 /** Provider-neutral interface for generating one reviewed narration script. */
@@ -32,7 +36,8 @@ export class SilentMockTtsAdapter implements TtsAdapter {
   }
 
   async synthesize(input: TtsInput): Promise<TtsOutput> {
-    const words = input.text.trim().split(/\s+/).filter(Boolean);
+    const displayText = input.displayText ?? input.text;
+    const words = displayText.trim().split(/\s+/).filter(Boolean);
     const durationMs = Math.max(1_600, words.length * 300);
     const frequency = this.mode === "audible-test" ? TONE_FREQUENCIES[input.cueType] ?? 440 : undefined;
     return {
