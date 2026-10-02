@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { setArActiveState } from "../src/active-state.js";
 import {
   ArSessionController,
   ArSessionStartError,
@@ -68,6 +69,19 @@ function setup(options: {
   const started = vi.fn();
   const ended = vi.fn();
   const errors: string[] = [];
+  const activeClasses = new Set<string>();
+  const activeTargets = Array.from({ length: 3 }, () => ({
+    classList: {
+      toggle: (name: string, force?: boolean): boolean => {
+        if (force) {
+          activeClasses.add(name);
+        } else {
+          activeClasses.delete(name);
+        }
+        return activeClasses.has(name);
+      },
+    },
+  }));
   let now = 10;
   const controller = new ArSessionController({
     overlayRoot: {} as HTMLElement,
@@ -77,6 +91,10 @@ function setup(options: {
     onStarted: started,
     onEnded: ended,
     onError: (reasonCode) => errors.push(reasonCode),
+    onStateChange: (state) => setArActiveState(
+      state.status === "active" || state.status === "ending",
+      activeTargets,
+    ),
   });
 
   return {
@@ -88,6 +106,7 @@ function setup(options: {
     requestSession,
     session,
     visibilityTarget,
+    activeClasses,
     setNow: (value: number) => { now = value; },
   };
 }
@@ -99,6 +118,31 @@ async function waitForEnd(ended: ReturnType<typeof vi.fn>): Promise<void> {
 afterEach(() => vi.restoreAllMocks());
 
 describe("ArSessionController", () => {
+  it.each(["student exit", "system end", "tracking lost", "hidden tab"])(
+    "adds ar-active on start and removes it after %s",
+    async (exitPath) => {
+      const result = setup();
+      await result.controller.start();
+      expect(result.activeClasses).toEqual(new Set(["ar-active"]));
+
+      if (exitPath === "student exit") {
+        await result.controller.stop();
+      } else if (exitPath === "system end") {
+        result.session.dispatchEvent(new Event("end"));
+        await waitForEnd(result.ended);
+      } else if (exitPath === "tracking lost") {
+        result.session.visibilityState = "hidden";
+        result.session.dispatchEvent(new Event("visibilitychange"));
+        await waitForEnd(result.ended);
+      } else {
+        result.visibilityTarget.hide();
+        await waitForEnd(result.ended);
+      }
+
+      expect(result.activeClasses).toEqual(new Set());
+    },
+  );
+
   it("requests a DOM overlay and starts the presentation only after it is granted", async () => {
     const setupResult = setup();
     const overlayRoot = {} as HTMLElement;
@@ -115,7 +159,6 @@ describe("ArSessionController", () => {
       presentation: setupResult.presentation,
       onStarted: setupResult.started,
     });
-
     await expect(controller.start()).resolves.toMatchObject({
       status: "active",
       requestedFeatures: ["dom-overlay"],

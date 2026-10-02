@@ -24,6 +24,7 @@ export {
   type ArSessionSystem,
   type ArVisibilityTarget,
 } from "./session-runtime.js";
+export { setArActiveState, type ArActiveClassTarget } from "./active-state.js";
 export {
   mapXrPointerSample,
   type XrPoint,

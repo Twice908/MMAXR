@@ -417,6 +417,64 @@ test("hides AR entry and explains unsupported devices", async ({ page }) => {
   await expect(page.locator("#atom-scene canvas")).toBeVisible();
 });
 
+test("AR overlay is transparent and camera explanation has two visible actions", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "xr", {
+      configurable: true,
+      value: {
+        isSessionSupported: async () => true,
+        requestSession: async () => {
+          document.documentElement.dataset.arRequest = "requested";
+          throw new DOMException("not started", "NotAllowedError");
+        },
+      },
+    });
+  });
+  await page.goto("http://127.0.0.1:5174");
+  await page.getByRole("button", { name: "View in AR" }).click();
+
+  const dialog = page.getByRole("dialog", { name: "View the atom in AR?" });
+  await expect(dialog).toBeVisible();
+  const cancel = dialog.getByRole("button", { name: "Cancel AR" });
+  const start = dialog.getByRole("button", { name: "Start AR" });
+  await expect(cancel).toBeVisible();
+  await expect(start).toBeVisible();
+  await expect(dialog.getByRole("button")).toHaveCount(2);
+  for (const button of [cancel, start]) {
+    const box = await button.boundingBox();
+    expect(box?.height).toBeGreaterThanOrEqual(48);
+  }
+  const primaryStyle = await start.evaluate((element) => ({
+    color: getComputedStyle(element).color,
+    background: getComputedStyle(element).backgroundColor,
+  }));
+  expect(primaryStyle).toEqual({ color: "rgb(255, 255, 255)", background: "rgb(40, 127, 131)" });
+  await dialog.locator(".ar-confirmation-actions").click({ position: { x: 4, y: 24 } });
+  expect(await page.locator("html").getAttribute("data-ar-request")).toBeNull();
+  await expect(dialog).toBeVisible();
+
+  await page.evaluate(() => {
+    document.documentElement.classList.add("ar-active");
+    document.body.classList.add("ar-active");
+    document.querySelector("#app")?.classList.add("ar-active");
+  });
+  const activeStyles = await page.evaluate(() => {
+    const selectors = [
+      "html", "body", "#app", ".atom-builder", ".builder-header", ".lesson-panel",
+      ".narration-hud", ".builder-content", ".particle-rail", ".atom-workspace",
+      ".scene-viewport", ".atom-inspector",
+    ];
+    return {
+      backgrounds: selectors.map((selector) => getComputedStyle(document.querySelector(selector)!).backgroundColor),
+      backgroundImages: selectors.map((selector) => getComputedStyle(document.querySelector(selector)!).backgroundImage),
+      canvasDisplay: getComputedStyle(document.querySelector("#atom-scene canvas")!).display,
+    };
+  });
+  expect(activeStyles.backgrounds.every((value) => value === "rgba(0, 0, 0, 0)")).toBe(true);
+  expect(activeStyles.backgroundImages.every((value) => value === "none")).toBe(true);
+  expect(activeStyles.canvasDisplay).toBe("none");
+});
+
 test("explains camera use before permission and returns cleanly after denial", async ({ page }) => {
   const browserErrors: string[] = [];
   page.on("console", (message) => {

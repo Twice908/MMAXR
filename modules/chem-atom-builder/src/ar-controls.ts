@@ -4,6 +4,7 @@ import {
   ArSessionController,
   ArSessionStartError,
   detectArSupport,
+  setArActiveState,
   type ArErrorReasonCode,
 } from "@mma/engine-xr";
 import { arTelemetryEventSchema } from "@mma/schema";
@@ -15,14 +16,16 @@ export interface ArControlsOptions {
   readonly clock: () => string;
   readonly idGenerator: () => string;
   readonly recordLocalEvent: (type: string, timestamp: string, detail: string) => void;
+  readonly diagnostics?: boolean;
 }
 
 /** Mount the supported-device AR controls without coupling AR to lesson state. */
 export function mountArControls(options: ArControlsOptions): () => Promise<void> {
   const { root, renderer } = options;
+  const builder = root.querySelector<HTMLElement>(".atom-builder");
   const sceneHeading = root.querySelector<HTMLElement>(".scene-heading");
-  if (!sceneHeading) {
-    throw new Error("The atom scene heading is missing.");
+  if (!builder || !sceneHeading) {
+    throw new Error("The Atom Builder AR controls could not find their host elements.");
   }
 
   const actions = document.createElement("div");
@@ -46,11 +49,11 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
     <h2 id="ar-confirmation-title">View the atom in AR?</h2>
     <p>Your camera shows the real world so the atom can appear in front of you. Nothing is recorded or uploaded.</p>
     <div class="ar-confirmation-actions">
-      <button type="button" data-ar-action="cancel">Cancel</button>
-      <button type="button" data-ar-action="start">Start AR</button>
+      <button type="button" aria-label="Cancel AR" data-ar-action="cancel">Cancel</button>
+      <button type="button" aria-label="Start AR" data-ar-action="start">Start AR</button>
     </div>
   `;
-  root.append(dialog);
+  builder.append(dialog);
 
   const status = document.createElement("div");
   status.id = "ar-status";
@@ -68,17 +71,32 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
   exitButton.hidden = true;
   root.append(exitButton);
 
+  const diagnostics = options.diagnostics ? document.createElement("output") : null;
+  if (diagnostics) {
+    diagnostics.className = "ar-diagnostics";
+    diagnostics.setAttribute("aria-label", "AR diagnostics");
+    diagnostics.setAttribute("aria-live", "off");
+    diagnostics.hidden = true;
+    root.append(diagnostics);
+  }
+
   const startButton = actions.querySelector<HTMLButtonElement>("[data-ar-action='explain']");
   if (!startButton) {
     throw new Error("The AR start control could not be created.");
   }
 
   let disposed = false;
+  const activeTargets = [document.documentElement, document.body, root];
+  let sessionState = "idle";
+  let grantedFeatures: readonly string[] = [];
   const setStatus = (message: string): void => {
     status.textContent = message;
     status.hidden = message.length === 0;
   };
   const recordEvent = (type: "ar_session_started" | "ar_session_ended" | "ar_error", payload: Record<string, unknown>): void => {
+    if (disposed) {
+      return;
+    }
     const event = arTelemetryEventSchema.parse({
       ...options.telemetryContext,
       eventId: options.idGenerator(),
@@ -107,10 +125,15 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
         return;
       }
       const inAr = state.status === "active" || state.status === "ending";
-      root.classList.toggle("is-ar", inAr);
+      setArActiveState(inAr, activeTargets);
+      sessionState = state.status;
+      grantedFeatures = state.status === "active" ? state.grantedFeatures : [];
       exitButton.hidden = !inAr;
       exitButton.disabled = state.status !== "active";
       startButton.disabled = state.status === "requesting" || inAr;
+      if (diagnostics) {
+        diagnostics.hidden = !inAr;
+      }
       if (state.status === "active") {
         setStatus("");
       }
@@ -126,6 +149,22 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
       }
     },
   });
+
+  if (diagnostics) {
+    renderer.setArDiagnosticsListener((facts) => {
+      diagnostics.textContent = [
+        `state ${sessionState}`,
+        `blend ${facts.environmentBlendMode}`,
+        `granted ${grantedFeatures.join(", ") || "none"}`,
+        `atom ${facts.atomVisible && facts.atomInCameraView ? "visible" : "not visible"}`,
+        `loop ${facts.renderLoopRunning ? "running" : "stopped"}`,
+        `session ${facts.sessionAttached ? "attached" : "detached"}`,
+        `scene ${facts.sceneBackground}`,
+        `clear ${facts.clearColor}/${facts.clearAlpha}`,
+        `canvas ${facts.canvasDisplay}`,
+      ].join(" | ");
+    });
+  }
 
   const onAction = (event: MouseEvent): void => {
     const action = (event.target as Element | null)
@@ -179,12 +218,14 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
       dialog.close();
     }
     await controller.stop();
-    root.classList.remove("is-ar");
+    setArActiveState(false, activeTargets);
+    renderer.setArDiagnosticsListener(null);
     actions.remove();
     supportMessage.remove();
     dialog.remove();
     status.remove();
     exitButton.remove();
+    diagnostics?.remove();
   };
 }
 
