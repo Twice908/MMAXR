@@ -4,21 +4,27 @@ Status: Accepted
 
 ## Context
 
-Phase 2a adds optional scripted narration to the Atom Builder while preserving a complete muted lesson path. Speech generation must remain provider-neutral until the same reviewed scripts can be compared across candidates. Live voice, microphones, STT, LLM calls, XR playback, and remote services are out of scope.
+Phase 2a adds optional scripted narration to the Atom Builder while preserving a complete muted lesson path. The reviewed English scripts use local browser-based Piper generation. Live voice, microphones, STT, LLM calls, XR playback, and remote speech services are out of scope.
 
 ## Decision
 
 - Implement `@mma/engine-voice` as an event-bus subscriber that depends on `@mma/engine-core`; `engine-core` does not depend on voice.
 - Identify mission-specific cues with an optional `missionId`. Use priority order `mission_completed`, `mission_started`, `module_started`, `hint_used`, `invalid_placement`, then `idle`. A higher-priority cue interrupts only an interruptible active cue; otherwise it is queued. Invalid-placement narration has a four-second cooldown.
-- Require a user gesture before creating/resuming Web Audio. Captions remain available while muted; settings are stored in local storage. Stop active audio when the document is hidden.
-- Persist mute, speed, captions, and the sound-enabled preference under a versioned local key. Migrate pre-versioned values; do not persist the active AudioContext state, which must be enabled by a fresh gesture after reload. Warn when settings storage fails and show a retry hint when the context remains suspended.
-- Keep a provider-neutral `TtsAdapter` interface and implement only a mock adapter. Silent gzip-compressed WAV placeholders with timed WebVTT captions are the default; an explicit development-only mode creates soft cue-specific tones in a separate ignored asset directory.
-- Restrict audible-test asset imports and selection to Vite development builds; production bundles include only the default silent assets.
-- Store scripts as JSON with `reviewStatus: "pending" | "reviewed"`. The generator can create pending development assets, but `--require-reviewed` refuses release generation until every script is reviewed.
+- Require a user gesture before unlocking HTML audio playback. Captions remain available while muted; settings are stored in local storage. Stop active audio when the document is hidden.
+- Play narration through one reusable `HTMLAudioElement` with `preservesPitch` explicitly enabled, including WebKit and Mozilla prefixed properties where present. Change its `playbackRate` for the supported 0.75x, 1x, and 1.25x settings; read `currentTime` directly for VTT caption synchronization. Keep the media implementation behind the existing `NarrationAudioEngine` interface.
+- Persist mute, speed, captions, and the sound-enabled preference under a versioned local key. Migrate pre-versioned values; do not persist active media playback, which must be enabled by a fresh gesture after reload. Warn when settings storage fails and show a retry hint when browser playback remains blocked.
+- Keep the provider-neutral `TtsAdapter` interface and its silent mock as the Node/CI default. The explicit Vite development-only generator uses `piper-tts-web` 1.1.2 and the `en_GB-jenny_dioco-medium` voice, encodes Piper WAV output to mono 64 kbps MP3, and caches models and generated output in OPFS.
+- Require an explicit browser action to generate audio. Production builds and CI never run Piper or include the generation interface; the module bundles MP3 when present and retains silent gzip-WAV fallback assets.
+- Store scripts as JSON with `reviewStatus: "pending" | "reviewed"`, plus optional `spokenText`; captions always use display `text`. Release generation refuses scripts that are not reviewed.
+- Generate sentence-level WebVTT captions from decoded audio duration and spoken sentence word counts. These timings are estimates because Piper does not provide word timestamps.
+- Keep generated assets at or below 5 MiB per lesson at 64 kbps mono MP3. Record package and voice licenses in `docs/narration-licenses.md`.
 - Keep narration telemetry local. Events contain cue IDs and reasons only; no audio or personal information is recorded.
+
+For Phase 3 positional audio, the media element can be routed through `AudioContext.createMediaElementSource()` into a positional graph without changing the engine interface. A Chromium browser experiment routed the same MP3 through a Web Audio graph with `preservesPitch` enabled and measured approximately 180-185 Hz at 0.75x, 1x, and 1.25x, versus 134/181/231 Hz without pitch preservation. This confirms pitch preservation in Chromium's routed path; verify Safari/iPhone and Android device behavior before relying on it for XR.
 
 ## Consequences
 
 - The screen lesson remains fully usable with sound disabled, and the mock artifacts exercise the full cue, caption, settings, and playback path.
-- No TTS provider or third-party dependency is selected. The same three scripts can be generated by future adapters for a direct listening comparison; the audible mock checks playback controls only and is not a speech substitute.
+- Audio generation is local to the browser and does not send scripts or audio to a speech service. The first run downloads the voice catalog/config and model as needed; OPFS caches them for that browser origin.
+- Jenny Dioco is the only selected voice for this release. The requested Indian English Spicor voice is not in the approved package's default catalog and is not generated by this implementation.
 - Positional narration and the live guide remain deferred.

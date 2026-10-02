@@ -10,4 +10,8 @@ export {
   type NarrationViewState,
   type SettingsStorage,
 } from "./player.js";
-export { createBrowserNarrationAudioEngine } from "./web-audio.js";
+export {
+  configureNarrationAudioElement,
+  createBrowserNarrationAudioEngine,
+  type BrowserNarrationAudioEngineOptions,
+} from "./media-audio.js";

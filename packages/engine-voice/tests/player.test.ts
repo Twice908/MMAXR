@@ -29,6 +29,10 @@ class FakeAudioEngine implements NarrationAudioEngine {
   muted = false;
   running = true;
   failPlayback = false;
+  elapsedMs = 0;
+  nextStarted: Promise<void> | undefined;
+  rejectPendingStart: (() => void) | undefined;
+  startErrors: Error[] = [];
 
   async resume(): Promise<boolean> { return this.running; }
   isRunning(): boolean { return this.running; }
@@ -42,11 +46,23 @@ class FakeAudioEngine implements NarrationAudioEngine {
     this.played.push(id);
     this.rates.push(speed);
     this.completions.set(id, onEnded);
+    const startError = this.startErrors.shift();
+    const wasPending = this.nextStarted !== undefined;
+    const started = startError
+      ? Promise.reject(startError)
+      : this.nextStarted ?? Promise.resolve();
+    this.nextStarted = undefined;
     return {
+      started,
       setSpeed: (nextSpeed) => this.rates.push(nextSpeed),
+      currentTimeMs: () => this.elapsedMs,
       stop: () => {
         this.stopped.push(id);
-        onEnded();
+        this.rejectPendingStart?.();
+        this.rejectPendingStart = undefined;
+        if (!startError && !wasPending) {
+          onEnded();
+        }
       },
     };
   }
@@ -64,6 +80,7 @@ const moduleCue: NarrationCue = {
   trigger: "module_started",
   script: "narration/en/module-started.json",
   audio: "narration/en/generated/module-started.wav.gz",
+  fallbackAudio: "narration/en/generated/module-started.wav.gz",
   captionText: "Welcome to Atom Builder.",
   interruptible: true,
 };
@@ -73,6 +90,7 @@ const missionCue: NarrationCue = {
   missionId: "make-na-plus",
   script: "narration/en/sodium-start.json",
   audio: "narration/en/generated/sodium-start.wav.gz",
+  fallbackAudio: "narration/en/generated/sodium-start.wav.gz",
   captionText: "Now make Na plus.",
   interruptible: true,
 };
@@ -81,6 +99,7 @@ const invalidCue: NarrationCue = {
   trigger: "invalid_placement",
   script: "narration/en/invalid-placement.json",
   audio: "narration/en/generated/invalid-placement.wav.gz",
+  fallbackAudio: "narration/en/generated/invalid-placement.wav.gz",
   captionText: "Try another position.",
   interruptible: true,
 };
@@ -92,6 +111,8 @@ function createHarness(cues: readonly NarrationCue[], options: {
   readonly cooldown?: number;
   readonly idleAfterMs?: number;
   readonly document?: Document;
+  readonly loadAudio?: (assetPath: string) => Promise<ArrayBuffer>;
+  readonly loadCaptions?: (assetPath: string) => Promise<string>;
 } = {}) {
   const events = new EventBus<LearningEventMap>();
   const audio = options.audio;
@@ -101,7 +122,8 @@ function createHarness(cues: readonly NarrationCue[], options: {
     cues,
     events,
     moduleId: "chem.atom-builder",
-    loadAudio: async () => new ArrayBuffer(4),
+    loadAudio: options.loadAudio ?? (async () => new ArrayBuffer(4)),
+    ...(options.loadCaptions ? { loadCaptions: options.loadCaptions } : {}),
     ...(audio ? { audioEngineFactory: () => audio } : {}),
     ...(options.storage ? { storage: options.storage } : {}),
     ...(options.now ? { now: options.now } : {}),
@@ -139,7 +161,7 @@ describe("NarrationPlayer", () => {
     harness.player.dispose();
   });
 
-  it("interrupts a lower-priority interruptible cue and starts the important cue", async () => {
+  it("plays the module introduction before the immediately started mission", async () => {
     const audio = new FakeAudioEngine();
     const harness = createHarness([moduleCue, missionCue], { audio });
     await harness.player.enableSound();
@@ -158,11 +180,71 @@ describe("NarrationPlayer", () => {
     });
     await flush();
 
+    expect(audio.played).toHaveLength(1);
+    expect(audio.stopped).toEqual([]);
+    expect(harness.player.viewState.currentCueId).toBe("module-started");
+    audio.complete("cue-1");
+    await flush();
     expect(audio.played).toHaveLength(2);
-    expect(audio.stopped).toEqual(["cue-1"]);
-    expect(harness.telemetry.some((event) =>
-      event.type === "narration_skipped" && event.payload.reason === "interrupted",
-    )).toBe(true);
+    expect(harness.player.viewState.currentCueId).toBe("sodium-start");
+    harness.player.dispose();
+  });
+
+  it("changes speed mid-cue without replacing the active media", async () => {
+    const audio = new FakeAudioEngine();
+    const harness = createHarness([moduleCue], { audio });
+    await harness.player.enableSound();
+    harness.events.emit("module_started", signal("module_started", { moduleId: "chem.atom-builder" }));
+    await flush();
+    harness.player.setSpeed(0.75);
+    harness.player.setSpeed(1.25);
+
+    expect(audio.played).toEqual(["cue-1"]);
+    expect(audio.rates).toEqual([1, 0.75, 1.25]);
+    harness.player.dispose();
+  });
+
+  it("replays at the persisted non-default speed", async () => {
+    const audio = new FakeAudioEngine();
+    const harness = createHarness([moduleCue], { audio });
+    await harness.player.enableSound();
+    harness.events.emit("module_started", signal("module_started", { moduleId: "chem.atom-builder" }));
+    await flush();
+    harness.player.setSpeed(1.25);
+    harness.player.replayLastCue();
+    audio.complete("cue-1");
+    await flush();
+
+    expect(audio.rates).toEqual([1, 1.25, 1.25]);
+    harness.player.dispose();
+  });
+
+  it("queues the mission behind module narration without losing the 1.25x rate", async () => {
+    const audio = new FakeAudioEngine();
+    const harness = createHarness([moduleCue, missionCue], { audio });
+    await harness.player.enableSound();
+    harness.events.emit("module_started", signal("module_started", { moduleId: "chem.atom-builder" }));
+    await flush();
+    harness.player.setSpeed(1.25);
+    harness.events.emit("mission_started", {
+      eventId: "550e8400-e29b-41d4-a716-446655440000",
+      ts: "2026-10-01T00:00:00Z",
+      studentRef: "opaque-test",
+      sessionId: "550e8400-e29b-41d4-a716-446655440001",
+      moduleId: "chem.atom-builder",
+      moduleVersion: "0.0.0",
+      type: "mission_started",
+      payload: { missionId: "make-na-plus" },
+      device: { mode: "screen", tier: "mid" },
+    });
+    await flush();
+
+    expect(audio.stopped).toEqual([]);
+    expect(audio.rates).toEqual([1, 1.25]);
+    expect(harness.player.viewState.currentCueId).toBe("module-started");
+    audio.complete("cue-1");
+    await flush();
+    expect(audio.rates).toEqual([1, 1.25, 1.25]);
     expect(harness.player.viewState.currentCueId).toBe("sodium-start");
     harness.player.dispose();
   });
@@ -295,6 +377,83 @@ describe("NarrationPlayer", () => {
     player.dispose();
   });
 
+  it("falls back to silent WAV when the MP3 asset is not present", async () => {
+    const audio = new FakeAudioEngine();
+    const cue = { ...moduleCue, audio: "narration/en/generated/module-started.mp3" };
+    const requests: string[] = [];
+    const harness = createHarness([cue], {
+      audio,
+      loadAudio: async (path) => {
+        requests.push(path);
+        if (path.endsWith(".mp3")) throw new Error("missing MP3");
+        return new ArrayBuffer(4);
+      },
+    });
+    await harness.player.enableSound();
+    harness.events.emit("module_started", signal("module_started", { moduleId: "chem.atom-builder" }));
+    await flush();
+
+    expect(requests).toEqual([
+      "narration/en/generated/module-started.mp3",
+      "narration/en/generated/module-started.wav.gz",
+    ]);
+    expect(audio.played).toHaveLength(1);
+    harness.player.dispose();
+  });
+
+  it("updates sentence captions against the timed WebVTT track", async () => {
+    vi.useFakeTimers();
+    const audio = new FakeAudioEngine();
+    const cue: NarrationCue = {
+      ...moduleCue,
+      audio: "narration/en/generated/module-started.mp3",
+      captions: "narration/en/generated/module-started.vtt",
+      captionText: undefined,
+    };
+    const harness = createHarness([cue], {
+      audio,
+      loadCaptions: async () => "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nFirst sentence.\n\n00:00:02.000 --> 00:00:04.000\nSecond sentence.\n",
+    });
+    try {
+      await harness.player.enableSound();
+      harness.events.emit("module_started", signal("module_started", { moduleId: "chem.atom-builder" }));
+      await vi.waitFor(() => expect(harness.player.viewState.captionText).toBe("First sentence."));
+      audio.elapsedMs = 2_500;
+      await vi.advanceTimersByTimeAsync(50);
+      expect(harness.player.viewState.captionText).toBe("Second sentence.");
+    } finally {
+      harness.player.dispose();
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([0.75, 1, 1.25] as const)("syncs VTT cues in media time at %sx", async (speed) => {
+    vi.useFakeTimers();
+    const audio = new FakeAudioEngine();
+    const cue: NarrationCue = {
+      ...moduleCue,
+      audio: "narration/en/generated/module-started.mp3",
+      captions: "narration/en/generated/module-started.vtt",
+      captionText: undefined,
+    };
+    const harness = createHarness([cue], {
+      audio,
+      loadCaptions: async () => "WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nFirst sentence.\n\n00:00:02.000 --> 00:00:04.000\nSecond sentence.\n",
+    });
+    try {
+      await harness.player.enableSound();
+      harness.events.emit("module_started", signal("module_started", { moduleId: "chem.atom-builder" }));
+      await vi.waitFor(() => expect(harness.player.viewState.captionText).toBe("First sentence."));
+      harness.player.setSpeed(speed);
+      audio.elapsedMs = 2_500;
+      await vi.advanceTimersByTimeAsync(50);
+      expect(harness.player.viewState.captionText).toBe("Second sentence.");
+    } finally {
+      harness.player.dispose();
+      vi.useRealTimers();
+    }
+  });
+
   it("stops active playback when the tab becomes hidden", async () => {
     const audio = new FakeAudioEngine();
     let hidden = false;
@@ -328,7 +487,7 @@ describe("NarrationPlayer", () => {
     }
   });
 
-  it("shows a blocked state and logs when audio remains suspended after a tap", async () => {
+  it("shows a blocked state and logs when HTML audio is unavailable after a tap", async () => {
     const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const audio = new FakeAudioEngine();
     audio.running = false;
@@ -338,7 +497,7 @@ describe("NarrationPlayer", () => {
     expect(harness.player.viewState.soundBlocked).toBe(true);
     expect(harness.player.viewState.audioEnabled).toBe(false);
     expect(warning).toHaveBeenCalledWith(
-      "Narration sound is blocked: AudioContext remains suspended after the user gesture.",
+      "Narration sound is blocked: HTML audio remained unavailable after the user gesture.",
     );
     warning.mockRestore();
     harness.player.dispose();
@@ -354,14 +513,72 @@ describe("NarrationPlayer", () => {
     await flush();
 
     expect(warning).toHaveBeenCalledWith(
-      'Narration playback failed for cue "module-started".',
+      'Narration playback failed for cue "module-started": Narration could not be played: mock playback failure',
       expect.any(Error),
     );
     expect(harness.telemetry).toContainEqual({
       type: "voice_fallback_used",
       payload: { reason: "audio_decode_failed" },
     });
+    expect(harness.player.viewState.audioError).toContain("Narration playback failed");
     warning.mockRestore();
+    harness.player.dispose();
+  });
+
+  it("falls back to the silent asset when HTML media play rejects", async () => {
+    const audio = new FakeAudioEngine();
+    audio.startErrors.push(new Error("unsupported MP3"));
+    const cue: NarrationCue = {
+      ...moduleCue,
+      audio: "narration/en/generated/module-started.mp3",
+      fallbackAudio: "narration/en/generated/module-started.wav.gz",
+    };
+    const loaded: string[] = [];
+    const harness = createHarness([cue], {
+      audio,
+      loadAudio: async (path) => {
+        loaded.push(path);
+        return new ArrayBuffer(4);
+      },
+    });
+    await harness.player.enableSound();
+    harness.events.emit("module_started", signal("module_started", { moduleId: "chem.atom-builder" }));
+    await vi.waitFor(() => expect(audio.played).toHaveLength(2));
+
+    expect(loaded).toEqual([cue.audio, cue.fallbackAudio]);
+    expect(harness.player.viewState.audioError).toBeNull();
+    harness.player.dispose();
+  });
+
+  it("surfaces an interrupted pending play promise", async () => {
+    const audio = new FakeAudioEngine();
+    let rejectStart: ((error: Error) => void) | undefined;
+    audio.nextStarted = new Promise<void>((_resolve, reject) => { rejectStart = reject; });
+    audio.rejectPendingStart = () => rejectStart?.(new DOMException("Playback was interrupted", "AbortError"));
+    const completionCue: NarrationCue = {
+      ...missionCue,
+      id: "sodium-complete",
+      trigger: "mission_completed",
+    };
+    const harness = createHarness([moduleCue, completionCue], { audio });
+    await harness.player.enableSound();
+    harness.events.emit("module_started", signal("module_started", { moduleId: "chem.atom-builder" }));
+    await flush();
+    harness.events.emit("mission_completed", {
+      eventId: "550e8400-e29b-41d4-a716-446655440000",
+      ts: "2026-10-01T00:00:00Z",
+      studentRef: "opaque-test",
+      sessionId: "550e8400-e29b-41d4-a716-446655440001",
+      moduleId: "chem.atom-builder",
+      moduleVersion: "0.0.0",
+      type: "mission_completed",
+      payload: { missionId: "make-na-plus", attempts: 1, hintsUsed: 0, assessmentIds: [] },
+      device: { mode: "screen", tier: "mid" },
+    });
+    await flush();
+
+    expect(harness.player.viewState.currentCueId).toBe("sodium-complete");
+    expect(harness.player.viewState.audioError).toContain("playback was interrupted");
     harness.player.dispose();
   });
 });

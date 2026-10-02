@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./piper-web-adapter": "./src/piper-web-adapter.ts"
+  },
   "scripts": {
     "generate": "tsc -p tsconfig.build.json && node dist/cli.js"
   },

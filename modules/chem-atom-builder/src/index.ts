@@ -50,6 +50,11 @@ interface LocalEventEntry {
 }
 
 const narrationAudioUrls = {
+  ...import.meta.glob("../narration/en/generated/*.mp3", {
+    eager: true,
+    query: "?url",
+    import: "default",
+  }),
   ...import.meta.glob("../narration/en/generated/*.wav.gz", {
     eager: true,
     query: "?inline",
@@ -290,6 +295,13 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
       const assetUrl = narrationAudioUrls[`../${selectedAssetPath}`];
       if (!assetUrl) {
         throw new Error(`Narration audio asset is missing: ${assetPath}`);
+      }
+      if (!assetUrl.startsWith("data:")) {
+        const response = await fetch(assetUrl);
+        if (!response.ok) {
+          throw new Error(`Narration audio request failed with HTTP ${response.status}: ${assetPath}`);
+        }
+        return response.arrayBuffer();
       }
       const encodedAudio = assetUrl.split(",", 2)[1];
       if (!assetUrl.startsWith("data:") || !encodedAudio) {
@@ -717,16 +729,16 @@ function renderNarrationView(root: HTMLElement, state: NarrationViewState): void
   captionsButton.textContent = state.settings.captionsEnabled ? "Captions on" : "Captions off";
   captionsButton.setAttribute("aria-pressed", String(state.settings.captionsEnabled));
 
-  setText(
-    root,
-    "#narration-audio-status",
+  const audioStatus = requiredElement<HTMLElement>(root, "#narration-audio-status");
+  audioStatus.setAttribute("role", state.audioError ? "alert" : "status");
+  audioStatus.textContent = state.audioError ?? (
     state.soundBlocked
       ? "Sound blocked. Tap to try again."
       : state.audioUnavailable
-      ? "Captions remain available."
-      : state.audioEnabled
-        ? state.settings.muted ? "Sound muted" : "Sound enabled"
-        : "Sound waits for your tap.",
+        ? "Captions remain available."
+        : state.audioEnabled
+          ? state.settings.muted ? "Sound muted" : "Sound enabled"
+          : "Sound waits for your tap."
   );
 }
 

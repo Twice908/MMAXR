@@ -32,6 +32,7 @@ const narrationCueSchema = z
     target: z.string().min(1).optional(),
     interruptible: z.boolean().optional(),
     audio: z.string().min(1).optional(),
+    fallbackAudio: z.string().min(1).optional(),
     captions: z.string().min(1).optional(),
     captionText: z.string().min(1).optional(),
   })

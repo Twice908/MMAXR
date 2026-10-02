@@ -62,12 +62,15 @@ describe("narration generation", () => {
 
       expect(result.releaseReady).toBe(false);
       expect(result.cues).toHaveLength(1);
+      const generatedCue = result.cues[0]!;
       const audio = await import("node:fs/promises").then(({ readFile }) =>
-        readFile(join(root, cue.audio!)),
+        readFile(join(root, generatedCue.audioPath)),
       );
       const captions = await import("node:fs/promises").then(({ readFile }) =>
-        readFile(join(root, cue.captions!), "utf8"),
+        readFile(join(root, generatedCue.captionsPath), "utf8"),
       );
+      expect(generatedCue.audioPath).toBe(".mock-narration/intro.wav.gz");
+      expect(generatedCue.captionsPath).toBe(".mock-narration/intro.vtt");
       expect(audio.subarray(0, 2)).toEqual(Buffer.from([0x1f, 0x8b]));
       expect(captions).toContain("WEBVTT");
       expect(captions).toContain("Welcome to the lesson.");

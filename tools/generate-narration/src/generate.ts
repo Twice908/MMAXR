@@ -1,11 +1,12 @@
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
-import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import { dirname, relative, resolve, sep } from "node:path";
 import type { ModuleManifest } from "@mma/schema";
 import type { TtsAdapter } from "./adapter.js";
 
 /** Source text and review state for one narration script. */
 export interface NarrationScript {
   readonly text: string;
+  readonly spokenText?: string;
   readonly reviewStatus: "pending" | "reviewed";
 }
 
@@ -58,7 +59,7 @@ export async function validateNarrationScriptFiles(
     if (!isNarrationScript(parsed)) {
       throw new Error(`Narration script must have text and reviewStatus: ${cue.script}`);
     }
-    if (parsed.text.trim().split(/\s+/).filter(Boolean).length > 40) {
+    if ((parsed.spokenText ?? parsed.text).trim().split(/\s+/).filter(Boolean).length > 40) {
       throw new Error(`Narration script exceeds 40 words: ${cue.script}`);
     }
     if (cue.captionText && cue.captionText !== parsed.text) {
@@ -93,14 +94,23 @@ export async function generateNarration(
     }
     const output = await options.adapter.synthesize({
       text: script.text,
+      displayText: script.text,
+      ...(script.spokenText === undefined ? {} : { spokenText: script.spokenText }),
       language: manifest.narration.languages[0]!,
       cueType: cue.trigger,
     });
-    const audioAssetPath = options.audibleTest
-      ? join(dirname(cue.audio), "audible-test", basename(cue.audio))
-      : cue.audio;
-    const audioPath = resolveModulePath(options.moduleRoot, audioAssetPath);
-    const captionsPath = resolveModulePath(options.moduleRoot, cue.captions);
+    const isMockAdapter = options.adapter.name.includes("mock");
+    const mockOutputDirectory = resolve(
+      options.moduleRoot,
+      ".mock-narration",
+      ...(options.audibleTest ? ["audible-test"] : []),
+    );
+    const audioPath = isMockAdapter
+      ? resolve(mockOutputDirectory, `${cue.id}.wav.gz`)
+      : resolveModulePath(options.moduleRoot, cue.audio);
+    const captionsPath = isMockAdapter
+      ? resolve(mockOutputDirectory, `${cue.id}.vtt`)
+      : resolveModulePath(options.moduleRoot, cue.captions);
     await mkdir(dirname(audioPath), { recursive: true });
     await mkdir(dirname(captionsPath), { recursive: true });
     await writeFile(audioPath, output.audioBytes);
@@ -108,7 +118,7 @@ export async function generateNarration(
     generated.push({
       cueId: cue.id,
       audioPath: relative(options.moduleRoot, audioPath).split(sep).join("/"),
-      captionsPath: cue.captions,
+      captionsPath: relative(options.moduleRoot, captionsPath).split(sep).join("/"),
       durationMs: output.durationMs,
       reviewStatus: script.reviewStatus,
     });
@@ -131,6 +141,7 @@ function isNarrationScript(value: unknown): value is NarrationScript {
   }
   const script = value as Record<string, unknown>;
   return typeof script.text === "string" && script.text.trim().length > 0 &&
+    (script.spokenText === undefined || (typeof script.spokenText === "string" && script.spokenText.trim().length > 0)) &&
     (script.reviewStatus === "pending" || script.reviewStatus === "reviewed");
 }
 

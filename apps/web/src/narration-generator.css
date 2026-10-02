@@ -1,0 +1,151 @@
+.narration-generator {
+  min-height: 100vh;
+  color: #172326;
+  background: #f2f5f3;
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+}
+
+.generator-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem clamp(1rem, 5vw, 4rem);
+  color: #f7f8f3;
+  background: #173f3d;
+}
+
+.generator-header a {
+  color: inherit;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.generator-header span {
+  color: #b5d1c1;
+  font-size: 0.875rem;
+}
+
+.generator-content {
+  width: min(760px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 2rem 0 4rem;
+}
+
+.generator-content h1 {
+  margin: 0 0 1.5rem;
+  font-size: 1.75rem;
+  font-weight: 650;
+}
+
+.generator-settings {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0 0 1.5rem;
+  border-block: 1px solid #c8d2cc;
+}
+
+.generator-settings div {
+  padding: 0.875rem 1rem 0.875rem 0;
+}
+
+.generator-settings dt {
+  color: #53625e;
+  font-size: 0.8rem;
+}
+
+.generator-settings dd {
+  margin: 0.25rem 0 0;
+  overflow-wrap: anywhere;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+#generate-narration {
+  min-height: 44px;
+  padding: 0.65rem 1rem;
+  border: 0;
+  border-radius: 4px;
+  color: #fff;
+  background: #087568;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+#generate-narration:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+#generator-status {
+  min-height: 1.5rem;
+  color: #445450;
+  overflow-wrap: anywhere;
+}
+
+#generator-progress {
+  width: 100%;
+  height: 0.5rem;
+  accent-color: #087568;
+}
+
+.generator-results {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.generator-results li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  padding: 0.75rem 0;
+  border-top: 1px solid #c8d2cc;
+}
+
+.generator-results h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.generator-results p {
+  grid-column: 1;
+  margin: 0;
+  color: #53625e;
+  font-size: 0.85rem;
+}
+
+.generator-results a {
+  color: #075f57;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.generator-results audio {
+  grid-column: 1 / -1;
+  width: min(100%, 480px);
+  height: 40px;
+}
+
+@media (max-width: 560px) {
+  .generator-settings {
+    grid-template-columns: 1fr;
+  }
+
+  .generator-settings div {
+    padding: 0.6rem 0;
+  }
+
+  .generator-results li {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .generator-results h2,
+  .generator-results p,
+  .generator-results audio {
+    grid-column: 1 / -1;
+  }
+}
