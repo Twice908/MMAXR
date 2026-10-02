@@ -51,6 +51,19 @@ export interface ScreenRendererOptions {
   readonly diagnostics?: boolean;
 }
 
+export interface ArRenderDiagnostics {
+  readonly sceneBackground: string;
+  readonly clearColor: string;
+  readonly clearAlpha: number;
+  readonly environmentBlendMode: string;
+  readonly grantedFeatures: readonly string[];
+  readonly canvasDisplay: string;
+  readonly renderLoopRunning: boolean;
+  readonly atomVisible: boolean;
+  readonly atomInCameraView: boolean;
+  readonly sessionAttached: boolean;
+}
+
 const AR_ATOM_DIAMETER_METERS = 0.27;
 const RING_TUBE_RADIUS = 0.035;
 
@@ -131,6 +144,9 @@ export class ScreenSceneRenderer {
   private dragParticle: string | null = null;
   private arActive = false;
   private currentFrame: ScreenSceneFrame | null = null;
+  private activeXRSession: XRSession | null = null;
+  private xrRenderLoopRunning = false;
+  private arDiagnosticsListener: ((diagnostics: ArRenderDiagnostics) => void) | null = null;
   private disposed = false;
 
   /** Create a WebGL canvas inside a host element and configure quality limits. */
@@ -279,7 +295,9 @@ export class ScreenSceneRenderer {
     this.atomRoot.scale.setScalar(this.currentFrame ? arContentScale(this.currentFrame) : 0.675);
 
     try {
-      await this.renderer.xr.setSession(session as XRSession);
+      this.activeXRSession = session as XRSession;
+      await this.renderer.xr.setSession(this.activeXRSession);
+      this.xrRenderLoopRunning = true;
       this.renderer.setAnimationLoop((time) => {
         const frameTime = this.lastFrameTime === 0 ? 0 : time - this.lastFrameTime;
         this.lastFrameTime = time;
@@ -298,6 +316,7 @@ export class ScreenSceneRenderer {
     }
 
     this.renderer.setAnimationLoop(null);
+    this.xrRenderLoopRunning = false;
     const session = this.renderer.xr.getSession();
     if (session) {
       try {
@@ -307,12 +326,21 @@ export class ScreenSceneRenderer {
       }
     }
     this.renderer.xr.enabled = false;
+    this.activeXRSession = null;
     this.atomRoot.position.set(0, 0, 0);
     this.atomRoot.scale.setScalar(1);
     this.scene.background = this.screenBackground;
     this.arActive = false;
     this.render();
     this.startDiagnosticsLoop();
+  }
+
+  /** Subscribe to live AR renderer facts for a development-only overlay. */
+  setArDiagnosticsListener(
+    listener: ((diagnostics: ArRenderDiagnostics) => void) | null,
+  ): void {
+    this.arDiagnosticsListener = listener;
+    this.publishArDiagnostics();
   }
 
   /** Find the closest interactive scene surface under viewport coordinates. */
@@ -459,6 +487,28 @@ export class ScreenSceneRenderer {
       this.diagnosticsElement.textContent =
         `${this.renderer.info.render.calls} calls · ${frameTime.toFixed(1)} ms · ${this.qualityTier}`;
     }
+    this.publishArDiagnostics();
+  }
+
+  private publishArDiagnostics(): void {
+    if (!this.arActive || !this.arDiagnosticsListener) {
+      return;
+    }
+    const session = this.renderer.xr.getSession();
+    const position = this.atomRoot.position;
+    const atomVisible = this.atomRoot.visible && this.atomRoot.children.some((child) => child.visible);
+    this.arDiagnosticsListener({
+      sceneBackground: this.scene.background === null ? "transparent" : "opaque",
+      clearColor: `#${this.renderer.getClearColor(new THREE.Color()).getHexString()}`,
+      clearAlpha: this.renderer.getClearAlpha(),
+      environmentBlendMode: session?.environmentBlendMode ?? "unavailable",
+      grantedFeatures: session?.enabledFeatures ?? [],
+      canvasDisplay: getComputedStyle(this.canvas).display,
+      renderLoopRunning: this.xrRenderLoopRunning,
+      atomVisible,
+      atomInCameraView: position.z < 0 && Math.abs(position.x) < 0.6 && Math.abs(position.y) < 0.6,
+      sessionAttached: session !== null && session === this.activeXRSession,
+    });
   }
 
   private updateCamera(): void {

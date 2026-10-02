@@ -296,6 +296,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     clock,
     idGenerator,
     recordLocalEvent: recordLocalArEvent,
+    ...(options.diagnostics === undefined ? {} : { diagnostics: options.diagnostics }),
   });
 
   const narrationPlayer = new NarrationPlayer({
