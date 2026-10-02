@@ -27,7 +27,13 @@ import {
   type NarrationTelemetryDraft,
   type NarrationViewState,
 } from "@mma/engine-voice";
-import { moduleManifestSchema, telemetryEventSchema } from "@mma/schema";
+import {
+  mountArControls,
+} from "./ar-controls.js";
+import {
+  moduleManifestSchema,
+  telemetryEventSchema,
+} from "@mma/schema";
 import carbon12Items from "../assessments/m1-carbon-12.json";
 import sodiumItems from "../assessments/m2-sodium-ion.json";
 import carbon14Items from "../assessments/m3-carbon-14.json";
@@ -48,11 +54,9 @@ interface LocalEventEntry {
   readonly timestamp: string;
   readonly missionId: string;
 }
-
 const narrationAudioUrls = {
   ...import.meta.glob("../narration/en/generated/*.mp3", {
     eager: true,
-    query: "?url",
     import: "default",
   }),
   ...import.meta.glob("../narration/en/generated/*.wav.gz", {
@@ -104,10 +108,10 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
           <h2 id="mission-title">Build carbon-12</h2>
           <p id="mission-goal">Build a neutral carbon atom with 6 protons, 6 neutrons, and 6 electrons.</p>
           <p class="mission-progress" id="mission-progress">Progress 0/4</p>
-        </div>
         <div class="lesson-controls">
           <button type="button" data-command="lesson:hint">Hint</button>
           <button type="button" data-command="lesson:check">Check</button>
+
           <button type="button" data-command="lesson:free-play">Free play</button>
         </div>
         <p class="hint-feedback" id="hint-feedback" aria-live="polite"></p>
@@ -254,6 +258,10 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
       return entry;
     }));
   }
+  const recordLocalArEvent = (type: string, timestamp: string, detail: string): void => {
+    localEvents.push({ type, timestamp, missionId: detail });
+    renderLocalEvents();
+  };
   store.events.subscribe("mission_started", recordLocalEvent);
   store.events.subscribe("mission_completed", recordLocalEvent);
   store.events.subscribe("hint_used", recordLocalEvent);
@@ -280,6 +288,15 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   };
   eventsToggle.hidden = !options.diagnostics;
   root.addEventListener("click", onEventsAction);
+
+  const disposeArControls = mountArControls({
+    root,
+    renderer,
+    telemetryContext,
+    clock,
+    idGenerator,
+    recordLocalEvent: recordLocalArEvent,
+  });
 
   const narrationPlayer = new NarrationPlayer({
     cues: manifest.narration?.cues ?? [],
@@ -491,7 +508,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     narrationSpeed.removeEventListener("change", onNarrationSpeedChange);
     root.removeEventListener("click", onEventsAction);
     narrationPlayer.dispose();
-    renderer.dispose();
+    void disposeArControls().finally(() => renderer.dispose());
     root.replaceChildren();
   };
 }

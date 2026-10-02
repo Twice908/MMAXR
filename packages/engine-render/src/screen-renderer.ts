@@ -51,6 +51,26 @@ export interface ScreenRendererOptions {
   readonly diagnostics?: boolean;
 }
 
+const AR_ATOM_DIAMETER_METERS = 0.27;
+const RING_TUBE_RADIUS = 0.035;
+
+/** Calculate the scale that fits a scene frame into a 27 cm AR diameter. */
+export function arContentScale(frame: ScreenSceneFrame): number {
+  const ringExtent = frame.rings.reduce(
+    (extent, ring) => Math.max(extent, ring.radius + RING_TUBE_RADIUS),
+    frame.nucleusRadius,
+  );
+  const sphereExtent = frame.spheres.reduce((extent, batch) =>
+    batch.positions.reduce(
+      (batchExtent, position) => Math.max(
+        batchExtent,
+        Math.hypot(position.x, position.y, position.z) + batch.radius,
+      ),
+      extent,
+    ), ringExtent);
+  return AR_ATOM_DIAMETER_METERS / Math.max(0.01, sphereExtent * 2);
+}
+
 const QUALITY_PIXEL_RATIO: Record<QualityTier, number> = {
   low: 1,
   mid: 1.5,
@@ -78,8 +98,10 @@ export class ScreenSceneRenderer {
 
   private readonly host: HTMLElement;
   private readonly scene = new THREE.Scene();
+  private readonly atomRoot = new THREE.Group();
   private readonly camera = new THREE.PerspectiveCamera(42, 1, 0.1, 80);
   private readonly renderer: THREE.WebGLRenderer;
+  private readonly screenBackground = new THREE.Color(0xf4f4ee);
   private readonly raycaster = new THREE.Raycaster();
   private readonly pointer = new THREE.Vector2();
   private readonly nucleonGeometry = new THREE.SphereGeometry(1, 16, 12);
@@ -107,6 +129,8 @@ export class ScreenSceneRenderer {
   private distance = 14;
   private nucleusRadius = 0.2;
   private dragParticle: string | null = null;
+  private arActive = false;
+  private currentFrame: ScreenSceneFrame | null = null;
   private disposed = false;
 
   /** Create a WebGL canvas inside a host element and configure quality limits. */
@@ -131,11 +155,12 @@ export class ScreenSceneRenderer {
     this.slotLayer.className = "drop-slot-layer";
     this.slotLayer.setAttribute("aria-hidden", "true");
     this.host.append(this.slotLayer);
-    this.scene.background = new THREE.Color(0xf4f4ee);
+    this.scene.background = this.screenBackground;
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x5c6870, 2));
     const keyLight = new THREE.DirectionalLight(0xffffff, 2.4);
     keyLight.position.set(4, 5, 9);
     this.scene.add(keyLight);
+    this.scene.add(this.atomRoot);
     this.camera.position.set(0, 0, this.distance);
 
     const pickMaterial = new THREE.MeshBasicMaterial({
@@ -147,7 +172,7 @@ export class ScreenSceneRenderer {
     });
     this.nucleusPickMesh = new THREE.Mesh(new THREE.SphereGeometry(1), pickMaterial);
     this.nucleusPickMesh.userData.interactionTarget = "nucleus";
-    this.scene.add(this.nucleusPickMesh);
+    this.atomRoot.add(this.nucleusPickMesh);
     this.interactiveMeshes.push(this.nucleusPickMesh);
 
     this.diagnosticsElement = options.diagnostics ? document.createElement("output") : null;
@@ -171,6 +196,7 @@ export class ScreenSceneRenderer {
 
   /** Replace view geometry from a serialized state-derived scene frame. */
   update(frame: ScreenSceneFrame): void {
+    this.currentFrame = frame;
     this.clearSphereMeshes();
     this.clearRingMeshes();
     this.nucleusRadius = Math.max(frame.nucleusRadius, 0.2);
@@ -194,7 +220,7 @@ export class ScreenSceneRenderer {
         mesh.setMatrixAt(index, transform.matrix);
       });
       mesh.instanceMatrix.needsUpdate = true;
-      this.scene.add(mesh);
+      this.atomRoot.add(mesh);
       this.sphereMeshes.push(mesh);
       if (batch.interactionTarget) {
         this.interactiveMeshes.push(mesh);
@@ -211,7 +237,7 @@ export class ScreenSceneRenderer {
       });
       const mesh = new THREE.Mesh(geometry, material);
       mesh.userData.interactionTarget = `shell:${ring.shell}`;
-      this.scene.add(mesh);
+      this.atomRoot.add(mesh);
       this.ringMeshes.set(ring.shell, mesh);
       this.interactiveMeshes.push(mesh);
       for (const slot of ring.slots) {
@@ -228,8 +254,65 @@ export class ScreenSceneRenderer {
         });
       }
     }
+    if (this.arActive) {
+      this.atomRoot.scale.setScalar(arContentScale(frame));
+    }
     this.positionSlotMarkers();
     this.render();
+  }
+
+  /** Present the atom at tabletop scale through the active WebXR session. */
+  async enterARSession(session: EventTarget): Promise<void> {
+    if (this.disposed) {
+      throw new Error("Cannot start AR with a disposed renderer.");
+    }
+    if (this.arActive) {
+      return;
+    }
+
+    this.arActive = true;
+    cancelAnimationFrame(this.animationFrame);
+    this.renderer.xr.enabled = true;
+    this.renderer.xr.setReferenceSpaceType("local");
+    this.scene.background = null;
+    this.atomRoot.position.set(0, 0, -0.6);
+    this.atomRoot.scale.setScalar(this.currentFrame ? arContentScale(this.currentFrame) : 0.675);
+
+    try {
+      await this.renderer.xr.setSession(session as XRSession);
+      this.renderer.setAnimationLoop((time) => {
+        const frameTime = this.lastFrameTime === 0 ? 0 : time - this.lastFrameTime;
+        this.lastFrameTime = time;
+        this.render(frameTime);
+      });
+    } catch (error) {
+      await this.exitARSession();
+      throw error;
+    }
+  }
+
+  /** Stop the WebXR render loop and restore the screen presentation. */
+  async exitARSession(): Promise<void> {
+    if (!this.arActive) {
+      return;
+    }
+
+    this.renderer.setAnimationLoop(null);
+    const session = this.renderer.xr.getSession();
+    if (session) {
+      try {
+        await this.renderer.xr.setSession(null);
+      } catch {
+        // The browser may already have ended the session.
+      }
+    }
+    this.renderer.xr.enabled = false;
+    this.atomRoot.position.set(0, 0, 0);
+    this.atomRoot.scale.setScalar(1);
+    this.scene.background = this.screenBackground;
+    this.arActive = false;
+    this.render();
+    this.startDiagnosticsLoop();
   }
 
   /** Find the closest interactive scene surface under viewport coordinates. */
@@ -318,6 +401,7 @@ export class ScreenSceneRenderer {
     this.disposed = true;
     cancelAnimationFrame(this.animationFrame);
     cancelAnimationFrame(this.resizeFrame);
+    this.renderer.setAnimationLoop(null);
     this.resizeObserver.disconnect();
     this.reducedMotion.removeEventListener("change", this.onReducedMotionChange);
     this.clearSphereMeshes();
@@ -351,7 +435,7 @@ export class ScreenSceneRenderer {
 
   private startDiagnosticsLoop(): void {
     cancelAnimationFrame(this.animationFrame);
-    if (this.diagnosticsElement && !this.reducedMotion.matches && !this.disposed) {
+    if (this.diagnosticsElement && !this.reducedMotion.matches && !this.disposed && !this.arActive) {
       this.animationFrame = requestAnimationFrame(this.tick);
     }
   }
@@ -483,7 +567,7 @@ export class ScreenSceneRenderer {
 
   private clearSphereMeshes(): void {
     for (const mesh of this.sphereMeshes) {
-      this.scene.remove(mesh);
+      this.atomRoot.remove(mesh);
     }
     this.sphereMeshes.length = 0;
     this.interactiveMeshes.splice(0, this.interactiveMeshes.length, this.nucleusPickMesh);
@@ -491,7 +575,7 @@ export class ScreenSceneRenderer {
 
   private clearRingMeshes(): void {
     for (const mesh of this.ringMeshes.values()) {
-      this.scene.remove(mesh);
+      this.atomRoot.remove(mesh);
       mesh.geometry.dispose();
       (mesh.material as THREE.Material).dispose();
     }

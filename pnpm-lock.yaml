@@ -66,6 +66,9 @@ importers:
       '@mma/engine-voice':
         specifier: workspace:*
         version: link:../../packages/engine-voice
+      '@mma/engine-xr':
+        specifier: workspace:*
+        version: link:../../packages/engine-xr
       '@mma/kit-chemistry':
         specifier: workspace:*
         version: link:../../packages/kits/chemistry

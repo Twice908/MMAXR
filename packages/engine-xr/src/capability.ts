@@ -17,12 +17,17 @@ export type ArCapabilityFailure =
 
 export type ArCapabilityResult = Readonly<{ supported: true }> | ArCapabilityFailure;
 
-interface ArXrSystem {
+export interface ArXrCapabilitySystem {
   isSessionSupported(mode: "immersive-ar"): Promise<boolean>;
 }
 
-interface NavigatorWithXr extends Navigator {
-  readonly xr?: ArXrSystem;
+export interface ArCapabilityEnvironment {
+  readonly secureContext: boolean;
+  readonly xr: ArXrCapabilitySystem | null;
+}
+
+interface NavigatorWithXr {
+  readonly xr?: ArXrCapabilitySystem;
 }
 
 function unsupported(
@@ -46,16 +51,25 @@ function unsupported(
   }
 }
 
+function browserCapabilityEnvironment(): ArCapabilityEnvironment {
+  const browserNavigator = typeof navigator === "undefined"
+    ? undefined
+    : navigator as unknown as NavigatorWithXr;
+  return {
+    secureContext: globalThis.isSecureContext,
+    xr: browserNavigator?.xr ?? null,
+  };
+}
+
 /** Detect whether this browser can start an immersive AR session. */
-export async function detectArSupport(): Promise<ArCapabilityResult> {
-  if (!globalThis.isSecureContext) {
+export async function detectArSupport(
+  environment = browserCapabilityEnvironment(),
+): Promise<ArCapabilityResult> {
+  if (!environment.secureContext) {
     return unsupported("insecure_context");
   }
 
-  const browserNavigator = typeof navigator === "undefined"
-    ? undefined
-    : navigator as NavigatorWithXr;
-  const xr = browserNavigator?.xr;
+  const xr = environment.xr;
   if (!xr) {
     return unsupported("webxr_unavailable");
   }

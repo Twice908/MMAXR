@@ -62,7 +62,9 @@ export class ScreenInputAdapter {
   }
 
   private readonly onPointerDown = (event: PointerEvent): void => {
-    if ((event.target as Element | null)?.closest("[data-command], .narration-controls, [data-dev-events-action]")) {
+    if ((event.target as Element | null)?.closest(
+      "[data-command], .narration-controls, [data-dev-events-action], [data-ar-action]",
+    )) {
       return;
     }
     this.pointerPositions.set(event.pointerId, { x: event.clientX, y: event.clientY });

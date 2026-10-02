@@ -1,7 +1,9 @@
 export {
   detectArSupport,
+  type ArCapabilityEnvironment,
   type ArCapabilityFailure,
   type ArCapabilityResult,
+  type ArXrCapabilitySystem,
 } from "./capability.js";
 export {
   arErrorReasonCodes,
@@ -12,6 +14,16 @@ export {
   type ArSessionEvent,
   type ArSessionState,
 } from "./session.js";
+export {
+  ArSessionController,
+  ArSessionStartError,
+  type ArSessionControllerOptions,
+  type ArSessionEnvironment,
+  type ArSessionHandle,
+  type ArSessionPresentation,
+  type ArSessionSystem,
+  type ArVisibilityTarget,
+} from "./session-runtime.js";
 export {
   mapXrPointerSample,
   type XrPoint,
