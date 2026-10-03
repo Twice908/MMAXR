@@ -324,7 +324,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
       const useAudibleTest = import.meta.env.DEV &&
         new URLSearchParams(window.location.search).get("narrationAudio") === "audible-test";
       const selectedAssetPath = useAudibleTest
-        ? assetPath.replace("/generated/", "/generated/audible-test/")
+        ? assetPath.replace("/generated/", "/generated/audible-test/").replace(/\.mp3$/, ".wav.gz")
         : assetPath;
       const assetUrl = narrationAudioUrls[`../${selectedAssetPath}`];
       if (!assetUrl) {
