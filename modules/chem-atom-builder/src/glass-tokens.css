@@ -1,0 +1,44 @@
+:root {
+  /* Frosted surface tint, raised to the minimum alpha that passes AA on tested backdrops. */
+  --glass-bg: rgba(255, 255, 255, 0.74);
+  /* Opaque-leaning surface for unsupported filters and reduced transparency. */
+  --glass-bg-strong: rgba(255, 255, 255, 0.82);
+  /* Blur radius for supported backdrop-filter implementations. */
+  --glass-blur: 14px;
+  /* Backdrop color saturation for supported backdrop-filter implementations. */
+  --glass-saturate: 1.15;
+  /* Backdrop brightness for supported backdrop-filter implementations. */
+  --glass-brightness: 1.06;
+  /* Shared glass edge thickness. */
+  --glass-border-width: 1px;
+  /* Shared translucent glass edge color. */
+  --glass-border-color: rgba(255, 255, 255, 0.55);
+  /* Shared inner top-edge highlight. */
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  /* Shared subtle drop shadow. */
+  --glass-shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
+  /* Radius for larger glass panels. */
+  --glass-radius-panel: 16px;
+  /* Radius for labels, pills, and secondary buttons. */
+  --glass-radius-pill: 10px;
+  /* Radius for primary action buttons. */
+  --glass-radius-button: 12px;
+  /* Primary text color used on glass surfaces. */
+  --glass-text: #16241d;
+  /* Muted text color, composited and tested against each glass surface. */
+  --glass-text-muted: rgba(22, 36, 29, 0.72);
+  /* Teal primary action surface, raised to preserve white-text AA contrast. */
+  --glass-primary-bg: rgba(31, 122, 126, 0.94);
+  /* Primary action text color. */
+  --glass-primary-text: #ffffff;
+  /* Red Exit AR surface, raised to preserve white-text AA contrast. */
+  --glass-danger-bg: rgba(160, 45, 35, 0.78);
+  /* Danger action text color. */
+  --glass-danger-text: #ffffff;
+  /* Padding for glass panels and dialogs. */
+  --glass-pad-panel: 14px;
+  /* Padding for labels, pills, and secondary buttons. */
+  --glass-pad-pill: 4px 12px;
+  /* Minimum height for AR touch targets. */
+  --glass-tap-min: 44px;
+}

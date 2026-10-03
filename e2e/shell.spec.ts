@@ -458,8 +458,19 @@ test("AR overlay is transparent and camera explanation has two visible actions",
   const primaryStyle = await start.evaluate((element) => ({
     color: getComputedStyle(element).color,
     background: getComputedStyle(element).backgroundColor,
+    primaryText: (() => {
+      const probe = document.createElement("span");
+      probe.style.color = getComputedStyle(document.documentElement)
+        .getPropertyValue("--glass-primary-text").trim();
+      document.body.append(probe);
+      const color = getComputedStyle(probe).color;
+      probe.remove();
+      return color;
+    })(),
+    primaryBackground: getComputedStyle(document.documentElement).getPropertyValue("--glass-primary-bg").trim(),
   }));
-  expect(primaryStyle).toEqual({ color: "rgb(255, 255, 255)", background: "rgb(40, 127, 131)" });
+  expect(primaryStyle.color).toBe(primaryStyle.primaryText);
+  expect(primaryStyle.background).toBe(primaryStyle.primaryBackground);
   await dialog.locator(".ar-confirmation-actions").click({ position: { x: 4, y: 24 } });
   expect(await page.locator("html").getAttribute("data-ar-request")).toBeNull();
   await expect(dialog).toBeVisible();
@@ -486,6 +497,65 @@ test("AR overlay is transparent and camera explanation has two visible actions",
   expect(activeStyles.canvasDisplay).toBe("none");
 });
 
+test("glass surfaces use tokens and fall back for reduced transparency", async ({ page }) => {
+  await installMockXr(page);
+  await page.goto("http://127.0.0.1:5174");
+  await page.getByRole("button", { name: "View in AR" }).click();
+  const dialog = page.getByRole("dialog", { name: "View the atom in AR?" });
+  await expect(dialog).toBeVisible();
+
+  const normalDialogStyle = await dialog.evaluate((element) => {
+    const style = getComputedStyle(element);
+    const root = getComputedStyle(document.documentElement);
+    return {
+      background: style.backgroundColor,
+      filter: style.backdropFilter,
+      glassBackground: root.getPropertyValue("--glass-bg").trim(),
+      strongBackground: root.getPropertyValue("--glass-bg-strong").trim(),
+      supportsBackdropFilter: CSS.supports("backdrop-filter", "blur(1px)")
+        || CSS.supports("-webkit-backdrop-filter", "blur(1px)"),
+    };
+  });
+  expect(normalDialogStyle.background).toBe(
+    normalDialogStyle.supportsBackdropFilter
+      ? normalDialogStyle.glassBackground
+      : normalDialogStyle.strongBackground,
+  );
+  if (normalDialogStyle.supportsBackdropFilter) {
+    expect(normalDialogStyle.filter).toContain("blur(14px)");
+  } else {
+    expect(normalDialogStyle.filter).toBe("none");
+  }
+
+  await page.emulateMedia({ reducedTransparency: "reduce" });
+  const transparencyEmulator = await page.context().newCDPSession(page);
+  await transparencyEmulator.send("Emulation.setEmulatedMedia", {
+    features: [{ name: "prefers-reduced-transparency", value: "reduce" }],
+  });
+  expect(await page.evaluate(() =>
+    matchMedia("(prefers-reduced-transparency: reduce)").matches,
+  )).toBe(true);
+  const reducedTransparencyStyle = await dialog.evaluate((element) => ({
+    background: getComputedStyle(element).backgroundColor,
+    filter: getComputedStyle(element).backdropFilter,
+    strongBackground: getComputedStyle(document.documentElement)
+      .getPropertyValue("--glass-bg-strong").trim(),
+  }));
+  expect(reducedTransparencyStyle.background).toBe(reducedTransparencyStyle.strongBackground);
+  expect(reducedTransparencyStyle.filter).toBe("none");
+
+  await transparencyEmulator.send("Emulation.setEmulatedMedia", { features: [] });
+  await page.emulateMedia({ reducedTransparency: "no-preference", contrast: "more" });
+  const highContrastStyle = await dialog.evaluate((element) => ({
+    background: getComputedStyle(element).backgroundColor,
+    filter: getComputedStyle(element).backdropFilter,
+    strongBackground: getComputedStyle(document.documentElement)
+      .getPropertyValue("--glass-bg-strong").trim(),
+  }));
+  expect(highContrastStyle.background).toBe(highContrastStyle.strongBackground);
+  expect(highContrastStyle.filter).toBe("none");
+});
+
 test("mocked AR keeps the atom world-fixed and exposes the lesson through its overlay", async ({ page }) => {
   await installMockXr(page);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -500,6 +570,29 @@ test("mocked AR keeps the atom world-fixed and exposes the lesson through its ov
   await expect(panel).toBeVisible();
   await expect(panel).toHaveClass(/is-collapsed/);
   await expect(panel).toContainText("Build carbon-12");
+  const collapsedGlassStyle = await panel.evaluate((element) => {
+    const style = getComputedStyle(element);
+    const root = getComputedStyle(document.documentElement);
+    return {
+      background: style.backgroundColor,
+      glassBackground: root.getPropertyValue("--glass-bg").trim(),
+      strongBackground: root.getPropertyValue("--glass-bg-strong").trim(),
+      text: style.color,
+      glassText: (() => {
+        const probe = document.createElement("span");
+        probe.style.color = root.getPropertyValue("--glass-text").trim();
+        document.body.append(probe);
+        const color = getComputedStyle(probe).color;
+        probe.remove();
+        return color;
+      })(),
+      radius: style.borderRadius,
+      glassRadius: root.getPropertyValue("--glass-radius-panel").trim(),
+    };
+  });
+  expect(collapsedGlassStyle.background).toBe(collapsedGlassStyle.glassBackground);
+  expect(collapsedGlassStyle.text).toBe(collapsedGlassStyle.glassText);
+  expect(collapsedGlassStyle.radius).toBe(collapsedGlassStyle.glassRadius);
   const collapsedPanelBox = await panel.boundingBox();
   expect(collapsedPanelBox?.height).toBeLessThanOrEqual(60);
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
@@ -522,10 +615,90 @@ test("mocked AR keeps the atom world-fixed and exposes the lesson through its ov
   await panel.getByRole("button", { name: "Show panel" }).click();
   await expect(panel).not.toHaveClass(/is-collapsed/);
   await expect(panel.locator("#lesson-panel")).toBeVisible();
+  const expandedPanelBounds = await panel.boundingBox();
+  expect(expandedPanelBounds?.y).toBeGreaterThanOrEqual(844 / 2);
+  expect(expandedPanelBounds?.width).toBeLessThanOrEqual(390 - 24);
   await expect(panel.locator(".narration-controls")).toBeVisible();
   await expect(panel.locator(".particle-rail")).toBeVisible();
   await expect(panel.locator(".tray-particle").first()).toBeHidden();
   await expect(panel.locator("#assessment-card")).toBeHidden();
+  const controlGlassStyles = await page.evaluate(() => {
+    const root = getComputedStyle(document.documentElement);
+    const read = (selector: string) => {
+      const element = document.querySelector<HTMLElement>(selector);
+      if (!element) {
+        throw new Error(`Missing AR glass control: ${selector}`);
+      }
+      const style = getComputedStyle(element);
+      return {
+        background: style.backgroundColor,
+        color: style.color,
+        minHeight: Number.parseFloat(style.minHeight),
+      };
+    };
+    return {
+      glassBackground: root.getPropertyValue("--glass-bg").trim(),
+      glassText: (() => {
+        const probe = document.createElement("span");
+        probe.style.color = root.getPropertyValue("--glass-text").trim();
+        document.body.append(probe);
+        const color = getComputedStyle(probe).color;
+        probe.remove();
+        return color;
+      })(),
+      primaryBackground: root.getPropertyValue("--glass-primary-bg").trim(),
+      primaryText: (() => {
+        const probe = document.createElement("span");
+        probe.style.color = root.getPropertyValue("--glass-primary-text").trim();
+        document.body.append(probe);
+        const color = getComputedStyle(probe).color;
+        probe.remove();
+        return color;
+      })(),
+      dangerBackground: root.getPropertyValue("--glass-danger-bg").trim(),
+      dangerText: (() => {
+        const probe = document.createElement("span");
+        probe.style.color = root.getPropertyValue("--glass-danger-text").trim();
+        document.body.append(probe);
+        const color = getComputedStyle(probe).color;
+        probe.remove();
+        return color;
+      })(),
+      hint: read('.ar-overlay-panel [data-command="lesson:hint"]'),
+      check: read('.ar-overlay-panel [data-command="lesson:check"]'),
+      stepper: read(".ar-overlay-panel .stepper button"),
+      narration: read('.ar-overlay-panel [data-narration-action="mute"]'),
+      caption: read(".ar-overlay-panel .narration-caption"),
+      missionTitle: read(".ar-panel-mission-title"),
+      panelToggle: read('.ar-panel-heading [data-ar-action="panel-toggle"]'),
+      exit: read(".ar-exit"),
+    };
+  });
+  for (const control of [
+    controlGlassStyles.hint,
+    controlGlassStyles.stepper,
+    controlGlassStyles.narration,
+    controlGlassStyles.caption,
+    controlGlassStyles.missionTitle,
+    controlGlassStyles.panelToggle,
+  ]) {
+    expect(control.background).toBe(controlGlassStyles.glassBackground);
+    expect(control.color).toBe(controlGlassStyles.glassText);
+  }
+  expect(controlGlassStyles.check.background).toBe(controlGlassStyles.primaryBackground);
+  expect(controlGlassStyles.check.color).toBe(controlGlassStyles.primaryText);
+  expect(controlGlassStyles.exit.background).toBe(controlGlassStyles.dangerBackground);
+  expect(controlGlassStyles.exit.color).toBe(controlGlassStyles.dangerText);
+  for (const control of [
+    controlGlassStyles.hint,
+    controlGlassStyles.check,
+    controlGlassStyles.stepper,
+    controlGlassStyles.narration,
+    controlGlassStyles.panelToggle,
+    controlGlassStyles.exit,
+  ]) {
+    expect(control.minHeight).toBeGreaterThanOrEqual(44);
+  }
   await panel.getByRole("button", { name: "Add proton" }).click();
   await expect(page.locator("#atomic-number")).toHaveText("2");
   await panel.getByRole("button", { name: "Hint" }).click();
@@ -543,6 +716,21 @@ test("mocked AR keeps the atom world-fixed and exposes the lesson through its ov
   await addParticles(page, "Add electron", 5);
   await panel.getByRole("button", { name: "Check" }).click();
   await expect(panel.locator("#assessment-card")).toBeVisible();
+  const questionSurface = await panel.locator("#assessment-card").evaluate((element) => ({
+    background: getComputedStyle(element).backgroundColor,
+    glassBackground: getComputedStyle(document.documentElement).getPropertyValue("--glass-bg").trim(),
+    text: getComputedStyle(element).color,
+    glassText: (() => {
+      const probe = document.createElement("span");
+      probe.style.color = getComputedStyle(document.documentElement).getPropertyValue("--glass-text").trim();
+      document.body.append(probe);
+      const color = getComputedStyle(probe).color;
+      probe.remove();
+      return color;
+    })(),
+  }));
+  expect(questionSurface.background).toBe(questionSurface.glassBackground);
+  expect(questionSurface.text).toBe(questionSurface.glassText);
   await panel.locator("#assessment-options button").first().click();
   await expect(panel.locator("#assessment-feedback")).not.toBeEmpty();
   await panel.getByRole("button", { name: "Next question" }).click();
@@ -571,6 +759,21 @@ test("mocked AR shows one local comfort break reminder after ten minutes", async
   await page.clock.fastForward(10 * 60 * 1000);
   await expect(page.locator("#ar-break-reminder")).toBeVisible();
   await expect(page.locator("#ar-break-reminder")).toHaveText("Take a short break");
+  const reminderSurface = await page.locator("#ar-break-reminder").evaluate((element) => ({
+    background: getComputedStyle(element).backgroundColor,
+    glassBackground: getComputedStyle(document.documentElement).getPropertyValue("--glass-bg").trim(),
+    text: getComputedStyle(element).color,
+    glassText: (() => {
+      const probe = document.createElement("span");
+      probe.style.color = getComputedStyle(document.documentElement).getPropertyValue("--glass-text").trim();
+      document.body.append(probe);
+      const color = getComputedStyle(probe).color;
+      probe.remove();
+      return color;
+    })(),
+  }));
+  expect(reminderSurface.background).toBe(reminderSurface.glassBackground);
+  expect(reminderSurface.text).toBe(reminderSurface.glassText);
   await expect(page.locator('#dev-event-list [data-event-type="comfort_break_shown"]')).toHaveCount(1);
 
   await page.clock.fastForward(10 * 60 * 1000);
