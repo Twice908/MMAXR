@@ -133,6 +133,13 @@
 .ar-status { position: fixed; z-index: 29; right: 12px; bottom: max(62px, env(safe-area-inset-bottom)); left: 12px; width: fit-content; max-width: min(540px, calc(100vw - 24px)); padding: 10px 14px; border: 1px solid #607274; border-radius: 6px; color: #eff8f5; background: #1e292df2; font-size: 13px; line-height: 1.4; }
 .ar-exit { position: fixed; z-index: 30; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); min-height: 44px; padding: 0 16px; border: 2px solid #fff; border-radius: 6px; color: #fff; background: #8c2d20; box-shadow: 0 2px 8px #101c2066; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
 .ar-exit:disabled { opacity: .8; cursor: wait; }
+.ar-overlay-panel { position: fixed; z-index: 20; right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); left: max(12px, env(safe-area-inset-left)); max-height: min(58dvh, 560px); overflow: auto; padding: 10px 14px; border: 1px solid #d7dfdb; border-radius: 10px; color: var(--ink); background: #fffffff0; box-shadow: 0 4px 20px #101c2033; backdrop-filter: blur(8px); }
+.ar-panel-heading { min-height: 40px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ar-panel-mission-title { min-width: 0; margin: 0; overflow: hidden; color: var(--ink); font-family: Georgia, "Times New Roman", serif; font-size: 16px; text-overflow: ellipsis; white-space: nowrap; }
+.ar-panel-heading button { flex: 0 0 auto; min-height: 42px; padding: 0 12px; border: 1px solid var(--teal); border-radius: 6px; color: #fff; background: var(--teal); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.ar-overlay-panel.is-collapsed { padding: 4px 10px; }
+.ar-overlay-panel.is-collapsed > :not(.ar-panel-heading) { display: none !important; }
+.ar-break-reminder { position: fixed; z-index: 29; top: max(12px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); padding: 10px 14px; border: 1px solid #607274; border-radius: 6px; color: #eff8f5; background: #1e292df2; font-size: 13px; line-height: 1.4; pointer-events: none; }
 .ar-diagnostics { position: fixed; z-index: 28; right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); max-width: calc(100vw - 24px); padding: 7px 10px; border: 1px solid #607274; border-radius: 5px; color: #eff8f5; background: #1e292df2; font: 10px/1.4 ui-monospace, monospace; overflow-wrap: anywhere; pointer-events: none; }
 .ar-active, html.ar-active, body.ar-active, #app.ar-active { background-color: transparent !important; background-image: none !important; }
 .ar-active .atom-builder,
@@ -147,6 +154,19 @@
 .ar-active .atom-workspace,
 .ar-active .atom-inspector,
 .ar-active .scene-viewport { background-color: transparent !important; background-image: none !important; }
+.ar-active .builder-header { display: none; }
+.ar-active .builder-content { display: block; min-height: 0; }
+.ar-active .atom-workspace { position: fixed; z-index: 0; inset: 0; padding: 0; pointer-events: none; }
+.ar-active .scene-heading,
+.ar-active .chemistry-feedback,
+.ar-active .atom-inspector { display: none; }
+.ar-active .scene-viewport { position: absolute; inset: 0; min-height: 0; overflow: visible; border: 0; border-radius: 0; }
+.ar-active .ar-overlay-panel .lesson-panel { grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 8px 0; border: 0; }
+.ar-active .ar-overlay-panel .lesson-controls { flex-wrap: wrap; }
+.ar-active .ar-overlay-panel .particle-rail { padding: 4px 0; border: 0; }
+.ar-active .ar-overlay-panel .particle-row { min-height: 48px; }
+.ar-active .ar-overlay-panel .rail-footer { display: none; }
+.ar-active .tray-particle { display: none !important; }
 .ar-active .builder-header,
 .ar-active .lesson-panel,
 .ar-active .narration-hud,

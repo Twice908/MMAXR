@@ -2,6 +2,14 @@ import { expect, test } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
+declare global {
+  interface Window {
+    __dispatchMockXrSelect: (target: Element) => void;
+    readonly __mockXrSelectCount: number;
+    __setMockXrCamera: (x: number, y: number, z: number) => void;
+  }
+}
+
 test("lazy-loads Atom Builder and mounts the screen canvas", async ({ page }) => {
   await page.goto("http://127.0.0.1:5174");
   await expect(page.getByRole("heading", { name: "Atom Builder" })).toBeVisible();
@@ -440,6 +448,9 @@ test("AR overlay is transparent and camera explanation has two visible actions",
   await expect(cancel).toBeVisible();
   await expect(start).toBeVisible();
   await expect(dialog.getByRole("button")).toHaveCount(2);
+  await expect(dialog).toContainText(
+    "Stay seated, look around you, and keep an eye on your surroundings.",
+  );
   for (const button of [cancel, start]) {
     const box = await button.boundingBox();
     expect(box?.height).toBeGreaterThanOrEqual(48);
@@ -473,6 +484,99 @@ test("AR overlay is transparent and camera explanation has two visible actions",
   expect(activeStyles.backgrounds.every((value) => value === "rgba(0, 0, 0, 0)")).toBe(true);
   expect(activeStyles.backgroundImages.every((value) => value === "none")).toBe(true);
   expect(activeStyles.canvasDisplay).toBe("none");
+});
+
+test("mocked AR keeps the atom world-fixed and exposes the lesson through its overlay", async ({ page }) => {
+  await installMockXr(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("http://127.0.0.1:5174");
+  await page.getByRole("button", { name: "View in AR" }).click();
+  const dialog = page.getByRole("dialog", { name: "View the atom in AR?" });
+  await dialog.getByRole("button", { name: "Start AR" }).click();
+
+  const exitButton = page.getByRole("button", { name: "Exit AR" });
+  await expect(exitButton).toBeVisible();
+  const panel = page.locator(".ar-overlay-panel");
+  await expect(panel).toBeVisible();
+  await expect(panel).toHaveClass(/is-collapsed/);
+  await expect(panel).toContainText("Build carbon-12");
+  const collapsedPanelBox = await panel.boundingBox();
+  expect(collapsedPanelBox?.height).toBeLessThanOrEqual(60);
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
+    .toBe(true);
+  await expect(page.locator(".ar-diagnostics")).toContainText("anchor 0.00,0.00,-0.60");
+
+  await page.evaluate(() => {
+    const panelButton = document.querySelector(".ar-overlay-panel button");
+    if (!panelButton) {
+      throw new Error("AR panel toggle is missing");
+    }
+    window.__dispatchMockXrSelect(panelButton);
+  });
+  expect(await page.evaluate(() => window.__mockXrSelectCount)).toBe(0);
+
+  await page.evaluate(() => window.__setMockXrCamera(0.25, 0.1, 0));
+  await expect(page.locator(".ar-diagnostics")).toContainText("camera 0.25,0.10,0.00");
+  await expect(page.locator(".ar-diagnostics")).toContainText("anchor 0.00,0.00,-0.60");
+
+  await panel.getByRole("button", { name: "Show panel" }).click();
+  await expect(panel).not.toHaveClass(/is-collapsed/);
+  await expect(panel.locator("#lesson-panel")).toBeVisible();
+  await expect(panel.locator(".narration-controls")).toBeVisible();
+  await expect(panel.locator(".particle-rail")).toBeVisible();
+  await expect(panel.locator(".tray-particle").first()).toBeHidden();
+  await expect(panel.locator("#assessment-card")).toBeHidden();
+  await panel.getByRole("button", { name: "Add proton" }).click();
+  await expect(page.locator("#atomic-number")).toHaveText("2");
+  await panel.getByRole("button", { name: "Hint" }).click();
+  await expect(panel.locator("#hint-feedback")).not.toBeEmpty();
+  await panel.getByRole("button", { name: "Check" }).click();
+  await expect(panel.locator("#mission-feedback")).toContainText("Not yet");
+  const captionsButton = panel.getByRole("button", { name: "Captions on" });
+  await captionsButton.click();
+  await expect(panel.getByRole("button", { name: "Captions off" })).toHaveAttribute("aria-pressed", "false");
+  await panel.getByLabel("Narration speed").selectOption("0.75");
+  await expect(panel.getByLabel("Narration speed")).toHaveValue("0.75");
+
+  await addParticles(page, "Add proton", 4);
+  await addParticles(page, "Add neutron", 6);
+  await addParticles(page, "Add electron", 5);
+  await panel.getByRole("button", { name: "Check" }).click();
+  await expect(panel.locator("#assessment-card")).toBeVisible();
+  await panel.locator("#assessment-options button").first().click();
+  await expect(panel.locator("#assessment-feedback")).not.toBeEmpty();
+  await panel.getByRole("button", { name: "Next question" }).click();
+  await panel.locator("#assessment-options button").first().click();
+  await panel.getByRole("button", { name: "Continue" }).click();
+  await expect(panel).toContainText("Make Na+");
+
+  await exitButton.click();
+  await expect(exitButton).toBeHidden();
+  await expect(page.locator("#atom-scene canvas")).toBeVisible();
+  await expect(page.locator("#atomic-number")).toHaveText("6");
+  await expect(page.locator("#neutron-count")).toHaveText("6");
+  await expect(page.locator("#electron-count")).toHaveText("6");
+  await expect(panel).toBeHidden();
+});
+
+test("mocked AR shows one local comfort break reminder after ten minutes", async ({ page }) => {
+  await page.clock.install();
+  await installMockXr(page);
+  await page.goto("http://127.0.0.1:5174");
+  await page.getByRole("button", { name: "View in AR" }).click();
+  await page.getByRole("dialog", { name: "View the atom in AR?" })
+    .getByRole("button", { name: "Start AR" }).click();
+  await expect(page.getByRole("button", { name: "Exit AR" })).toBeVisible();
+
+  await page.clock.fastForward(10 * 60 * 1000);
+  await expect(page.locator("#ar-break-reminder")).toBeVisible();
+  await expect(page.locator("#ar-break-reminder")).toHaveText("Take a short break");
+  await expect(page.locator('#dev-event-list [data-event-type="comfort_break_shown"]')).toHaveCount(1);
+
+  await page.clock.fastForward(10 * 60 * 1000);
+  await expect(page.locator('#dev-event-list [data-event-type="comfort_break_shown"]')).toHaveCount(1);
+  await page.getByRole("button", { name: "Exit AR" }).click();
+  await expect(page.locator("#ar-break-reminder")).toBeHidden();
 });
 
 test("explains camera use before permission and returns cleanly after denial", async ({ page }) => {
@@ -517,6 +621,138 @@ test("explains camera use before permission and returns cleanly after denial", a
   );
   expect(browserErrors).toEqual([]);
 });
+
+async function installMockXr(page: import("@playwright/test").Page): Promise<void> {
+  await page.addInitScript(() => {
+    for (const context of [window.WebGLRenderingContext, window.WebGL2RenderingContext]) {
+      if (context) {
+        Object.defineProperty(context.prototype, "makeXRCompatible", {
+          configurable: true,
+          value: async () => undefined,
+        });
+      }
+    }
+    let cameraX = 0;
+    let cameraY = 0;
+    let cameraZ = 0;
+    let selectCount = 0;
+    let ended = false;
+    const identityMatrix = (): number[] => [
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1,
+    ];
+    const viewerMatrix = (): number[] => {
+      const matrix = identityMatrix();
+      matrix[12] = cameraX;
+      matrix[13] = cameraY;
+      matrix[14] = cameraZ;
+      return matrix;
+    };
+    const session = new EventTarget() as EventTarget & {
+      enabledFeatures: string[];
+      visibilityState: string;
+      environmentBlendMode: string;
+      domOverlayState: object;
+      renderState: { baseLayer: unknown };
+      inputSources: unknown[];
+      updateRenderState: (state: { baseLayer: unknown }) => void;
+      requestReferenceSpace: (type: string) => Promise<object>;
+      requestAnimationFrame: (callback: (time: number, frame: object) => void) => number;
+      cancelAnimationFrame: (handle: number) => void;
+      end: () => Promise<void>;
+    };
+    session.enabledFeatures = ["dom-overlay"];
+    session.visibilityState = "visible";
+    session.environmentBlendMode = "alpha-blend";
+    session.domOverlayState = {};
+    session.renderState = { baseLayer: null };
+    session.inputSources = [];
+    session.updateRenderState = (state) => {
+      session.renderState = { ...session.renderState, ...state };
+    };
+    session.requestReferenceSpace = async () => ({});
+    const frame = {
+      getViewerPose: () => ({
+        views: [{
+          eye: "none",
+          projectionMatrix: identityMatrix(),
+          transform: { matrix: viewerMatrix() },
+        }],
+      }),
+    };
+    session.requestAnimationFrame = (callback) =>
+      window.requestAnimationFrame((time) => {
+        if (!ended) {
+          callback(time, frame);
+        }
+      });
+    session.cancelAnimationFrame = (handle) => window.cancelAnimationFrame(handle);
+    session.end = async () => {
+      ended = true;
+    };
+    session.addEventListener("select", () => {
+      selectCount += 1;
+    });
+
+    class MockXRWebGLLayer {
+      framebufferWidth = 256;
+      framebufferHeight = 256;
+      framebuffer = null;
+      ignoreDepthValues = true;
+
+      constructor() {}
+
+      getViewport(): { x: number; y: number; width: number; height: number } {
+        return { x: 0, y: 0, width: this.framebufferWidth, height: this.framebufferHeight };
+      }
+    }
+    Object.defineProperty(window, "XRWebGLLayer", {
+      configurable: true,
+      value: MockXRWebGLLayer,
+    });
+    const xrWebGLBinding = Reflect.get(window, "XRWebGLBinding");
+    if (typeof xrWebGLBinding === "function") {
+      const prototype = Reflect.get(xrWebGLBinding, "prototype");
+      if (prototype && typeof prototype === "object") {
+        Reflect.deleteProperty(prototype, "createProjectionLayer");
+      }
+    }
+    Object.defineProperty(navigator, "xr", {
+      configurable: true,
+      value: {
+        isSessionSupported: async () => true,
+        requestSession: async () => session,
+      },
+    });
+
+    const mockWindow = window as Window & {
+      __dispatchMockXrSelect: (target: Element) => void;
+      __mockXrSelectCount: number;
+      __setMockXrCamera: (x: number, y: number, z: number) => void;
+    };
+    Object.defineProperty(mockWindow, "__dispatchMockXrSelect", {
+      value: (target: Element) => {
+        const beforeSelect = new Event("beforexrselect", { bubbles: true, cancelable: true });
+        target.dispatchEvent(beforeSelect);
+        if (!beforeSelect.defaultPrevented) {
+          session.dispatchEvent(new Event("select"));
+        }
+      },
+    });
+    Object.defineProperty(mockWindow, "__mockXrSelectCount", {
+      get: () => selectCount,
+    });
+    Object.defineProperty(mockWindow, "__setMockXrCamera", {
+      value: (x: number, y: number, z: number) => {
+        cameraX = x;
+        cameraY = y;
+        cameraZ = z;
+      },
+    });
+  });
+}
 
 async function addParticles(
   page: import("@playwright/test").Page,

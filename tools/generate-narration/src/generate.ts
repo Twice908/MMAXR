@@ -100,17 +100,21 @@ export async function generateNarration(
       cueType: cue.trigger,
     });
     const isMockAdapter = options.adapter.name.includes("mock");
-    const mockOutputDirectory = resolve(
-      options.moduleRoot,
-      ".mock-narration",
-      ...(options.audibleTest ? ["audible-test"] : []),
+    const mockOutputDirectory = resolve(options.moduleRoot, ".mock-narration");
+    const audibleTestDirectory = resolve(
+      dirname(resolveModulePath(options.moduleRoot, cue.audio)),
+      "audible-test",
     );
-    const audioPath = isMockAdapter
-      ? resolve(mockOutputDirectory, `${cue.id}.wav.gz`)
-      : resolveModulePath(options.moduleRoot, cue.audio);
-    const captionsPath = isMockAdapter
-      ? resolve(mockOutputDirectory, `${cue.id}.vtt`)
-      : resolveModulePath(options.moduleRoot, cue.captions);
+    const audioPath = options.audibleTest
+      ? resolve(audibleTestDirectory, `${cue.id}.wav.gz`)
+      : isMockAdapter
+        ? resolve(mockOutputDirectory, `${cue.id}.wav.gz`)
+        : resolveModulePath(options.moduleRoot, cue.audio);
+    const captionsPath = options.audibleTest
+      ? resolve(audibleTestDirectory, `${cue.id}.vtt`)
+      : isMockAdapter
+        ? resolve(mockOutputDirectory, `${cue.id}.vtt`)
+        : resolveModulePath(options.moduleRoot, cue.captions);
     await mkdir(dirname(audioPath), { recursive: true });
     await mkdir(dirname(captionsPath), { recursive: true });
     await writeFile(audioPath, output.audioBytes);

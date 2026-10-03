@@ -79,6 +79,51 @@ describe("narration generation", () => {
     }
   });
 
+  it("generates audible test assets under generated/audible-test when audibleTest is enabled", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mma-narration-"));
+    try {
+      await mkdir(join(root, "narration/en"), { recursive: true });
+      await writeFile(join(root, "narration/en/intro.json"), JSON.stringify({
+        text: "Welcome to the lesson.",
+        reviewStatus: "pending",
+      }));
+      await writeFile(join(root, "module.json"), JSON.stringify({
+        schemaVersion: "1.0",
+        releaseStatus: "draft",
+        id: "chem.sample",
+        title: { en: "Sample" },
+        subject: "chemistry",
+        kit: "chemistry",
+        concepts: ["sci.chem.atom.structure"],
+        boards: ["CBSE"],
+        levels: [{ id: "class9-10", classes: [9], features: ["particles"] }],
+        modes: ["screen"],
+        estimatedMinutes: 1,
+        assets: [],
+        interactions: { manipulate: ["grab"], simulate: ["update"], missions: [], check: [] },
+        missions: [],
+        rulesPlugin: "./src/index.ts",
+        narration: {
+          languages: ["en"],
+          cues: [cue],
+          guide: { enabled: false, allowedActions: [], groundingDocs: [] },
+        },
+      }));
+      const result = await generateNarration({
+        moduleRoot: root,
+        adapter: new SilentMockTtsAdapter("audible-test"),
+        audibleTest: true,
+      });
+
+      expect(result.cues).toHaveLength(1);
+      const generatedCue = result.cues[0]!;
+      expect(generatedCue.audioPath).toBe("narration/en/generated/audible-test/intro.wav.gz");
+      expect(generatedCue.captionsPath).toBe("narration/en/generated/audible-test/intro.vtt");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("refuses release generation until all scripts are reviewed", async () => {
     const root = await mkdtemp(join(tmpdir(), "mma-narration-"));
     try {

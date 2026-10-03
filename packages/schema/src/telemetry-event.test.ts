@@ -52,6 +52,14 @@ describe("telemetryEventSchema", () => {
     },
   );
 
+  it("accepts the local comfort break event", () => {
+    expect(telemetryEventSchema.safeParse({
+      ...validEvent,
+      type: "comfort_break_shown",
+      payload: { missionId: "build-carbon-12" },
+    }).success).toBe(true);
+  });
+
   it.each([
     { type: "ar_session_started", payload: { grantedFeatures: ["hit-test"] } },
     { type: "ar_session_ended", payload: { durationSec: 125 } },

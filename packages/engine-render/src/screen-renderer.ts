@@ -62,10 +62,15 @@ export interface ArRenderDiagnostics {
   readonly atomVisible: boolean;
   readonly atomInCameraView: boolean;
   readonly sessionAttached: boolean;
+  readonly atomPosition: Position3;
+  readonly cameraPosition: Position3;
 }
 
 const AR_ATOM_DIAMETER_METERS = 0.27;
 const RING_TUBE_RADIUS = 0.035;
+
+/** Position of the atom in the AR session's fixed local reference space. */
+export const arWorldAnchorPosition: Position3 = Object.freeze({ x: 0, y: 0, z: -0.6 });
 
 /** Calculate the scale that fits a scene frame into a 27 cm AR diameter. */
 export function arContentScale(frame: ScreenSceneFrame): number {
@@ -291,7 +296,11 @@ export class ScreenSceneRenderer {
     this.renderer.xr.enabled = true;
     this.renderer.xr.setReferenceSpaceType("local");
     this.scene.background = null;
-    this.atomRoot.position.set(0, 0, -0.6);
+    this.atomRoot.position.set(
+      arWorldAnchorPosition.x,
+      arWorldAnchorPosition.y,
+      arWorldAnchorPosition.z,
+    );
     this.atomRoot.scale.setScalar(this.currentFrame ? arContentScale(this.currentFrame) : 0.675);
 
     try {
@@ -448,11 +457,13 @@ export class ScreenSceneRenderer {
   }
 
   private readonly resize = (): void => {
-    const width = Math.max(1, this.host.clientWidth);
-    const height = Math.max(1, this.host.clientHeight);
-    this.camera.aspect = width / height;
-    this.camera.updateProjectionMatrix();
-    this.renderer.setSize(width, height, false);
+    if (!this.arActive) {
+      const width = Math.max(1, this.host.clientWidth);
+      const height = Math.max(1, this.host.clientHeight);
+      this.camera.aspect = width / height;
+      this.camera.updateProjectionMatrix();
+      this.renderer.setSize(width, height, false);
+    }
     this.positionSlotMarkers();
     this.render();
   };
@@ -508,6 +519,12 @@ export class ScreenSceneRenderer {
       atomVisible,
       atomInCameraView: position.z < 0 && Math.abs(position.x) < 0.6 && Math.abs(position.y) < 0.6,
       sessionAttached: session !== null && session === this.activeXRSession,
+      atomPosition: { x: position.x, y: position.y, z: position.z },
+      cameraPosition: {
+        x: this.camera.position.x,
+        y: this.camera.position.y,
+        z: this.camera.position.z,
+      },
     });
   }
 

@@ -28,6 +28,7 @@ export interface LearningEventPayloads {
     selectedOptionIndex: number;
     correct: boolean;
   };
+  comfort_break_shown: { missionId: string | null };
   narration_played: { cueId: string; trigger: string };
   narration_skipped: { cueId: string; reason: string };
   voice_fallback_used: { reason: string };
