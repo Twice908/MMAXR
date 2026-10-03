@@ -7,7 +7,7 @@ export const arErrorReasonCodes = [
 ] as const;
 
 export type ArErrorReasonCode = (typeof arErrorReasonCodes)[number];
-export type ArFeature = "hit-test" | "dom-overlay";
+export type ArFeature = "hit-test" | "dom-overlay" | "hand-tracking";
 
 export type ArSessionState =
   | Readonly<{ status: "idle" }>

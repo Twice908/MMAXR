@@ -1,4 +1,4 @@
-import type { JsonValue } from "@mma/engine-core";
+import type { EngineAction } from "@mma/engine-core";
 
 /** Input commands understood by modules, regardless of the physical device. */
 export type InputActionType =
@@ -13,10 +13,7 @@ export type InputActionType =
   | "back";
 
 /** Serializable action emitted by a screen input adapter. */
-export interface InputAction {
-  readonly type: InputActionType;
-  readonly payload: JsonValue;
-}
+export type InputAction = EngineAction;
 
 /** Normalized pointer information used by the pure screen input mapper. */
 export interface PointerSample {

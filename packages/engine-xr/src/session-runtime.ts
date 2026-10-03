@@ -19,7 +19,7 @@ export interface ArSessionHandle extends EventTarget {
 }
 
 export interface ArSessionRequestOptions {
-  readonly optionalFeatures: ["dom-overlay"];
+  readonly optionalFeatures: readonly ArFeature[];
   readonly domOverlay: Readonly<{ root: HTMLElement }>;
 }
 
@@ -143,7 +143,8 @@ export class ArSessionController {
       throw new Error(`Cannot start AR while session is ${this.currentState.status}.`);
     }
 
-    this.transition({ type: "request", requestedFeatures: ["dom-overlay"] });
+    const requestedFeatures: readonly ArFeature[] = ["dom-overlay", "hand-tracking"];
+    this.transition({ type: "request", requestedFeatures });
     this.startListeningForTabVisibility();
 
     const capability = await detectArSupport(this.environment);
@@ -155,7 +156,7 @@ export class ArSessionController {
     let session: ArSessionHandle;
     try {
       session = await this.environment.xr!.requestSession("immersive-ar", {
-        optionalFeatures: ["dom-overlay"],
+        optionalFeatures: requestedFeatures,
         domOverlay: { root: this.options.overlayRoot },
       });
     } catch (error) {
@@ -168,7 +169,10 @@ export class ArSessionController {
     session.addEventListener("end", this.onSessionEnd);
     session.addEventListener("visibilitychange", this.onSessionVisibilityChange);
 
-    const overlayGranted = session.enabledFeatures?.includes("dom-overlay") === true
+    const grantedFeatures = requestedFeatures.filter(
+      (feature) => session.enabledFeatures?.includes(feature) === true,
+    );
+    const overlayGranted = grantedFeatures.includes("dom-overlay")
       || session.domOverlayState !== undefined && session.domOverlayState !== null;
     if (!overlayGranted) {
       await this.finish("dom_overlay_unavailable", true);
@@ -192,8 +196,8 @@ export class ArSessionController {
     }
 
     this.startedAt = this.now();
-    this.transition({ type: "started", grantedFeatures: ["dom-overlay"] });
-    this.options.onStarted?.(["dom-overlay"]);
+    this.transition({ type: "started", grantedFeatures });
+    this.options.onStarted?.(grantedFeatures);
     return this.currentState;
   }
 

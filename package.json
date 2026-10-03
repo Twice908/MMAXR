@@ -7,7 +7,7 @@
     "dev": "pnpm --filter @mma/web dev",
     "generate:narration": "pnpm --filter @mma/generate-narration generate",
     "test": "vitest run",
-    "typecheck": "tsc -p apps/web/tsconfig.json && tsc -p packages/curriculum/tsconfig.json && tsc -p packages/schema/tsconfig.json && tsc -p packages/engine-core/tsconfig.json && tsc -p packages/engine-xr/tsconfig.json && tsc -p packages/engine-assess/tsconfig.json && tsc -p packages/kits/chemistry/tsconfig.json && tsc -p packages/engine-render/tsconfig.json && tsc -p packages/engine-voice/tsconfig.json && tsc -p tools/generate-narration/tsconfig.json && tsc -p modules/chem-atom-builder/tsconfig.json",
+    "typecheck": "tsc -p apps/web/tsconfig.json && tsc -p packages/curriculum/tsconfig.json && tsc -p packages/schema/tsconfig.json && tsc -p packages/engine-core/tsconfig.json && tsc -p packages/engine-input/tsconfig.json && tsc -p packages/engine-xr/tsconfig.json && tsc -p packages/engine-assess/tsconfig.json && tsc -p packages/kits/chemistry/tsconfig.json && tsc -p packages/engine-render/tsconfig.json && tsc -p packages/engine-voice/tsconfig.json && tsc -p tools/generate-narration/tsconfig.json && tsc -p modules/chem-atom-builder/tsconfig.json",
     "lint": "eslint .",
     "test:e2e": "pnpm generate:narration -- --audible-test && playwright test"
   },
