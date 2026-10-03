@@ -47,6 +47,7 @@ import {
   type AtomBuilderLearningState,
 } from "./learning.js";
 import { layoutAtom } from "./layout.js";
+import "./glass-tokens.css";
 import "./atom-builder.css";
 
 interface LocalEventEntry {

@@ -12,7 +12,6 @@
   --drop-slot-opacity: 0.24;
   --narration-panel-color: 255, 255, 255;
   --narration-panel-opacity: 0.94;
-  --narration-blur: 0px;
   position: relative;
   min-height: 100dvh;
   color: var(--ink);
@@ -69,7 +68,7 @@
 .hint-feedback, .mission-feedback { grid-column: 1 / -1; margin: 0; font-size: 13px; line-height: 1.45; }
 .hint-feedback { color: var(--teal); }
 .mission-feedback { color: #7c3225; }
-.narration-hud { display: grid; gap: 8px; padding: 10px 24px; border-bottom: 1px solid var(--line); background: rgba(var(--narration-panel-color), var(--narration-panel-opacity)); backdrop-filter: blur(var(--narration-blur)); }
+.narration-hud { display: grid; gap: 8px; padding: 10px 24px; border-bottom: 1px solid var(--line); background: rgba(var(--narration-panel-color), var(--narration-panel-opacity)); }
 .narration-caption { max-width: 1100px; margin: 0; color: var(--ink); font-size: 14px; line-height: 1.45; }
 .narration-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
 .narration-controls button, .narration-controls select { min-height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 5px; color: var(--ink); background: #fff; font: inherit; font-size: 11px; cursor: pointer; }
@@ -123,24 +122,24 @@
 .ar-start { min-height: 36px; padding: 0 12px; border: 1px solid var(--teal); border-radius: 6px; color: #fff; background: var(--teal); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
 .ar-start:hover { background: #20696d; }
 .ar-support-message { margin: 0 0 8px; color: var(--muted); font-size: 12px; line-height: 1.45; }
-.ar-confirmation { width: min(420px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; padding: 22px; border: 1px solid var(--line, #d7dfdb); border-radius: 8px; color: var(--ink, #1e292d); background: #fff; font: inherit; }
-.ar-confirmation::backdrop { background: #101c20a8; }
+.ar-confirmation { width: min(420px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; padding: var(--glass-pad-panel); border: var(--glass-border-width) solid var(--glass-border-color); border-radius: var(--glass-radius-panel); color: var(--glass-text); background: var(--glass-bg-strong); box-shadow: var(--glass-highlight), var(--glass-shadow); font: inherit; }
+.ar-confirmation::backdrop { background: transparent; }
 .ar-confirmation h2 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 21px; font-weight: 500; }
 .ar-confirmation p { margin: 12px 0 18px; font-size: 14px; line-height: 1.5; }
 .ar-confirmation-actions { display: flex; justify-content: flex-end; gap: 8px; }
-.ar-confirmation-actions button { min-width: 88px; min-height: 48px; padding: 0 16px; border: 1px solid var(--line, #d7dfdb); border-radius: 6px; color: var(--ink, #1e292d); background: #fff; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
-.ar-confirmation-actions [data-ar-action="start"] { border-color: var(--teal, #287f83); color: #fff; background-color: #287f83; }
-.ar-status { position: fixed; z-index: 29; right: 12px; bottom: max(62px, env(safe-area-inset-bottom)); left: 12px; width: fit-content; max-width: min(540px, calc(100vw - 24px)); padding: 10px 14px; border: 1px solid #607274; border-radius: 6px; color: #eff8f5; background: #1e292df2; font-size: 13px; line-height: 1.4; }
-.ar-exit { position: fixed; z-index: 30; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); min-height: 44px; padding: 0 16px; border: 2px solid #fff; border-radius: 6px; color: #fff; background: #8c2d20; box-shadow: 0 2px 8px #101c2066; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.ar-confirmation-actions button { min-width: 88px; min-height: max(48px, var(--glass-tap-min)); padding: var(--glass-pad-pill); border: var(--glass-border-width) solid var(--glass-border-color); border-radius: var(--glass-radius-pill); color: var(--glass-text); background: var(--glass-bg-strong); box-shadow: var(--glass-highlight), var(--glass-shadow); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.ar-confirmation-actions [data-ar-action="start"] { border-color: var(--glass-primary-bg); border-radius: var(--glass-radius-button); color: var(--glass-primary-text); background: var(--glass-primary-bg); }
+.ar-status { position: fixed; z-index: 29; right: 12px; bottom: max(62px, env(safe-area-inset-bottom)); left: 12px; width: fit-content; max-width: min(540px, calc(100vw - 24px)); padding: var(--glass-pad-pill); border: var(--glass-border-width) solid var(--glass-border-color); border-radius: var(--glass-radius-pill); color: var(--glass-text); background: var(--glass-bg-strong); box-shadow: var(--glass-highlight), var(--glass-shadow); font-size: 13px; line-height: 1.4; }
+.ar-exit { position: fixed; z-index: 30; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); min-height: var(--glass-tap-min); padding: var(--glass-pad-pill); border: var(--glass-border-width) solid var(--glass-border-color); border-radius: var(--glass-radius-button); color: var(--glass-danger-text); background: var(--glass-danger-bg); box-shadow: var(--glass-highlight), var(--glass-shadow); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
 .ar-exit:disabled { opacity: .8; cursor: wait; }
-.ar-overlay-panel { position: fixed; z-index: 20; right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); left: max(12px, env(safe-area-inset-left)); max-height: min(58dvh, 560px); overflow: auto; padding: 10px 14px; border: 1px solid #d7dfdb; border-radius: 10px; color: var(--ink); background: #fffffff0; box-shadow: 0 4px 20px #101c2033; backdrop-filter: blur(8px); }
+.ar-overlay-panel { position: fixed; z-index: 20; right: auto; bottom: max(12px, env(safe-area-inset-bottom)); left: max(12px, env(safe-area-inset-left)); width: min(540px, calc(100vw - max(12px, env(safe-area-inset-left)) - max(12px, env(safe-area-inset-right)))); max-height: min(42dvh, 420px); box-sizing: border-box; overflow: auto; padding: var(--glass-pad-panel); border: var(--glass-border-width) solid var(--glass-border-color); border-radius: var(--glass-radius-panel); color: var(--glass-text); background: var(--glass-bg-strong); box-shadow: var(--glass-highlight), var(--glass-shadow); }
 .ar-panel-heading { min-height: 40px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.ar-panel-mission-title { min-width: 0; margin: 0; overflow: hidden; color: var(--ink); font-family: Georgia, "Times New Roman", serif; font-size: 16px; text-overflow: ellipsis; white-space: nowrap; }
-.ar-panel-heading button { flex: 0 0 auto; min-height: 42px; padding: 0 12px; border: 1px solid var(--teal); border-radius: 6px; color: #fff; background: var(--teal); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.ar-panel-mission-title { min-width: 0; margin: 0; overflow: hidden; padding: var(--glass-pad-pill); border: var(--glass-border-width) solid var(--glass-border-color); border-radius: var(--glass-radius-pill); color: var(--glass-text); background: var(--glass-bg-strong); box-shadow: var(--glass-highlight), var(--glass-shadow); font-family: Georgia, "Times New Roman", serif; font-size: 16px; text-overflow: ellipsis; white-space: nowrap; }
+.ar-panel-heading button { flex: 0 0 auto; min-height: var(--glass-tap-min); padding: var(--glass-pad-pill); border: var(--glass-border-width) solid var(--glass-border-color); border-radius: var(--glass-radius-pill); color: var(--glass-text); background: var(--glass-bg-strong); box-shadow: var(--glass-highlight), var(--glass-shadow); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
 .ar-overlay-panel.is-collapsed { padding: 4px 10px; }
 .ar-overlay-panel.is-collapsed > :not(.ar-panel-heading) { display: none !important; }
-.ar-break-reminder { position: fixed; z-index: 29; top: max(12px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); padding: 10px 14px; border: 1px solid #607274; border-radius: 6px; color: #eff8f5; background: #1e292df2; font-size: 13px; line-height: 1.4; pointer-events: none; }
-.ar-diagnostics { position: fixed; z-index: 28; right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); max-width: calc(100vw - 24px); padding: 7px 10px; border: 1px solid #607274; border-radius: 5px; color: #eff8f5; background: #1e292df2; font: 10px/1.4 ui-monospace, monospace; overflow-wrap: anywhere; pointer-events: none; }
+.ar-break-reminder { position: fixed; z-index: 29; top: max(12px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); padding: var(--glass-pad-pill); border: var(--glass-border-width) solid var(--glass-border-color); border-radius: var(--glass-radius-pill); color: var(--glass-text); background: var(--glass-bg-strong); box-shadow: var(--glass-highlight), var(--glass-shadow); font-size: 13px; line-height: 1.4; pointer-events: none; }
+.ar-diagnostics { position: fixed; z-index: 28; right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); max-width: calc(100vw - 24px); padding: var(--glass-pad-pill); border: var(--glass-border-width) solid var(--glass-border-color); border-radius: var(--glass-radius-pill); color: var(--glass-text); background: var(--glass-bg-strong); box-shadow: var(--glass-highlight), var(--glass-shadow); font: 10px/1.4 ui-monospace, monospace; overflow-wrap: anywhere; pointer-events: none; }
 .ar-active, html.ar-active, body.ar-active, #app.ar-active { background-color: transparent !important; background-image: none !important; }
 .ar-active .atom-builder,
 .ar-active .builder-header,
@@ -178,6 +177,148 @@
 .ar-active .atom-canvas,
 .ar-active .drop-slot-layer,
 .ar-active .render-diagnostics { display: none !important; }
+.ar-overlay-panel .lesson-step,
+.ar-overlay-panel .mission-progress,
+.ar-overlay-panel .narration-audio-status { display: inline-block; width: fit-content; padding: var(--glass-pad-pill); border: var(--glass-border-width) solid var(--glass-border-color); border-radius: var(--glass-radius-pill); color: var(--glass-text); background: var(--glass-bg-strong); box-shadow: var(--glass-highlight), var(--glass-shadow); }
+.ar-overlay-panel .lesson-step { margin: 0 0 4px; }
+.ar-overlay-panel .lesson-copy h2,
+.ar-overlay-panel #assessment-card h2,
+.ar-overlay-panel .lesson-summary h2,
+.ar-overlay-panel .lesson-copy > p:not(.lesson-step):not(.mission-progress),
+.ar-overlay-panel #assessment-card p,
+.ar-overlay-panel .narration-caption,
+.ar-overlay-panel .narration-controls label,
+.ar-overlay-panel .narration-audio-status { color: var(--glass-text); }
+.ar-overlay-panel #assessment-card,
+.ar-overlay-panel .narration-caption,
+.ar-overlay-panel .lesson-summary,
+.ar-overlay-panel #free-play-status { padding: var(--glass-pad-panel); border: var(--glass-border-width) solid var(--glass-border-color); border-radius: var(--glass-radius-panel); color: var(--glass-text); background: var(--glass-bg-strong); box-shadow: var(--glass-highlight), var(--glass-shadow); }
+.ar-overlay-panel #assessment-card,
+.ar-overlay-panel .lesson-summary,
+.ar-overlay-panel #free-play-status { background-color: var(--glass-bg-strong) !important; }
+.ar-overlay-panel .lesson-panel,
+.ar-overlay-panel .narration-hud,
+.ar-overlay-panel .particle-rail { color: var(--glass-text); }
+.ar-overlay-panel .mission-progress,
+.ar-overlay-panel .narration-audio-status { color: var(--glass-text-muted); }
+.ar-overlay-panel .lesson-controls button,
+.ar-overlay-panel .assessment-options button,
+.ar-overlay-panel .assessment-continue,
+.ar-overlay-panel .narration-controls button,
+.ar-overlay-panel .narration-controls select,
+.ar-overlay-panel .stepper button {
+  min-width: var(--glass-tap-min);
+  min-height: var(--glass-tap-min);
+  padding: var(--glass-pad-pill);
+  border: var(--glass-border-width) solid var(--glass-border-color);
+  border-radius: var(--glass-radius-pill);
+  color: var(--glass-text);
+  background: var(--glass-bg-strong);
+  box-shadow: var(--glass-highlight), var(--glass-shadow);
+  font: inherit;
+  cursor: pointer;
+}
+.ar-overlay-panel .lesson-controls [data-command="lesson:check"],
+.ar-overlay-panel .narration-controls [data-narration-action="enable"] {
+  border-color: var(--glass-primary-bg);
+  border-radius: var(--glass-radius-button);
+  color: var(--glass-primary-text);
+  background: var(--glass-primary-bg);
+}
+.ar-overlay-panel .lesson-controls button:disabled,
+.ar-overlay-panel .narration-controls button:disabled { cursor: not-allowed; }
+.ar-overlay-panel .stepper button { width: var(--glass-tap-min); padding: 0; }
+.ar-overlay-panel .assessment-options button.is-correct,
+.ar-overlay-panel .assessment-options button.is-answer,
+.ar-overlay-panel .assessment-options button.is-incorrect {
+  border-color: var(--glass-border-color);
+  color: var(--glass-text);
+  background: var(--glass-bg-strong);
+}
+.ar-overlay-panel .assessment-continue { margin-top: 12px; }
+.ar-overlay-panel .narration-caption { max-width: 100%; margin: 0; }
+.ar-overlay-panel .narration-controls label { font-size: 11px; }
+.ar-overlay-panel .narration-audio-status { font-size: 11px; }
+.ar-overlay-panel .ar-panel-mission-title { flex: 1 1 auto; }
+.ar-overlay-panel .ar-panel-heading button { min-width: var(--glass-tap-min); }
+.ar-confirmation:focus-visible,
+.ar-confirmation-actions button:focus-visible,
+.ar-exit:focus-visible,
+.ar-overlay-panel button:focus-visible,
+.ar-overlay-panel select:focus-visible { outline: var(--glass-border-width) solid var(--glass-primary-bg); outline-offset: 2px; }
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .ar-overlay-panel,
+  .ar-confirmation,
+  .ar-status,
+  .ar-break-reminder,
+  .ar-diagnostics,
+  .ar-overlay-panel .lesson-step,
+  .ar-overlay-panel .mission-progress,
+  .ar-overlay-panel .narration-audio-status,
+  .ar-overlay-panel #assessment-card,
+  .ar-overlay-panel .narration-caption,
+  .ar-overlay-panel .lesson-summary,
+  .ar-overlay-panel #free-play-status,
+  .ar-overlay-panel .lesson-controls button,
+  .ar-overlay-panel .assessment-options button,
+  .ar-overlay-panel .assessment-continue,
+  .ar-overlay-panel .narration-controls button,
+  .ar-overlay-panel .narration-controls select,
+  .ar-overlay-panel .stepper button,
+  .ar-panel-mission-title,
+  .ar-panel-heading button,
+  .ar-confirmation-actions button {
+    background-color: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
+  }
+  .ar-overlay-panel .lesson-controls [data-command="lesson:check"],
+  .ar-overlay-panel .narration-controls [data-narration-action="enable"],
+  .ar-confirmation-actions [data-ar-action="start"] {
+    background-color: var(--glass-primary-bg);
+  }
+  .ar-overlay-panel #assessment-card,
+  .ar-overlay-panel .lesson-summary,
+  .ar-overlay-panel #free-play-status { background-color: var(--glass-bg) !important; }
+  .ar-exit { background-color: var(--glass-danger-bg); }
+  @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+    .ar-overlay-panel,
+    .ar-confirmation,
+    .ar-status,
+    .ar-break-reminder,
+    .ar-diagnostics,
+    .ar-overlay-panel .lesson-step,
+    .ar-overlay-panel .mission-progress,
+    .ar-overlay-panel .narration-audio-status,
+    .ar-overlay-panel #assessment-card,
+    .ar-overlay-panel .narration-caption,
+    .ar-overlay-panel .lesson-summary,
+    .ar-overlay-panel #free-play-status,
+    .ar-overlay-panel .lesson-controls button,
+    .ar-overlay-panel .assessment-options button,
+    .ar-overlay-panel .assessment-continue,
+    .ar-overlay-panel .narration-controls button,
+    .ar-overlay-panel .narration-controls select,
+    .ar-overlay-panel .stepper button,
+    .ar-panel-mission-title,
+    .ar-panel-heading button,
+    .ar-confirmation-actions button {
+      background-color: var(--glass-bg-strong);
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+    .ar-overlay-panel .lesson-controls [data-command="lesson:check"],
+    .ar-overlay-panel .narration-controls [data-narration-action="enable"],
+    .ar-confirmation-actions [data-ar-action="start"] {
+      background-color: var(--glass-primary-bg);
+    }
+    .ar-overlay-panel #assessment-card,
+    .ar-overlay-panel .lesson-summary,
+    .ar-overlay-panel #free-play-status { background-color: var(--glass-bg-strong) !important; }
+    .ar-exit { background-color: var(--glass-danger-bg); }
+  }
+}
 .scene-viewport { position: relative; flex: 1; min-height: min(64vh, 620px); overflow: hidden; border: 1px solid #d7dfdb; border-radius: 8px; background: #f4f4ee; touch-action: none; }
 .atom-canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 .drop-slot-layer { position: absolute; inset: 0; z-index: 2; visibility: hidden; pointer-events: none; }
