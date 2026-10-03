@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { arContentScale, type ScreenSceneFrame } from "../src/screen-renderer.js";
+import {
+  arContentScale,
+  arWorldAnchorPosition,
+  type ScreenSceneFrame,
+} from "../src/screen-renderer.js";
 
 describe("AR scene scaling", () => {
+  it("uses a fixed session-local atom anchor", () => {
+    expect(arWorldAnchorPosition).toEqual({ x: 0, y: 0, z: -0.6 });
+  });
+
   it("fits the complete outer geometry to a 27 cm diameter", () => {
     const frame: ScreenSceneFrame = {
       nucleusRadius: 0.5,

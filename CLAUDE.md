@@ -10,8 +10,9 @@ Current status (update this block as work completes):
 - Done: Phase 0 tasks 1-4 (monorepo + CI, `packages/schema`, `packages/engine-core`, `packages/kits/chemistry`).
 - Done: Phase 1 task 6 lesson flow (screen-mode missions, assessments, and local-only learning events); Atom Builder remains `draft` pending assessment review.
 - Done: Phase 2a screen-mode scripted narration player, ten reviewed English scripts, browser-only Piper generation, MP3 playback, and silent fallback.
+- Done: Phase 3a-4a phone AR lesson flow with a world-fixed atom, DOM controls, a collapsible lesson panel, and comfort safeguards; AR particle dragging is not enabled.
 - Next: Review the eight assessment items and verify generated narration on desktop and phone.
-- Not started: Phase 2b live voice guide, AR/VR (Phase 3), portal link (Phase 4).
+- Not started: Phase 2b live voice guide, remaining XR work (including 3a-4b and VR), portal link (Phase 4).
 
 ## 2. Phase gates (do not build ahead)
 

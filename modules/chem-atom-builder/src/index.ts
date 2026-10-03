@@ -266,6 +266,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   store.events.subscribe("mission_completed", recordLocalEvent);
   store.events.subscribe("hint_used", recordLocalEvent);
   store.events.subscribe("assessment_answered", recordLocalEvent);
+  store.events.subscribe("comfort_break_shown", recordLocalEvent);
   store.events.subscribe("module_started", recordLocalEvent);
   store.events.subscribe("invalid_placement", recordLocalEvent);
   store.events.subscribe("idle", recordLocalEvent);
@@ -295,6 +296,21 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     telemetryContext,
     clock,
     idGenerator,
+    getActiveMissionId: () => store.getState().activeMissionId,
+    publishComfortBreakShown: (missionId) => {
+      const event = telemetryEventSchema.parse({
+        ...telemetryContext,
+        eventId: idGenerator(),
+        ts: clock(),
+        type: "comfort_break_shown",
+        payload: { missionId },
+        device: { ...telemetryContext.device, mode: "ar" },
+      });
+      store.events.emit(
+        "comfort_break_shown",
+        event as LearningEventMap["comfort_break_shown"],
+      );
+    },
     recordLocalEvent: recordLocalArEvent,
     ...(options.diagnostics === undefined ? {} : { diagnostics: options.diagnostics }),
   });
@@ -650,6 +666,11 @@ function renderLearningState(
           : "",
     );
   }
+  setText(
+    root,
+    "#ar-panel-mission-title",
+    state.mode === "free-play" ? "Free play" : activeMission?.title ?? "Lesson complete",
+  );
 
   const triggeredItems = resolveTriggeredAssessmentItems(state.assessmentIds, items);
   const currentItem = triggeredItems[state.assessmentIndex];

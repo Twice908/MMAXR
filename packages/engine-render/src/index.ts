@@ -24,6 +24,7 @@ export {
   ScreenSceneRenderer,
   type ArRenderDiagnostics,
   arContentScale,
+  arWorldAnchorPosition,
   selectQualityTier,
   type Position3,
   type QualityTier,

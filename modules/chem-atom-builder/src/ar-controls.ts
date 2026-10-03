@@ -15,8 +15,18 @@ export interface ArControlsOptions {
   readonly telemetryContext: TelemetryContext;
   readonly clock: () => string;
   readonly idGenerator: () => string;
+  readonly getActiveMissionId: () => string | null;
+  readonly publishComfortBreakShown: (missionId: string | null) => void;
   readonly recordLocalEvent: (type: string, timestamp: string, detail: string) => void;
   readonly diagnostics?: boolean;
+}
+
+const comfortBreakDelayMs = 10 * 60 * 1000;
+
+/** Schedule one comfort reminder and return a function that cancels it. */
+export function scheduleComfortBreakReminder(onReminder: () => void): () => void {
+  const timeout = globalThis.setTimeout(onReminder, comfortBreakDelayMs);
+  return () => globalThis.clearTimeout(timeout);
 }
 
 /** Mount the supported-device AR controls without coupling AR to lesson state. */
@@ -48,6 +58,7 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
   dialog.innerHTML = `
     <h2 id="ar-confirmation-title">View the atom in AR?</h2>
     <p>Your camera shows the real world so the atom can appear in front of you. Nothing is recorded or uploaded.</p>
+    <p>Stay seated, look around you, and keep an eye on your surroundings.</p>
     <div class="ar-confirmation-actions">
       <button type="button" aria-label="Cancel AR" data-ar-action="cancel">Cancel</button>
       <button type="button" aria-label="Start AR" data-ar-action="start">Start AR</button>
@@ -62,6 +73,70 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
   status.setAttribute("aria-live", "polite");
   status.hidden = true;
   root.append(status);
+
+  const arPanel = document.createElement("section");
+  arPanel.className = "ar-overlay-panel is-collapsed";
+  arPanel.setAttribute("aria-label", "Lesson controls");
+  arPanel.hidden = true;
+  arPanel.innerHTML = `
+    <header class="ar-panel-heading">
+      <p class="ar-panel-mission-title" id="ar-panel-mission-title"></p>
+      <button type="button" data-ar-action="panel-toggle" aria-expanded="false">Show panel</button>
+    </header>
+  `;
+  builder.append(arPanel);
+
+  const panelContents = [
+    root.querySelector<HTMLElement>("#lesson-panel"),
+    root.querySelector<HTMLElement>(".narration-hud"),
+    root.querySelector<HTMLElement>("#assessment-card"),
+    root.querySelector<HTMLElement>("#lesson-summary"),
+    root.querySelector<HTMLElement>("#free-play-status"),
+    root.querySelector<HTMLElement>(".particle-rail"),
+  ];
+  if (panelContents.some((element) => !element)) {
+    throw new Error("The Atom Builder lesson controls could not be found.");
+  }
+  const panelPlacements = panelContents.map((element) => {
+    const parent = element!.parentNode;
+    if (!parent) {
+      throw new Error("An Atom Builder lesson control is detached.");
+    }
+    return { element: element!, parent, nextSibling: element!.nextSibling };
+  });
+  const panelToggle = arPanel.querySelector<HTMLButtonElement>("[data-ar-action='panel-toggle']");
+  const panelMissionTitle = arPanel.querySelector<HTMLElement>("#ar-panel-mission-title");
+  if (!panelToggle || !panelMissionTitle) {
+    throw new Error("The AR lesson panel could not be created.");
+  }
+  let panelMounted = false;
+  const setPanelCollapsed = (collapsed: boolean): void => {
+    arPanel.classList.toggle("is-collapsed", collapsed);
+    panelToggle.textContent = collapsed ? "Show panel" : "Hide panel";
+    panelToggle.setAttribute("aria-expanded", String(!collapsed));
+  };
+  const mountPanel = (): void => {
+    if (panelMounted) {
+      return;
+    }
+    for (const { element } of panelPlacements) {
+      arPanel.append(element);
+    }
+    arPanel.hidden = false;
+    setPanelCollapsed(true);
+    panelMounted = true;
+  };
+  const unmountPanel = (): void => {
+    if (!panelMounted) {
+      return;
+    }
+    for (const { element, parent, nextSibling } of [...panelPlacements].reverse()) {
+      parent.insertBefore(element, nextSibling?.parentNode === parent ? nextSibling : null);
+    }
+    arPanel.hidden = true;
+    arPanel.classList.add("is-collapsed");
+    panelMounted = false;
+  };
 
   const exitButton = document.createElement("button");
   exitButton.type = "button";
@@ -89,6 +164,7 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
   const activeTargets = [document.documentElement, document.body, root];
   let sessionState = "idle";
   let grantedFeatures: readonly string[] = [];
+  let cancelComfortBreak: (() => void) | null = null;
   const setStatus = (message: string): void => {
     status.textContent = message;
     status.hidden = message.length === 0;
@@ -128,6 +204,14 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
       setArActiveState(inAr, activeTargets);
       sessionState = state.status;
       grantedFeatures = state.status === "active" ? state.grantedFeatures : [];
+      if (inAr) {
+        mountPanel();
+      } else {
+        unmountPanel();
+        breakReminder.hidden = true;
+        cancelComfortBreak?.();
+        cancelComfortBreak = null;
+      }
       exitButton.hidden = !inAr;
       exitButton.disabled = state.status !== "active";
       startButton.disabled = state.status === "requesting" || inAr;
@@ -140,6 +224,18 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
     },
     onStarted: (grantedFeatures) => {
       recordEvent("ar_session_started", { grantedFeatures: [...grantedFeatures] });
+      cancelComfortBreak?.();
+      cancelComfortBreak = scheduleComfortBreakReminder(() => {
+        cancelComfortBreak = null;
+        if (disposed || sessionState !== "active") {
+          return;
+        }
+        options.publishComfortBreakShown(options.getActiveMissionId());
+        const reminder = root.querySelector<HTMLElement>("#ar-break-reminder");
+        if (reminder) {
+          reminder.hidden = false;
+        }
+      });
     },
     onEnded: (durationSec) => recordEvent("ar_session_ended", { durationSec }),
     onError: (reasonCode) => {
@@ -157,6 +253,8 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
         `blend ${facts.environmentBlendMode}`,
         `granted ${grantedFeatures.join(", ") || "none"}`,
         `atom ${facts.atomVisible && facts.atomInCameraView ? "visible" : "not visible"}`,
+        `anchor ${formatPosition(facts.atomPosition)}`,
+        `camera ${formatPosition(facts.cameraPosition)}`,
         `loop ${facts.renderLoopRunning ? "running" : "stopped"}`,
         `session ${facts.sessionAttached ? "attached" : "detached"}`,
         `scene ${facts.sceneBackground}`,
@@ -165,6 +263,15 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
       ].join(" | ");
     });
   }
+
+  const breakReminder = document.createElement("div");
+  breakReminder.id = "ar-break-reminder";
+  breakReminder.className = "ar-break-reminder";
+  breakReminder.setAttribute("role", "status");
+  breakReminder.setAttribute("aria-live", "polite");
+  breakReminder.textContent = "Take a short break";
+  breakReminder.hidden = true;
+  root.append(breakReminder);
 
   const onAction = (event: MouseEvent): void => {
     const action = (event.target as Element | null)
@@ -193,9 +300,15 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
           setStatus("AR has ended. You are back in screen mode.");
         }
       });
+    } else if (action === "panel-toggle") {
+      setPanelCollapsed(!arPanel.classList.contains("is-collapsed"));
     }
   };
+  const onBeforeXrSelect = (event: Event): void => {
+    event.preventDefault();
+  };
   root.addEventListener("click", onAction);
+  root.addEventListener("beforexrselect", onBeforeXrSelect);
 
   void detectArSupport().then((result) => {
     if (disposed) {
@@ -214,17 +327,23 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
   return async () => {
     disposed = true;
     root.removeEventListener("click", onAction);
+    root.removeEventListener("beforexrselect", onBeforeXrSelect);
+    cancelComfortBreak?.();
+    cancelComfortBreak = null;
     if (dialog.open) {
       dialog.close();
     }
     await controller.stop();
+    unmountPanel();
     setArActiveState(false, activeTargets);
     renderer.setArDiagnosticsListener(null);
     actions.remove();
     supportMessage.remove();
     dialog.remove();
+    arPanel.remove();
     status.remove();
     exitButton.remove();
+    breakReminder.remove();
     diagnostics?.remove();
   };
 }
@@ -242,4 +361,8 @@ function arFailureMessage(reasonCode: ArErrorReasonCode): string {
     case "unknown":
       return "AR could not continue. You are back in screen mode.";
   }
+}
+
+function formatPosition(position: Readonly<{ x: number; y: number; z: number }>): string {
+  return `${position.x.toFixed(2)},${position.y.toFixed(2)},${position.z.toFixed(2)}`;
 }
