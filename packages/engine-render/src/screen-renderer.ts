@@ -63,11 +63,69 @@ export interface ArRenderDiagnostics {
   readonly atomInCameraView: boolean;
   readonly sessionAttached: boolean;
   readonly atomPosition: Position3;
+  readonly atomScaleFactor: number;
+  readonly atomYaw: number;
+  readonly atomPitch: number;
   readonly cameraPosition: Position3;
 }
 
 const AR_ATOM_DIAMETER_METERS = 0.27;
 const RING_TUBE_RADIUS = 0.035;
+
+/** Shared handheld AR gesture tuning and view limits. */
+export const arTouchGestureConfig = Object.freeze({
+  pinchSensitivity: 0.008,
+  pinchDeadZonePx: 1,
+  dragThresholdPx: 4,
+  rotationSensitivity: 0.006,
+  minScaleFactor: 0.5,
+  maxScaleFactor: 2,
+  maxPitchRadians: Math.PI / 3,
+});
+
+/** Serializable view-only transform for the atom in a handheld AR session. */
+export interface ArViewTransform {
+  readonly scaleFactor: number;
+  readonly yaw: number;
+  readonly pitch: number;
+}
+
+/** A normalized rotate or scale gesture applied to the AR view transform. */
+export type ArViewGesture =
+  | { readonly type: "rotate"; readonly deltaX: number; readonly deltaY: number }
+  | { readonly type: "scale"; readonly delta: number };
+
+const DEFAULT_AR_VIEW_TRANSFORM: ArViewTransform = Object.freeze({
+  scaleFactor: 1,
+  yaw: 0,
+  pitch: 0,
+});
+
+/** Apply a handheld AR gesture using the shared sensitivity and view bounds. */
+export function applyArViewGesture(
+  transform: ArViewTransform,
+  gesture: ArViewGesture,
+): ArViewTransform {
+  if (gesture.type === "scale") {
+    return {
+      ...transform,
+      scaleFactor: THREE.MathUtils.clamp(
+        transform.scaleFactor - gesture.delta,
+        arTouchGestureConfig.minScaleFactor,
+        arTouchGestureConfig.maxScaleFactor,
+      ),
+    };
+  }
+  return {
+    ...transform,
+    yaw: transform.yaw - gesture.deltaX * arTouchGestureConfig.rotationSensitivity,
+    pitch: THREE.MathUtils.clamp(
+      transform.pitch + gesture.deltaY * arTouchGestureConfig.rotationSensitivity,
+      -arTouchGestureConfig.maxPitchRadians,
+      arTouchGestureConfig.maxPitchRadians,
+    ),
+  };
+}
 
 /** Position of the atom in the AR session's fixed local reference space. */
 export const arWorldAnchorPosition: Position3 = Object.freeze({ x: 0, y: 0, z: -0.6 });
@@ -145,6 +203,7 @@ export class ScreenSceneRenderer {
   private yaw = 0;
   private pitch = 0;
   private distance = 14;
+  private arViewTransform: ArViewTransform = DEFAULT_AR_VIEW_TRANSFORM;
   private nucleusRadius = 0.2;
   private dragParticle: string | null = null;
   private arActive = false;
@@ -276,7 +335,9 @@ export class ScreenSceneRenderer {
       }
     }
     if (this.arActive) {
-      this.atomRoot.scale.setScalar(arContentScale(frame));
+      this.atomRoot.scale.setScalar(
+        arContentScale(frame) * this.arViewTransform.scaleFactor,
+      );
     }
     this.positionSlotMarkers();
     this.render();
@@ -301,7 +362,12 @@ export class ScreenSceneRenderer {
       arWorldAnchorPosition.y,
       arWorldAnchorPosition.z,
     );
-    this.atomRoot.scale.setScalar(this.currentFrame ? arContentScale(this.currentFrame) : 0.675);
+    this.arViewTransform = DEFAULT_AR_VIEW_TRANSFORM;
+    this.atomRoot.rotation.set(0, 0, 0);
+    this.atomRoot.scale.setScalar(
+      (this.currentFrame ? arContentScale(this.currentFrame) : 0.675) *
+        this.arViewTransform.scaleFactor,
+    );
 
     try {
       this.activeXRSession = session as XRSession;
@@ -337,7 +403,9 @@ export class ScreenSceneRenderer {
     this.renderer.xr.enabled = false;
     this.activeXRSession = null;
     this.atomRoot.position.set(0, 0, 0);
+    this.atomRoot.rotation.set(0, 0, 0);
     this.atomRoot.scale.setScalar(1);
+    this.arViewTransform = DEFAULT_AR_VIEW_TRANSFORM;
     this.scene.background = this.screenBackground;
     this.arActive = false;
     this.render();
@@ -430,6 +498,39 @@ export class ScreenSceneRenderer {
     this.updateCamera();
   }
 
+  /** Rotate the atom view in AR without changing its fixed world anchor. */
+  rotateArView(deltaX: number, deltaY: number): void {
+    this.arViewTransform = applyArViewGesture(this.arViewTransform, {
+      type: "rotate",
+      deltaX,
+      deltaY,
+    });
+    this.atomRoot.rotation.set(
+      this.arViewTransform.pitch,
+      this.arViewTransform.yaw,
+      0,
+    );
+    this.render();
+  }
+
+  /** Scale the atom view in AR, bounded relative to its default size. */
+  scaleArView(delta: number): void {
+    this.arViewTransform = applyArViewGesture(this.arViewTransform, {
+      type: "scale",
+      delta,
+    });
+    this.updateArAtomScale();
+    this.render();
+  }
+
+  /** Restore the AR atom's default scale and rotation while preserving its anchor. */
+  resetArView(): void {
+    this.arViewTransform = DEFAULT_AR_VIEW_TRANSFORM;
+    this.atomRoot.rotation.set(0, 0, 0);
+    this.updateArAtomScale();
+    this.render();
+  }
+
   /** Dispose browser observers, WebGL resources, and owned DOM nodes. */
   dispose(): void {
     if (this.disposed) {
@@ -520,6 +621,9 @@ export class ScreenSceneRenderer {
       atomInCameraView: position.z < 0 && Math.abs(position.x) < 0.6 && Math.abs(position.y) < 0.6,
       sessionAttached: session !== null && session === this.activeXRSession,
       atomPosition: { x: position.x, y: position.y, z: position.z },
+      atomScaleFactor: this.arViewTransform.scaleFactor,
+      atomYaw: this.arViewTransform.yaw,
+      atomPitch: this.arViewTransform.pitch,
       cameraPosition: {
         x: this.camera.position.x,
         y: this.camera.position.y,
@@ -538,6 +642,16 @@ export class ScreenSceneRenderer {
     this.camera.lookAt(0, 0, 0);
     this.positionSlotMarkers();
     this.render();
+  }
+
+  private updateArAtomScale(): void {
+    if (!this.arActive) {
+      return;
+    }
+    this.atomRoot.scale.setScalar(
+      (this.currentFrame ? arContentScale(this.currentFrame) : 0.675) *
+        this.arViewTransform.scaleFactor,
+    );
   }
 
   private projectedRingZones(bounds: DOMRect): ProjectedDropZone[] {

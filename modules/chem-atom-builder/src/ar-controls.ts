@@ -81,6 +81,7 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
   arPanel.innerHTML = `
     <header class="ar-panel-heading">
       <p class="ar-panel-mission-title" id="ar-panel-mission-title"></p>
+      <button type="button" data-ar-action="reset-view">Reset view</button>
       <button type="button" data-ar-action="panel-toggle" aria-expanded="false">Show panel</button>
     </header>
   `;
@@ -254,6 +255,8 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
         `granted ${grantedFeatures.join(", ") || "none"}`,
         `atom ${facts.atomVisible && facts.atomInCameraView ? "visible" : "not visible"}`,
         `anchor ${formatPosition(facts.atomPosition)}`,
+        `view ${facts.atomScaleFactor.toFixed(2)}x`,
+        `rotation ${facts.atomYaw.toFixed(2)},${facts.atomPitch.toFixed(2)}`,
         `camera ${formatPosition(facts.cameraPosition)}`,
         `loop ${facts.renderLoopRunning ? "running" : "stopped"}`,
         `session ${facts.sessionAttached ? "attached" : "detached"}`,
@@ -302,6 +305,8 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
       });
     } else if (action === "panel-toggle") {
       setPanelCollapsed(!arPanel.classList.contains("is-collapsed"));
+    } else if (action === "reset-view") {
+      renderer.resetArView();
     }
   };
   const onBeforeXrSelect = (event: Event): void => {

@@ -3,13 +3,18 @@ import { distance2D } from "./utils.js";
 
 export interface TouchInputOptions extends PointerAdapterOptions {
   pinchSensitivity?: number;
+  pinchDeadZonePx?: number;
   dragThresholdPx?: number;
+  shouldIgnoreTarget?: (target: EventTarget | null) => boolean;
 }
 
 export class TouchInputAdapter extends PointerAdapterBase {
   private readonly pinchSensitivity: number;
+  private readonly pinchDeadZonePx: number;
   private readonly dragThresholdPx: number;
+  private readonly shouldIgnoreTarget: (target: EventTarget | null) => boolean;
   private readonly touches = new Map<number, { x: number; y: number }>();
+  private readonly ignoredPointers = new Set<number>();
   private activeTarget: string | null = null;
   private activePointerId: number | null = null;
   private traySource: string | null = null;
@@ -21,7 +26,9 @@ export class TouchInputAdapter extends PointerAdapterBase {
   constructor(options: TouchInputOptions) {
     super(options);
     this.pinchSensitivity = options.pinchSensitivity ?? 0.008;
+    this.pinchDeadZonePx = options.pinchDeadZonePx ?? 1;
     this.dragThresholdPx = options.dragThresholdPx ?? 4;
+    this.shouldIgnoreTarget = options.shouldIgnoreTarget ?? (() => false);
 
     this.root.addEventListener("pointerdown", this.onDown, { passive: false });
     this.root.addEventListener("pointermove", this.onMove, { passive: false });
@@ -35,6 +42,7 @@ export class TouchInputAdapter extends PointerAdapterBase {
     this.root.removeEventListener("pointerup", this.onUp);
     this.root.removeEventListener("pointercancel", this.onCancel);
     this.touches.clear();
+    this.ignoredPointers.clear();
     this.activeTarget = null;
     this.activePointerId = null;
     this.traySource = null;
@@ -45,6 +53,10 @@ export class TouchInputAdapter extends PointerAdapterBase {
 
   private readonly onDown = (event: PointerEvent): void => {
     if (event.pointerType !== "touch") return;
+    if (this.shouldIgnoreTarget(event.target)) {
+      this.ignoredPointers.add(event.pointerId);
+      return;
+    }
 
     this.touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
 
@@ -86,14 +98,18 @@ export class TouchInputAdapter extends PointerAdapterBase {
   };
 
   private readonly onMove = (event: PointerEvent): void => {
-    if (event.pointerType !== "touch" || !this.touches.has(event.pointerId)) return;
+    if (
+      event.pointerType !== "touch" ||
+      this.ignoredPointers.has(event.pointerId) ||
+      !this.touches.has(event.pointerId)
+    ) return;
     const previous = this.touches.get(event.pointerId)!;
     this.touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
 
     if (this.touches.size >= 2 && this.pinchDistance !== null) {
       const next = this.currentPinchDistance();
       const delta = next - this.pinchDistance;
-      if (Math.abs(delta) >= 1) {
+      if (Math.abs(delta) >= this.pinchDeadZonePx) {
         this.dispatcher.emit({
           type: "scale",
           payload: {
@@ -149,6 +165,7 @@ export class TouchInputAdapter extends PointerAdapterBase {
 
   private readonly onUp = (event: PointerEvent): void => {
     if (event.pointerType !== "touch") return;
+    if (this.ignoredPointers.delete(event.pointerId)) return;
     const wasActive = event.pointerId === this.activePointerId;
     this.touches.delete(event.pointerId);
 
@@ -195,6 +212,7 @@ export class TouchInputAdapter extends PointerAdapterBase {
 
   private readonly onCancel = (event: PointerEvent): void => {
     if (event.pointerType !== "touch") return;
+    if (this.ignoredPointers.delete(event.pointerId)) return;
     const target = this.activeTarget;
     const traySource = this.traySource;
     this.touches.delete(event.pointerId);

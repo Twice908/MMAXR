@@ -20,6 +20,7 @@ import {
 import {
   ScreenInputAdapter,
   ScreenSceneRenderer,
+  arTouchGestureConfig,
   type InputAction,
 } from "@mma/engine-render";
 import {
@@ -482,12 +483,20 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
         break;
       case "rotate":
         if (typeof payload.deltaX === "number" && typeof payload.deltaY === "number") {
-          renderer.rotate(payload.deltaX, payload.deltaY);
+          if (root.classList.contains("ar-active") && payload.source === "touch") {
+            renderer.rotateArView(payload.deltaX, payload.deltaY);
+          } else {
+            renderer.rotate(payload.deltaX, payload.deltaY);
+          }
         }
         break;
       case "scale":
         if (typeof payload.delta === "number") {
-          renderer.scale(payload.delta);
+          if (root.classList.contains("ar-active") && payload.source === "touch") {
+            renderer.scaleArView(payload.delta);
+          } else {
+            renderer.scale(payload.delta);
+          }
         }
         break;
       case "confirm":
@@ -516,6 +525,13 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     root,
     dispatch: onInput,
     pickTarget: (x, y, source, pointerType) => renderer.pickTarget(x, y, source, pointerType),
+    touch: {
+      pinchSensitivity: arTouchGestureConfig.pinchSensitivity,
+      pinchDeadZonePx: arTouchGestureConfig.pinchDeadZonePx,
+      dragThresholdPx: arTouchGestureConfig.dragThresholdPx,
+      shouldIgnoreTarget: (target) =>
+        root.classList.contains("ar-active") && isArHudTarget(target),
+    },
     onDragEnd: () => {
       activeParticle = null;
       ghost.classList.remove("is-visible");
@@ -822,4 +838,10 @@ function bounceParticle(element: HTMLElement | null): void {
   element.classList.remove("is-rejected");
   void element.offsetWidth;
   element.classList.add("is-rejected");
+}
+
+function isArHudTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest(
+    ".ar-overlay-panel, .ar-exit, .ar-status, .ar-break-reminder, .ar-diagnostics, .ar-confirmation",
+  ) !== null;
 }
