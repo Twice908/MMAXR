@@ -40,7 +40,7 @@ describe("MouseInputAdapter", () => {
     adapter.dispose();
   });
 
-  it("emits move while dragging", () => {
+  it("rotates the picked scene while dragging", () => {
     const { root, sink, adapter } = create();
 
     root.dispatchEvent(event("mousedown", {
@@ -54,9 +54,8 @@ describe("MouseInputAdapter", () => {
     }));
 
     expect(sink.actions[1]).toMatchObject({
-      type: "move",
+      type: "rotate",
       payload: {
-        target: "atom:1",
         deltaX: 20,
         deltaY: 30,
       },

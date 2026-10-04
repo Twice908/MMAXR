@@ -38,7 +38,7 @@ describe("TouchInputAdapter", () => {
     adapter.dispose();
   });
 
-  it("moves an active target after a drag threshold", () => {
+  it("rotates the picked scene after a drag threshold", () => {
     const { root, sink, adapter } = create();
 
     root.dispatchEvent(pointerEvent("pointerdown", {
@@ -49,12 +49,36 @@ describe("TouchInputAdapter", () => {
     }));
 
     expect(sink.actions.at(-1)).toMatchObject({
-      type: "move",
+      type: "rotate",
       payload: {
         source: "touch",
-        target: "electron:1",
-        x: 110,
-        y: 115,
+        deltaX: 10,
+        deltaY: 15,
+      },
+    });
+
+    adapter.dispose();
+  });
+
+  it("counts small touch moves cumulatively toward the drag threshold", () => {
+    const { root, sink, adapter } = create();
+
+    root.dispatchEvent(pointerEvent("pointerdown", {
+      pointerId: 1, pointerType: "touch", clientX: 100, clientY: 100,
+    }));
+    root.dispatchEvent(pointerEvent("pointermove", {
+      pointerId: 1, pointerType: "touch", clientX: 102, clientY: 101,
+    }));
+    root.dispatchEvent(pointerEvent("pointermove", {
+      pointerId: 1, pointerType: "touch", clientX: 104, clientY: 102,
+    }));
+
+    expect(sink.actions.at(-1)).toMatchObject({
+      type: "rotate",
+      payload: {
+        source: "touch",
+        deltaX: 2,
+        deltaY: 1,
       },
     });
 
