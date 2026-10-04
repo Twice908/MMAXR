@@ -10,7 +10,6 @@ import carbon14Complete from "../../../modules/chem-atom-builder/narration/en/bu
 import chlorideStart from "../../../modules/chem-atom-builder/narration/en/make-cl-minus-start.json";
 import chlorideComplete from "../../../modules/chem-atom-builder/narration/en/make-cl-minus-complete.json";
 import invalidPlacement from "../../../modules/chem-atom-builder/narration/en/invalid-placement.json";
-import { createBrowserAudioProcessor, createOpfsNarrationOutputCache, createPiperRuntime } from "./piper-browser.js";
 import "./narration-generator.css";
 
 interface Script {
@@ -99,6 +98,8 @@ async function generateAll(
   results.replaceChildren();
   progress.value = 0;
   let totalAudioBytes = 0;
+  const { createBrowserAudioProcessor, createOpfsNarrationOutputCache, createPiperRuntime } =
+    await import("./piper-browser.js");
   const runtime = createPiperRuntime(__PIPER_BASE_PATH__ ?? "");
   const adapter = new PiperWebTtsAdapter({
     voiceId,

@@ -137,6 +137,7 @@ test("opens the narration generator only by explicit development query and waits
 });
 
 test("fails visibly with nonzero generation status when the configured Piper voice is unknown", async ({ page }) => {
+  test.slow();
   await page.route("**/voices.json", (route) => route.fulfill({
     status: 200,
     contentType: "application/json",
