@@ -1,5 +1,5 @@
 import type { EngineAction } from "@mma/engine-core";
-import { InputManager } from "@mma/engine-input";
+import { InputManager, type TouchInputOptions } from "@mma/engine-input";
 import type { ScreenPickFunction } from "@mma/engine-input";
 import * as THREE from "three";
 
@@ -9,6 +9,7 @@ export interface ScreenInputOptions {
   readonly dispatch: (action: EngineAction) => void;
   readonly pickTarget: ScreenPickFunction;
   readonly onDragEnd?: () => void;
+  readonly touch?: Omit<TouchInputOptions, "root" | "dispatch" | "pickTarget" | "events">;
 }
 
 /**
@@ -34,6 +35,7 @@ export class ScreenInputAdapter {
         }
       },
       pickScreenTarget: options.pickTarget,
+      ...(options.touch === undefined ? {} : { touch: options.touch }),
       enableXrControllers: false,
       enableXrHands: false,
     });

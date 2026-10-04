@@ -599,6 +599,116 @@ test("mocked AR keeps the atom world-fixed and exposes the lesson through its ov
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
     .toBe(true);
   await expect(page.locator(".ar-diagnostics")).toContainText("anchor 0.00,0.00,-0.60");
+  await expect(page.locator(".ar-diagnostics")).toContainText("view 1.00x");
+
+  const viewStateBeforeGestures = await page.evaluate(() => ({
+    atomicNumber: document.querySelector("#atomic-number")?.textContent,
+    protonCount: document.querySelector("#proton-count")?.textContent,
+    neutronCount: document.querySelector("#neutron-count")?.textContent,
+    electronCount: document.querySelector("#electron-count")?.textContent,
+    missionProgress: document.querySelector("#mission-progress")?.textContent,
+    localEventCount: document.querySelectorAll("#dev-event-list li").length,
+  }));
+  const gestureResults = await page.evaluate(() => {
+    Object.defineProperty(HTMLElement.prototype, "setPointerCapture", {
+      configurable: true,
+      value: () => {},
+    });
+    Object.defineProperty(HTMLElement.prototype, "hasPointerCapture", {
+      configurable: true,
+      value: () => false,
+    });
+    const root = document.querySelector<HTMLElement>("#app");
+    if (!root) {
+      throw new Error("App overlay root is missing");
+    }
+    const dispatchTouch = (
+      target: HTMLElement,
+      type: string,
+      pointerId: number,
+      clientX: number,
+      clientY: number,
+    ) => target.dispatchEvent(new PointerEvent(type, {
+      pointerId,
+      pointerType: "touch",
+      clientX,
+      clientY,
+      bubbles: true,
+      cancelable: true,
+    }));
+    const diagnostics = document.querySelector<HTMLElement>(".ar-diagnostics");
+    if (!diagnostics) {
+      throw new Error("AR diagnostics are missing");
+    }
+    const snapshots: string[] = [];
+    dispatchTouch(root, "pointerdown", 11, 100, 300);
+    dispatchTouch(root, "pointerdown", 12, 200, 300);
+    dispatchTouch(root, "pointermove", 12, 250, 300);
+    dispatchTouch(root, "pointerup", 11, 100, 300);
+    dispatchTouch(root, "pointerup", 12, 250, 300);
+    snapshots.push(diagnostics.textContent ?? "");
+
+    dispatchTouch(root, "pointerdown", 13, 100, 300);
+    dispatchTouch(root, "pointermove", 13, 120, 320);
+    dispatchTouch(root, "pointerup", 13, 120, 320);
+    snapshots.push(diagnostics.textContent ?? "");
+
+    const exit = document.querySelector<HTMLElement>(".ar-exit");
+    if (!exit) {
+      throw new Error("AR exit control is missing");
+    }
+    dispatchTouch(exit, "pointerdown", 14, 350, 20);
+    dispatchTouch(root, "pointermove", 14, 370, 40);
+    dispatchTouch(root, "pointerup", 14, 370, 40);
+    snapshots.push(diagnostics.textContent ?? "");
+
+    dispatchTouch(root, "pointerdown", 21, 100, 300);
+    dispatchTouch(root, "pointerdown", 22, 200, 300);
+    dispatchTouch(root, "pointermove", 22, 10_000, 300);
+    dispatchTouch(root, "pointerup", 21, 100, 300);
+    dispatchTouch(root, "pointerup", 22, 10_000, 300);
+    snapshots.push(diagnostics.textContent ?? "");
+
+    dispatchTouch(root, "pointerdown", 23, 100, 300);
+    dispatchTouch(root, "pointerdown", 24, 1_100, 300);
+    dispatchTouch(root, "pointermove", 24, 100, 300);
+    dispatchTouch(root, "pointerup", 23, 100, 300);
+    dispatchTouch(root, "pointerup", 24, 100, 300);
+    snapshots.push(diagnostics.textContent ?? "");
+
+    dispatchTouch(root, "pointerdown", 25, 100, 300);
+    dispatchTouch(root, "pointermove", 25, 100, 10_000);
+    dispatchTouch(root, "pointerup", 25, 100, 10_000);
+    snapshots.push(diagnostics.textContent ?? "");
+    dispatchTouch(root, "pointerdown", 26, 100, 10_000);
+    dispatchTouch(root, "pointermove", 26, 100, -10_000);
+    dispatchTouch(root, "pointerup", 26, 100, -10_000);
+    snapshots.push(diagnostics.textContent ?? "");
+
+    return snapshots;
+  });
+  expect(gestureResults[0]).toContain("view 1.40x");
+  expect(gestureResults[1]).toContain("rotation -0.12,0.12");
+  expect(gestureResults[2]).toContain("rotation -0.12,0.12");
+  expect(gestureResults[3]).toContain("view 2.00x");
+  expect(gestureResults[4]).toContain("view 0.50x");
+  expect(gestureResults[5]).toContain("rotation -0.12,1.05");
+  expect(gestureResults[6]).toContain("rotation -0.12,-1.05");
+  expect(gestureResults[6]).toContain("anchor 0.00,0.00,-0.60");
+
+  const viewStateAfterGestures = await page.evaluate(() => ({
+    atomicNumber: document.querySelector("#atomic-number")?.textContent,
+    protonCount: document.querySelector("#proton-count")?.textContent,
+    neutronCount: document.querySelector("#neutron-count")?.textContent,
+    electronCount: document.querySelector("#electron-count")?.textContent,
+    missionProgress: document.querySelector("#mission-progress")?.textContent,
+    localEventCount: document.querySelectorAll("#dev-event-list li").length,
+  }));
+  expect(viewStateAfterGestures).toEqual(viewStateBeforeGestures);
+
+  await page.locator(".ar-panel-heading").getByRole("button", { name: "Reset view" }).click();
+  await expect(page.locator(".ar-diagnostics")).toContainText("view 1.00x");
+  await expect(page.locator(".ar-diagnostics")).toContainText("rotation 0.00,0.00");
 
   await page.evaluate(() => {
     const panelButton = document.querySelector(".ar-overlay-panel button");
@@ -671,6 +781,7 @@ test("mocked AR keeps the atom world-fixed and exposes the lesson through its ov
       narration: read('.ar-overlay-panel [data-narration-action="mute"]'),
       caption: read(".ar-overlay-panel .narration-caption"),
       missionTitle: read(".ar-panel-mission-title"),
+      resetView: read('.ar-panel-heading [data-ar-action="reset-view"]'),
       panelToggle: read('.ar-panel-heading [data-ar-action="panel-toggle"]'),
       exit: read(".ar-exit"),
     };
@@ -681,6 +792,7 @@ test("mocked AR keeps the atom world-fixed and exposes the lesson through its ov
     controlGlassStyles.narration,
     controlGlassStyles.caption,
     controlGlassStyles.missionTitle,
+    controlGlassStyles.resetView,
     controlGlassStyles.panelToggle,
   ]) {
     expect(control.background).toBe(controlGlassStyles.glassBackground);
@@ -696,6 +808,7 @@ test("mocked AR keeps the atom world-fixed and exposes the lesson through its ov
     controlGlassStyles.stepper,
     controlGlassStyles.narration,
     controlGlassStyles.panelToggle,
+    controlGlassStyles.resetView,
     controlGlassStyles.exit,
   ]) {
     expect(control.minHeight).toBeGreaterThanOrEqual(44);

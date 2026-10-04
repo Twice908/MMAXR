@@ -131,6 +131,83 @@ describe("TouchInputAdapter", () => {
     adapter.dispose();
   });
 
+  it("ignores pinch movement inside the configured dead zone", () => {
+    const root = new FakeDomElement();
+    const sink = createActionSink();
+    const adapter = new TouchInputAdapter({
+      root: root as unknown as HTMLElement,
+      dispatch: sink.dispatch,
+      pickTarget: () => null,
+      pinchSensitivity: 0.008,
+      pinchDeadZonePx: 3,
+    });
+
+    root.dispatchEvent(pointerEvent("pointerdown", {
+      pointerId: 1, pointerType: "touch", clientX: 100, clientY: 100,
+    }));
+    root.dispatchEvent(pointerEvent("pointerdown", {
+      pointerId: 2, pointerType: "touch", clientX: 200, clientY: 100,
+    }));
+    root.dispatchEvent(pointerEvent("pointermove", {
+      pointerId: 2, pointerType: "touch", clientX: 202, clientY: 100,
+    }));
+
+    expect(sink.actions.filter((action) => action.type === "scale")).toHaveLength(0);
+
+    root.dispatchEvent(pointerEvent("pointermove", {
+      pointerId: 2, pointerType: "touch", clientX: 205, clientY: 100,
+    }));
+    const scaleActions = sink.actions.filter((action) => action.type === "scale");
+    expect(scaleActions).toHaveLength(1);
+    expect(scaleActions[0]?.payload).toMatchObject({ source: "touch" });
+    expect((scaleActions[0]?.payload as { delta: number }).delta).toBeCloseTo(-0.04);
+
+    adapter.dispose();
+  });
+
+  it("ignores HUD pointers and does not let them join a camera-area pinch", () => {
+    const root = new FakeDomElement();
+    const sink = createActionSink();
+    let downOnHud = false;
+    const adapter = new TouchInputAdapter({
+      root: root as unknown as HTMLElement,
+      dispatch: sink.dispatch,
+      pickTarget: () => null,
+      shouldIgnoreTarget: (target) => downOnHud && target === root,
+    });
+
+    root.dispatchEvent(pointerEvent("pointerdown", {
+      pointerId: 1, pointerType: "touch", clientX: 100, clientY: 100,
+    }));
+    downOnHud = true;
+    root.dispatchEvent(pointerEvent("pointerdown", {
+      pointerId: 2, pointerType: "touch", clientX: 200, clientY: 100,
+    }));
+    downOnHud = false;
+    root.dispatchEvent(pointerEvent("pointermove", {
+      pointerId: 2, pointerType: "touch", clientX: 240, clientY: 100,
+    }));
+    root.dispatchEvent(pointerEvent("pointermove", {
+      pointerId: 1, pointerType: "touch", clientX: 102, clientY: 100,
+    }));
+
+    downOnHud = true;
+    root.dispatchEvent(pointerEvent("pointerdown", {
+      pointerId: 3, pointerType: "touch", clientX: 300, clientY: 100,
+    }));
+    downOnHud = false;
+    root.dispatchEvent(pointerEvent("pointermove", {
+      pointerId: 3, pointerType: "touch", clientX: 340, clientY: 100,
+    }));
+    root.dispatchEvent(pointerEvent("pointerup", {
+      pointerId: 3, pointerType: "touch", clientX: 340, clientY: 100,
+    }));
+
+    expect(sink.actions.filter((action) => action.type === "scale")).toHaveLength(0);
+    expect(sink.actions.filter((action) => action.type === "rotate")).toHaveLength(0);
+    adapter.dispose();
+  });
+
   it("does not treat mouse pointer events as touch", () => {
     const { root, sink, adapter } = create();
 

@@ -45,6 +45,10 @@ export {
 export {
   ScreenSceneRenderer,
   type ArRenderDiagnostics,
+  type ArViewGesture,
+  type ArViewTransform,
+  applyArViewGesture,
+  arTouchGestureConfig,
   arContentScale,
   arWorldAnchorPosition,
   selectQualityTier,
