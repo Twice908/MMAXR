@@ -275,6 +275,22 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   store.events.subscribe("narration_played", recordLocalEvent);
   store.events.subscribe("narration_skipped", recordLocalEvent);
   store.events.subscribe("voice_fallback_used", recordLocalEvent);
+  const onLocalTelemetry = (event: Event): void => {
+    const telemetry = telemetryEventSchema.parse((event as CustomEvent<unknown>).detail);
+    const payload = telemetry.payload;
+    const duration = typeof payload.durationSec === "number"
+      ? `${payload.durationSec.toFixed(1)}s`
+      : "";
+    const reason = typeof payload.errorReasonCode === "string"
+      ? payload.errorReasonCode
+      : "";
+    localEvents.push({
+      type: telemetry.type,
+      timestamp: telemetry.ts,
+      missionId: [reason, duration].filter(Boolean).join(" · ") || "-",
+    });
+    renderLocalEvents();
+  };
   const eventsToggle = requiredElement<HTMLButtonElement>(root, "#dev-events-toggle");
   const eventsPanel = requiredElement<HTMLElement>(root, "#dev-event-panel");
   const setEventsPanelOpen = (open: boolean): void => {
@@ -291,6 +307,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   };
   eventsToggle.hidden = !options.diagnostics;
   root.addEventListener("click", onEventsAction);
+  root.addEventListener("mma:local-telemetry", onLocalTelemetry);
 
   const disposeArControls = mountArControls({
     root,
@@ -552,6 +569,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     narrationControls.removeEventListener("click", onNarrationAction);
     narrationSpeed.removeEventListener("change", onNarrationSpeedChange);
     root.removeEventListener("click", onEventsAction);
+    root.removeEventListener("mma:local-telemetry", onLocalTelemetry);
     root.removeEventListener("click", onCommandClick);
     narrationPlayer.dispose();
     void disposeArControls().finally(() => renderer.dispose());

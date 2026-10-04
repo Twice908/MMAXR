@@ -51,6 +51,18 @@ export interface ScreenRendererOptions {
   readonly diagnostics?: boolean;
 }
 
+const SCREEN_BACKGROUND_MODE_EVENT = "mma:screen-background-mode";
+
+/** Toggle the screen renderer's scene background transparency without exposing Three.js. */
+export function setScreenRendererTransparentBackground(
+  host: HTMLElement,
+  transparent: boolean,
+): void {
+  host.dispatchEvent(new CustomEvent(SCREEN_BACKGROUND_MODE_EVENT, {
+    detail: transparent,
+  }));
+}
+
 export interface ArRenderDiagnostics {
   readonly sceneBackground: string;
   readonly clearColor: string;
@@ -230,7 +242,9 @@ export class ScreenSceneRenderer {
       Math.min(window.devicePixelRatio || 1, QUALITY_PIXEL_RATIO[this.qualityTier]),
     );
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.setClearColor(0x000000, 1);
     this.host.append(this.canvas);
+    this.host.addEventListener(SCREEN_BACKGROUND_MODE_EVENT, this.onBackgroundModeChange);
     this.slotLayer = document.createElement("div");
     this.slotLayer.className = "drop-slot-layer";
     this.slotLayer.setAttribute("aria-hidden", "true");
@@ -537,6 +551,7 @@ export class ScreenSceneRenderer {
       return;
     }
     this.disposed = true;
+    this.host.removeEventListener(SCREEN_BACKGROUND_MODE_EVENT, this.onBackgroundModeChange);
     cancelAnimationFrame(this.animationFrame);
     cancelAnimationFrame(this.resizeFrame);
     this.renderer.setAnimationLoop(null);
@@ -571,6 +586,16 @@ export class ScreenSceneRenderer {
 
   private readonly onReducedMotionChange = (): void => {
     this.startDiagnosticsLoop();
+  };
+
+  private readonly onBackgroundModeChange = (event: Event): void => {
+    const transparent = (event as CustomEvent<unknown>).detail;
+    if (typeof transparent !== "boolean" || this.arActive) {
+      return;
+    }
+    this.scene.background = transparent ? null : this.screenBackground;
+    this.renderer.setClearColor(0x000000, transparent ? 0 : 1);
+    this.render();
   };
 
   private startDiagnosticsLoop(): void {

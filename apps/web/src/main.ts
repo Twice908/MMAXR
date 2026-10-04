@@ -1,4 +1,7 @@
 import "./shell.css";
+import "./camera-view.css";
+import { createIdGenerator } from "@mma/engine-core";
+import { mountCameraView } from "./camera-view.js";
 
 const appRoot = document.querySelector<HTMLElement>("#app");
 
@@ -21,6 +24,28 @@ if (import.meta.env.DEV && new URLSearchParams(window.location.search).has("narr
         throw new Error("This build supports the screen mode only.");
       }
       mountAtomBuilder(app, { diagnostics: import.meta.env.DEV });
+      const sceneHost = app.querySelector<HTMLElement>(".scene-viewport");
+      if (!sceneHost) {
+        throw new Error("Camera view could not find the screen scene.");
+      }
+      const idGenerator = createIdGenerator({
+        crypto: globalThis.crypto,
+        now: Date.now,
+      });
+      mountCameraView({
+        root: app,
+        sceneHost,
+        telemetryContext: {
+          studentRef: idGenerator(),
+          sessionId: idGenerator(),
+          moduleId: manifest.id,
+          moduleVersion: "0.0.0",
+          device: { mode: "screen", tier: "mid" },
+        },
+        clock: () => new Date().toISOString(),
+        idGenerator,
+        diagnostics: import.meta.env.DEV,
+      });
     })
     .catch(showLoadError);
 }

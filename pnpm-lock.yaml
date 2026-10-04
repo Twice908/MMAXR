@@ -38,6 +38,15 @@ importers:
       '@mma/chem-atom-builder':
         specifier: workspace:*
         version: link:../../modules/chem-atom-builder
+      '@mma/engine-core':
+        specifier: workspace:*
+        version: link:../../packages/engine-core
+      '@mma/engine-render':
+        specifier: workspace:*
+        version: link:../../packages/engine-render
+      '@mma/schema':
+        specifier: workspace:*
+        version: link:../../packages/schema
     devDependencies:
       '@mma/generate-narration':
         specifier: workspace:*

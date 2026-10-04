@@ -33,6 +33,8 @@ const coreEventTypeSchema = z.enum([
   "ar_session_ended",
   "ar_placement",
   "ar_error",
+  "camera_view_started",
+  "camera_view_ended",
 ]);
 
 const telemetryEnvelopeSchema = z
@@ -80,7 +82,37 @@ export const arTelemetryEventSchema = z.discriminatedUnion("type", [
   }).strict(),
 ]);
 
+export const cameraViewErrorReasonCodeSchema = z.enum([
+  "none",
+  "permission_denied",
+  "no_camera",
+  "camera_in_use",
+  "device_unavailable",
+  "page_hidden",
+  "unsupported",
+  "unknown",
+]);
+
+export const cameraViewTelemetryEventSchema = z.discriminatedUnion("type", [
+  telemetryEnvelopeSchema.extend({
+    type: z.literal("camera_view_started"),
+    payload: z.object({
+      durationSec: z.literal(0),
+      errorReasonCode: cameraViewErrorReasonCodeSchema,
+    }).strict(),
+  }).strict(),
+  telemetryEnvelopeSchema.extend({
+    type: z.literal("camera_view_ended"),
+    payload: z.object({
+      durationSec: z.number().nonnegative(),
+      errorReasonCode: cameraViewErrorReasonCodeSchema,
+    }).strict(),
+  }).strict(),
+]);
+
 export type TelemetryEvent = z.infer<typeof telemetryEventSchema>;
 export type ArTelemetryEvent = z.infer<typeof arTelemetryEventSchema>;
 export type ArErrorReasonCode = z.infer<typeof arErrorReasonCodeSchema>;
 export type ArFeature = z.infer<typeof arFeatureSchema>;
+export type CameraViewErrorReasonCode = z.infer<typeof cameraViewErrorReasonCodeSchema>;
+export type CameraViewTelemetryEvent = z.infer<typeof cameraViewTelemetryEventSchema>;

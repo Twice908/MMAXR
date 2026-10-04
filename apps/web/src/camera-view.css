@@ -1,0 +1,251 @@
+.camera-view-entry,
+.camera-view-exit,
+.camera-view-confirmation [data-camera-action],
+.camera-view-reason,
+.camera-view-status {
+  color: var(--glass-text);
+  background: var(--glass-bg-strong);
+  border: var(--glass-border-width) solid var(--glass-border-color);
+  border-radius: var(--glass-radius-pill);
+  box-shadow: var(--glass-highlight), var(--glass-shadow);
+  font: inherit;
+}
+
+.camera-view-entry,
+.camera-view-exit,
+.camera-view-confirmation [data-camera-action] {
+  min-height: var(--glass-tap-min);
+  padding: var(--glass-pad-pill);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.camera-view-reason,
+.camera-view-status {
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.camera-view-diagnostic {
+  margin: 8px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid #607274;
+  overflow-wrap: anywhere;
+}
+
+.camera-view-video {
+  position: fixed;
+  z-index: 0;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+.camera-view-video--mirrored {
+  transform: scaleX(-1);
+}
+
+.camera-view-exit {
+  position: fixed;
+  z-index: 20;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  color: var(--glass-danger-text);
+  background: var(--glass-danger-bg);
+}
+
+.camera-view-status {
+  position: fixed;
+  z-index: 21;
+  right: 12px;
+  bottom: max(12px, env(safe-area-inset-bottom));
+  max-width: min(540px, calc(100vw - 24px));
+  margin: 0;
+  pointer-events: none;
+}
+
+html.camera-active,
+body.camera-active,
+#app.camera-active {
+  min-height: 100dvh;
+  background: transparent !important;
+  background-image: none !important;
+}
+
+.camera-active .atom-builder,
+.camera-active .builder-header,
+.camera-active .lesson-panel,
+.camera-active .narration-hud,
+.camera-active .assessment-card,
+.camera-active .lesson-summary,
+.camera-active .free-play-status,
+.camera-active .builder-content,
+.camera-active .particle-rail,
+.camera-active .atom-workspace,
+.camera-active .atom-inspector,
+.camera-active .scene-viewport {
+  background: transparent !important;
+  background-image: none !important;
+}
+
+.camera-active .builder-header,
+.camera-active .lesson-panel,
+.camera-active .narration-hud,
+.camera-active .assessment-card,
+.camera-active .lesson-summary,
+.camera-active .free-play-status,
+.camera-active .particle-rail,
+.camera-active .atom-inspector {
+  position: relative;
+  z-index: 2;
+  border-color: transparent;
+}
+
+.camera-active .builder-header {
+  background-color: var(--glass-bg) !important;
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+
+.camera-active .builder-content {
+  display: block;
+  min-height: 0;
+}
+
+.camera-active .atom-workspace {
+  position: fixed;
+  z-index: 1;
+  inset: 0;
+  padding: 0;
+  pointer-events: none;
+}
+
+.camera-active .scene-viewport {
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  touch-action: none;
+}
+
+.camera-active .camera-view-video {
+  z-index: 0;
+}
+
+.camera-active .atom-canvas {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  pointer-events: none;
+}
+
+.camera-active .drop-slot-layer,
+.camera-active .render-diagnostics {
+  display: none !important;
+}
+
+.camera-active .scene-heading {
+  position: fixed;
+  z-index: 3;
+  top: max(12px, env(safe-area-inset-top));
+  left: max(12px, env(safe-area-inset-left));
+  gap: 8px;
+  padding: 6px;
+  border: var(--glass-border-width) solid var(--glass-border-color);
+  border-radius: var(--glass-radius-panel);
+  color: var(--glass-text);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-highlight), var(--glass-shadow);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  pointer-events: auto;
+}
+
+.camera-active .scene-heading > span {
+  display: none;
+}
+
+.camera-active .scene-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.camera-active .camera-view-entry,
+.camera-active .dev-events-toggle,
+.camera-active .dev-event-panel,
+.camera-active .reset-view,
+.camera-active .lesson-panel,
+.camera-active .narration-hud,
+.camera-active .particle-rail,
+.camera-active .atom-inspector,
+.camera-active .assessment-card,
+.camera-active .lesson-summary,
+.camera-active .free-play-status,
+.camera-active .narration-controls button,
+.camera-active .narration-controls select,
+.camera-active .lesson-controls button,
+.camera-active .stepper button,
+.camera-active .assessment-options button,
+.camera-active .assessment-continue {
+  color: var(--glass-text);
+  background-color: var(--glass-bg);
+  border-color: var(--glass-border-color);
+  box-shadow: var(--glass-highlight), var(--glass-shadow);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+
+.camera-active .lesson-panel,
+.camera-active .narration-hud {
+  margin: 8px;
+  padding: 12px;
+  border: var(--glass-border-width) solid var(--glass-border-color);
+  border-radius: var(--glass-radius-panel);
+}
+
+.camera-active .dev-event-panel {
+  color: var(--glass-text);
+}
+
+.camera-active .lesson-copy h2,
+.camera-active .lesson-copy > p,
+.camera-active .narration-caption,
+.camera-active .narration-controls label,
+.camera-active .atom-inspector,
+.camera-active .assessment-card,
+.camera-active .assessment-card h2,
+.camera-active .assessment-feedback {
+  color: var(--glass-text);
+}
+
+.camera-active .ar-confirmation,
+.camera-active .camera-view-confirmation {
+  z-index: 30;
+}
+
+.camera-active :is(.lesson-panel, .narration-hud, .assessment-card, .lesson-summary, .free-play-status,
+.particle-rail, .atom-inspector, .camera-view-entry, .dev-events-toggle, .dev-event-panel, .reset-view,
+.camera-view-exit, .camera-view-status,
+.camera-view-confirmation, .camera-view-confirmation button, .narration-controls button, .narration-controls select,
+.lesson-controls button, .stepper button, .assessment-options button, .assessment-continue) {
+  background-color: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .camera-active :is(.builder-header, .scene-heading, .lesson-panel, .narration-hud, .assessment-card, .lesson-summary,
+  .free-play-status, .particle-rail, .atom-inspector, .camera-view-entry, .dev-events-toggle, .dev-event-panel,
+  .reset-view, .camera-view-exit,
+  .camera-view-status, .camera-view-confirmation, .camera-view-confirmation button, .narration-controls button,
+  .narration-controls select, .lesson-controls button, .stepper button, .assessment-options button, .assessment-continue) {
+    background-color: var(--glass-bg-strong);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
