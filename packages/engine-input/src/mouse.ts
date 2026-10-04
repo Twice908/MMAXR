@@ -10,6 +10,7 @@ export class MouseInputAdapter extends PointerAdapterBase {
   private readonly wheelScaleSensitivity: number;
   private active = false;
   private target: string | null = null;
+  private traySource: string | null = null;
   private x = 0;
   private y = 0;
 
@@ -41,7 +42,26 @@ export class MouseInputAdapter extends PointerAdapterBase {
     this.active = true;
     this.x = event.clientX;
     this.y = event.clientY;
-    this.target = this.pickTarget(event.clientX, event.clientY);
+    this.traySource = this.traySourceFor(event.target);
+    this.target = this.pickTarget(
+      event.clientX,
+      event.clientY,
+      this.traySource ?? undefined,
+      "mouse",
+    );
+
+    if (this.traySource) {
+      this.dispatcher.emit({
+        type: "grab",
+        payload: {
+          source: this.traySource,
+          target: this.target,
+          x: this.x,
+          y: this.y,
+        },
+      });
+      return;
+    }
 
     if (this.target) {
       this.dispatcher.emit({
@@ -53,7 +73,12 @@ export class MouseInputAdapter extends PointerAdapterBase {
   };
 
   private readonly onMove = (event: MouseEvent): void => {
-    const target = this.pickTarget(event.clientX, event.clientY);
+    const target = this.pickTarget(
+      event.clientX,
+      event.clientY,
+      this.traySource ?? undefined,
+      "mouse",
+    );
     if (!this.active) {
       if (target) {
         this.dispatcher.emit({
@@ -68,6 +93,22 @@ export class MouseInputAdapter extends PointerAdapterBase {
     const dy = event.clientY - this.y;
     this.x = event.clientX;
     this.y = event.clientY;
+
+    if (this.traySource) {
+      this.target = target;
+      this.dispatcher.emit({
+        type: "move",
+        payload: {
+          source: this.traySource,
+          target,
+          x: event.clientX,
+          y: event.clientY,
+          deltaX: dx,
+          deltaY: dy,
+        },
+      });
+      return;
+    }
 
     if (this.target) {
       this.dispatcher.emit({
@@ -95,7 +136,23 @@ export class MouseInputAdapter extends PointerAdapterBase {
 
   private readonly onUp = (event: MouseEvent): void => {
     if (event.button !== 0) return;
-    if (this.target) {
+    if (this.traySource) {
+      const target = this.pickTarget(
+        event.clientX,
+        event.clientY,
+        this.traySource,
+        "mouse",
+      );
+      this.dispatcher.emit({
+        type: "release",
+        payload: {
+          source: this.traySource,
+          target,
+          x: event.clientX,
+          y: event.clientY,
+        },
+      });
+    } else if (this.target) {
       this.dispatcher.emit({
         type: "release",
         payload: { source: "mouse", target: this.target, x: event.clientX, y: event.clientY },
@@ -103,10 +160,16 @@ export class MouseInputAdapter extends PointerAdapterBase {
     }
     this.active = false;
     this.target = null;
+    this.traySource = null;
   };
 
   private readonly onLeave = (): void => {
-    if (this.active && this.target) {
+    if (this.active && this.traySource) {
+      this.dispatcher.emit({
+        type: "release",
+        payload: { source: this.traySource, target: null, cancelled: true },
+      });
+    } else if (this.active && this.target) {
       this.dispatcher.emit({
         type: "release",
         payload: { source: "mouse", target: this.target, cancelled: true },
@@ -114,6 +177,7 @@ export class MouseInputAdapter extends PointerAdapterBase {
     }
     this.active = false;
     this.target = null;
+    this.traySource = null;
   };
 
   private readonly onWheel = (event: WheelEvent): void => {

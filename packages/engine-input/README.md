@@ -261,7 +261,7 @@ proton.userData.inputId = "proton:1";
 electron.userData.inputId = "electron:3";
 ```
 
-The picker walks up the object hierarchy until it finds `userData.inputId`. This means a GLTF child mesh can be hit while the module still receives the parent entity ID.
+The picker starts at the hit object and walks up the object hierarchy until it finds `userData.inputId`. The nearest tagged object wins; if the hit child is untagged, a tagged parent can provide the stable entity ID. This means a GLTF child mesh can be hit while the module still receives the parent entity ID.
 
 For screen input:
 

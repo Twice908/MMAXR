@@ -12,6 +12,7 @@ export class TouchInputAdapter extends PointerAdapterBase {
   private readonly touches = new Map<number, { x: number; y: number }>();
   private activeTarget: string | null = null;
   private activePointerId: number | null = null;
+  private traySource: string | null = null;
   private dragging = false;
   private pinchDistance: number | null = null;
 
@@ -34,6 +35,7 @@ export class TouchInputAdapter extends PointerAdapterBase {
     this.touches.clear();
     this.activeTarget = null;
     this.activePointerId = null;
+    this.traySource = null;
     super.dispose();
   }
 
@@ -44,9 +46,26 @@ export class TouchInputAdapter extends PointerAdapterBase {
 
     if (this.touches.size === 1) {
       this.activePointerId = event.pointerId;
-      this.activeTarget = this.pickTarget(event.clientX, event.clientY);
+      this.traySource = this.traySourceFor(event.target);
+      this.activeTarget = this.pickTarget(
+        event.clientX,
+        event.clientY,
+        this.traySource ?? undefined,
+        "touch",
+      );
       this.dragging = false;
-      if (this.activeTarget) {
+      if (this.traySource) {
+        this.dispatcher.emit({
+          type: "grab",
+          payload: {
+            source: this.traySource,
+            target: this.activeTarget,
+            pointerId: event.pointerId,
+            x: event.clientX,
+            y: event.clientY,
+          },
+        });
+      } else if (this.activeTarget) {
         this.dispatcher.emit({
           type: "select",
           payload: { source: "touch", target: this.activeTarget, pointerId: event.pointerId },
@@ -83,7 +102,30 @@ export class TouchInputAdapter extends PointerAdapterBase {
       return;
     }
 
-    if (event.pointerId !== this.activePointerId || !this.activeTarget) return;
+    if (event.pointerId !== this.activePointerId) return;
+
+    if (this.traySource) {
+      const target = this.pickTarget(event.clientX, event.clientY, this.traySource, "touch");
+      this.activeTarget = target;
+      const moved = Math.hypot(event.clientX - previous.x, event.clientY - previous.y);
+      if (moved >= this.dragThresholdPx) this.dragging = true;
+      if (this.dragging) {
+        this.dispatcher.emit({
+          type: "move",
+          payload: {
+            source: this.traySource,
+            target,
+            pointerId: event.pointerId,
+            x: event.clientX,
+            y: event.clientY,
+          },
+        });
+        event.preventDefault();
+      }
+      return;
+    }
+
+    if (!this.activeTarget) return;
 
     const moved = Math.hypot(event.clientX - previous.x, event.clientY - previous.y);
     if (moved >= this.dragThresholdPx) this.dragging = true;
@@ -110,7 +152,19 @@ export class TouchInputAdapter extends PointerAdapterBase {
 
     if (this.touches.size < 2) this.pinchDistance = null;
 
-    if (wasActive && this.activeTarget) {
+    if (wasActive && this.traySource) {
+      const target = this.pickTarget(event.clientX, event.clientY, this.traySource, "touch");
+      this.dispatcher.emit({
+        type: "release",
+        payload: {
+          source: this.traySource,
+          target,
+          pointerId: event.pointerId,
+          x: event.clientX,
+          y: event.clientY,
+        },
+      });
+    } else if (wasActive && this.activeTarget) {
       this.dispatcher.emit({
         type: "release",
         payload: {
@@ -126,6 +180,7 @@ export class TouchInputAdapter extends PointerAdapterBase {
     if (wasActive) {
       this.activePointerId = null;
       this.activeTarget = null;
+      this.traySource = null;
       this.dragging = false;
     }
 
@@ -137,8 +192,14 @@ export class TouchInputAdapter extends PointerAdapterBase {
   private readonly onCancel = (event: PointerEvent): void => {
     if (event.pointerType !== "touch") return;
     const target = this.activeTarget;
+    const traySource = this.traySource;
     this.touches.delete(event.pointerId);
-    if (target) {
+    if (traySource) {
+      this.dispatcher.emit({
+        type: "release",
+        payload: { source: traySource, target: null, pointerId: event.pointerId, cancelled: true },
+      });
+    } else if (target) {
       this.dispatcher.emit({
         type: "release",
         payload: { source: "touch", target, pointerId: event.pointerId, cancelled: true },
@@ -146,6 +207,7 @@ export class TouchInputAdapter extends PointerAdapterBase {
     }
     this.activePointerId = null;
     this.activeTarget = null;
+    this.traySource = null;
     this.dragging = false;
     this.pinchDistance = null;
   };

@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { InputAdapter, InputAction, PickFunction, Handedness } from "./types.js";
+import type { InputAdapter, InputAction, PickFunction, Handedness, InputEventMap } from "./types.js";
 import { ActionDispatcher } from "./action-dispatcher.js";
 import { InputEventBus } from "./event-bus.js";
 import { GestureRecognizer } from "./gestures.js";
@@ -56,7 +56,12 @@ export class XrHandInputAdapter implements InputAdapter {
     this.options = options;
   }
 
-  on = this.events.on.bind(this.events);
+  on<K extends keyof InputEventMap>(
+    type: K,
+    listener: (event: InputEventMap[K]) => void,
+  ): () => void {
+    return this.events.on(type, listener);
+  }
 
   update(frameOrDelta?: number | XRFrame): void {
     const frame = typeof frameOrDelta === "number" ? undefined : frameOrDelta;

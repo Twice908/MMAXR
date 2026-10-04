@@ -17,6 +17,11 @@ export {
   type MouseInputOptions,
 } from "./mouse.js";
 
+export type {
+  PointerAdapterOptions,
+  ScreenPickFunction,
+} from "./pointer-base.js";
+
 export {
   TouchInputAdapter,
   type TouchInputOptions,

@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { ActionDispatcher } from "./action-dispatcher.js";
 import { InputEventBus } from "./event-bus.js";
-import type { InputAction, PickFunction, Handedness, InputAdapter } from "./types.js";
+import type { InputAction, PickFunction, Handedness, InputAdapter, InputEventMap } from "./types.js";
 
 export interface XrControllerInputOptions {
   renderer: THREE.WebGLRenderer;
@@ -46,7 +46,12 @@ export class XrControllerInputAdapter implements InputAdapter {
     for (let index = 0; index < count; index++) this.addController(index);
   }
 
-  on = this.events.on.bind(this.events);
+  on<K extends keyof InputEventMap>(
+    type: K,
+    listener: (event: InputEventMap[K]) => void,
+  ): () => void {
+    return this.events.on(type, listener);
+  }
 
   update(): void {
     if (this.disposed) return;

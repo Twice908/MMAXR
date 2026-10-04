@@ -5,12 +5,13 @@ import { TouchInputAdapter, type TouchInputOptions } from "./touch.js";
 import { XrControllerInputAdapter, type XrControllerInputOptions } from "./xr-controller.js";
 import { XrHandInputAdapter, type XrHandInputOptions } from "./xr-hand.js";
 import type { InputAction, PickFunction } from "./types.js";
+import type { ScreenPickFunction } from "./pointer-base.js";
 
 export interface InputManagerOptions {
   renderer: THREE.WebGLRenderer;
   root: HTMLElement;
   dispatch: (action: InputAction) => void;
-  pickScreenTarget: (clientX: number, clientY: number) => string | null;
+  pickScreenTarget: ScreenPickFunction;
   pickWorldRay?: PickFunction;
   enableMouse?: boolean;
   enableTouch?: boolean;

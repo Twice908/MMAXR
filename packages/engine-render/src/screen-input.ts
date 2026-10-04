@@ -1,17 +1,13 @@
 import type { EngineAction } from "@mma/engine-core";
 import { InputManager } from "@mma/engine-input";
+import type { ScreenPickFunction } from "@mma/engine-input";
 import * as THREE from "three";
 
 /** Configuration for translating browser pointer events into engine actions. */
 export interface ScreenInputOptions {
   readonly root: HTMLElement;
   readonly dispatch: (action: EngineAction) => void;
-  readonly pickTarget: (
-    clientX: number,
-    clientY: number,
-    source?: string,
-    pointerType?: string,
-  ) => string | null;
+  readonly pickTarget: ScreenPickFunction;
   readonly onDragEnd?: () => void;
 }
 
@@ -32,10 +28,10 @@ export class ScreenInputAdapter {
       renderer: {} as THREE.WebGLRenderer,
       root: options.root,
       dispatch: (action) => {
+        this.dispatch(action as EngineAction);
         if (action.type === "release") {
           this.onDragEnd?.();
         }
-        this.dispatch(action as EngineAction);
       },
       pickScreenTarget: options.pickTarget,
       enableXrControllers: false,

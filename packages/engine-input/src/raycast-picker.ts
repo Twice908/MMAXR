@@ -2,7 +2,6 @@ import * as THREE from "three";
 import type { PickFunction, PickResult, RayPick } from "./types.js";
 
 export interface RaycastPickerOptions {
-  camera?: THREE.Camera;
   recursive?: boolean;
   layers?: number;
   filter?: (object: THREE.Object3D) => boolean;
