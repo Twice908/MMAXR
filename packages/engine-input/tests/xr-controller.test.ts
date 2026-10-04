@@ -3,11 +3,11 @@ import * as THREE from "three";
 import { XrControllerInputAdapter } from "../src/xr-controller.js";
 import { InputEventBus } from "../src/event-bus.js";
 import { createActionSink } from "./helpers/test-actions.js";
-import { makeFakeRenderer } from "./helpers/fake-xr.js";
+import { asWebGLRenderer, dispatchControllerEvent, makeFakeRenderer } from "./helpers/fake-xr.js";
 
 describe("XrControllerInputAdapter", () => {
   it("creates controller and grip spaces", () => {
-    const renderer = makeFakeRenderer();
+    const renderer = asWebGLRenderer(makeFakeRenderer());
     const sink = createActionSink();
     const adapter = new XrControllerInputAdapter({
       renderer,
@@ -21,7 +21,7 @@ describe("XrControllerInputAdapter", () => {
   });
 
   it("emits sourceAdded with handedness on connect", () => {
-    const renderer = makeFakeRenderer();
+    const renderer = asWebGLRenderer(makeFakeRenderer());
     const sink = createActionSink();
     const events = new InputEventBus();
     const added = vi.fn();
@@ -34,10 +34,7 @@ describe("XrControllerInputAdapter", () => {
     });
 
     const controller = adapter.getController(0);
-    controller.dispatchEvent({
-      type: "connected",
-      data: { handedness: "right" },
-    } as any);
+    dispatchControllerEvent(controller, "connected", { handedness: "right" });
 
     expect(added).toHaveBeenCalledWith({
       source: "xr-controller",
@@ -48,7 +45,7 @@ describe("XrControllerInputAdapter", () => {
   });
 
   it("picks and hovers a target", () => {
-    const renderer = makeFakeRenderer();
+    const renderer = asWebGLRenderer(makeFakeRenderer());
     const sink = createActionSink();
     const adapter = new XrControllerInputAdapter({
       renderer,
@@ -70,7 +67,7 @@ describe("XrControllerInputAdapter", () => {
   });
 
   it("selects and releases a target", () => {
-    const renderer = makeFakeRenderer();
+    const renderer = asWebGLRenderer(makeFakeRenderer());
     const sink = createActionSink();
     const adapter = new XrControllerInputAdapter({
       renderer,
@@ -81,9 +78,9 @@ describe("XrControllerInputAdapter", () => {
     adapter.update();
     const controller = adapter.getController(0);
 
-    controller.dispatchEvent({ type: "connected", data: { handedness: "left" } } as any);
-    controller.dispatchEvent({ type: "selectstart" } as any);
-    controller.dispatchEvent({ type: "selectend" } as any);
+    dispatchControllerEvent(controller, "connected", { handedness: "left" });
+    dispatchControllerEvent(controller, "selectstart");
+    dispatchControllerEvent(controller, "selectend");
 
     expect(sink.actions.map((a) => a.type)).toContain("grab");
     expect(sink.actions.map((a) => a.type)).toContain("release");
@@ -92,7 +89,7 @@ describe("XrControllerInputAdapter", () => {
   });
 
   it("supports squeeze as the activation button", () => {
-    const renderer = makeFakeRenderer();
+    const renderer = asWebGLRenderer(makeFakeRenderer());
     const sink = createActionSink();
     const adapter = new XrControllerInputAdapter({
       renderer,
@@ -105,9 +102,9 @@ describe("XrControllerInputAdapter", () => {
     adapter.update();
     const controller = adapter.getController(0);
 
-    controller.dispatchEvent({ type: "connected", data: { handedness: "right" } } as any);
-    controller.dispatchEvent({ type: "squeezestart" } as any);
-    controller.dispatchEvent({ type: "squeezeend" } as any);
+    dispatchControllerEvent(controller, "connected", { handedness: "right" });
+    dispatchControllerEvent(controller, "squeezestart");
+    dispatchControllerEvent(controller, "squeezeend");
 
     expect(sink.actions.map((a) => a.type)).toEqual(["hover", "grab", "release"]);
 
@@ -115,7 +112,7 @@ describe("XrControllerInputAdapter", () => {
   });
 
   it("releases an active grab on disconnect", () => {
-    const renderer = makeFakeRenderer();
+    const renderer = asWebGLRenderer(makeFakeRenderer());
     const sink = createActionSink();
     const adapter = new XrControllerInputAdapter({
       renderer,
@@ -125,9 +122,9 @@ describe("XrControllerInputAdapter", () => {
 
     adapter.update();
     const controller = adapter.getController(0);
-    controller.dispatchEvent({ type: "connected", data: { handedness: "left" } } as any);
-    controller.dispatchEvent({ type: "selectstart" } as any);
-    controller.dispatchEvent({ type: "disconnected" } as any);
+    dispatchControllerEvent(controller, "connected", { handedness: "left" });
+    dispatchControllerEvent(controller, "selectstart");
+    dispatchControllerEvent(controller, "disconnected");
 
     expect(sink.actions.at(-1)).toMatchObject({
       type: "release",

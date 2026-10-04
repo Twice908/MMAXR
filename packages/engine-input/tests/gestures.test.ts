@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { GestureRecognizer } from "../src/gestures.js";
 import { InputEventBus } from "../src/event-bus.js";
 import { ActionDispatcher } from "../src/action-dispatcher.js";
-import { createActionSink } from "./helpers/test-actions.js";
+import { createActionSink, payloadNumber } from "./helpers/test-actions.js";
 
 describe("GestureRecognizer", () => {
   function create() {
@@ -102,8 +102,8 @@ describe("GestureRecognizer", () => {
     recognizer.updateHand(snapshot(1.2, 0.02, 0, "right"));
 
     expect(sink.actions.some((a) => a.type === "scale")).toBe(true);
-    const scale = sink.actions.find((a) => a.type === "scale")!;
-    expect((scale.payload as any).scale).toBeCloseTo(1.2);
+    const scale = sink.actions.find((a) => a.type === "scale");
+    expect(payloadNumber(scale, "scale")).toBeCloseTo(1.2);
   });
 
   it("emits two-hand rotation", () => {

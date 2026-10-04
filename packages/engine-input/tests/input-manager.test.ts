@@ -1,13 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 import * as THREE from "three";
-import { InputManager } from "../src/input-manager.ts";
+import { InputManager } from "../src/input-manager.js";
 import { FakeDomElement, event, pointerEvent } from "./helpers/fake-dom.js";
-import { makeFakeRenderer } from "./helpers/fake-xr.js";
+import {
+  asWebGLRenderer,
+  asXrFrame,
+  makeFakeRenderer,
+  makeFrameFromJointPositions,
+} from "./helpers/fake-xr.js";
 
 describe("InputManager", () => {
   it("creates all default input adapters", () => {
     const root = new FakeDomElement();
-    const renderer = makeFakeRenderer();
+    const renderer = asWebGLRenderer(makeFakeRenderer());
     const dispatch = vi.fn();
     const manager = new InputManager({
       renderer,
@@ -32,7 +37,7 @@ describe("InputManager", () => {
 
   it("can disable individual adapters", () => {
     const root = new FakeDomElement();
-    const renderer = makeFakeRenderer();
+    const renderer = asWebGLRenderer(makeFakeRenderer());
     const dispatch = vi.fn();
 
     const manager = new InputManager({
@@ -70,9 +75,9 @@ describe("InputManager", () => {
 
   it("forwards XR frames to hand input", () => {
     const root = new FakeDomElement();
-    const renderer = makeFakeRenderer({
+    const renderer = asWebGLRenderer(makeFakeRenderer({
       inputSources: [],
-    });
+    }));
     const dispatch = vi.fn();
 
     const manager = new InputManager({
@@ -86,16 +91,16 @@ describe("InputManager", () => {
       enableXrHands: true,
     });
 
-    expect(() => manager.updateXrFrame({
-      getJointPose: () => null,
-    } as any)).not.toThrow();
+    expect(() =>
+      manager.updateXrFrame(asXrFrame(makeFrameFromJointPositions({})))
+    ).not.toThrow();
 
     manager.dispose();
   });
 
   it("exposes controller spaces when XR controllers are enabled", () => {
     const root = new FakeDomElement();
-    const renderer = makeFakeRenderer();
+    const renderer = asWebGLRenderer(makeFakeRenderer());
     const manager = new InputManager({
       renderer,
       root: root as unknown as HTMLElement,
@@ -114,7 +119,7 @@ describe("InputManager", () => {
 
   it("disposes without leaking listeners", () => {
     const root = new FakeDomElement();
-    const renderer = makeFakeRenderer();
+    const renderer = asWebGLRenderer(makeFakeRenderer());
     const dispatch = vi.fn();
 
     const manager = new InputManager({

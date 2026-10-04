@@ -88,7 +88,7 @@ describe("raycast pickers", () => {
     camera.updateMatrixWorld();
 
     const dom = new FakeDomElement();
-    const picker = createScreenRayPicker(camera, scene, dom);
+    const picker = createScreenRayPicker(camera, scene, dom as unknown as HTMLElement);
 
     expect(picker(400, 300)).toBe("box:1");
   });

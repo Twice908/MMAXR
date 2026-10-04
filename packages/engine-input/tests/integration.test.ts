@@ -6,7 +6,7 @@ import {
   createScreenRayPicker,
 } from "../src/index.js";
 import { FakeDomElement, event, pointerEvent } from "./helpers/fake-dom.js";
-import { makeFakeRenderer } from "./helpers/fake-xr.js";
+import { asWebGLRenderer, makeFakeRenderer } from "./helpers/fake-xr.js";
 
 describe("engine-input integration", () => {
   it("routes mouse and touch through one EngineAction stream", () => {
@@ -24,7 +24,7 @@ describe("engine-input integration", () => {
     scene.add(object);
 
     const root = new FakeDomElement();
-    const renderer = makeFakeRenderer();
+    const renderer = asWebGLRenderer(makeFakeRenderer());
     const dispatch = vi.fn();
 
     const input = new InputManager({
@@ -64,7 +64,7 @@ describe("engine-input integration", () => {
 
   it("keeps the public action vocabulary device-independent", () => {
     const root = new FakeDomElement();
-    const renderer = makeFakeRenderer();
+    const renderer = asWebGLRenderer(makeFakeRenderer());
     const dispatch = vi.fn();
 
     const input = new InputManager({
@@ -97,7 +97,7 @@ describe("engine-input integration", () => {
 
   it("does not create duplicate listeners after repeated updates", () => {
     const root = new FakeDomElement();
-    const renderer = makeFakeRenderer();
+    const renderer = asWebGLRenderer(makeFakeRenderer());
     const dispatch = vi.fn();
 
     const input = new InputManager({
