@@ -9,3 +9,4 @@ test-results/
 modules/chem-atom-builder/narration/en/generated/audible-test/
 modules/**/.mock-narration/
 .DS_Store
+audio/en_GB-jenny_dioco-medium.onnx

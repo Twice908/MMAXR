@@ -161,15 +161,27 @@ describe("ArSessionController", () => {
     });
     await expect(controller.start()).resolves.toMatchObject({
       status: "active",
-      requestedFeatures: ["dom-overlay"],
+      requestedFeatures: ["dom-overlay", "hand-tracking"],
       grantedFeatures: ["dom-overlay"],
     });
     expect(setupResult.requestSession).toHaveBeenCalledWith("immersive-ar", {
-      optionalFeatures: ["dom-overlay"],
+      optionalFeatures: ["dom-overlay", "hand-tracking"],
       domOverlay: { root: overlayRoot },
     });
     expect(setupResult.presentation.enter).toHaveBeenCalledWith(setupResult.session);
     expect(setupResult.started).toHaveBeenCalledWith(["dom-overlay"]);
+  });
+
+  it("records optional hand-tracking when the browser grants it", async () => {
+    const session = new MockSession(["dom-overlay", "hand-tracking"]);
+    const result = setup({ session });
+
+    await expect(result.controller.start()).resolves.toMatchObject({
+      status: "active",
+      requestedFeatures: ["dom-overlay", "hand-tracking"],
+      grantedFeatures: ["dom-overlay", "hand-tracking"],
+    });
+    expect(result.started).toHaveBeenCalledWith(["dom-overlay", "hand-tracking"]);
   });
 
   it("returns a named unsupported error before requesting a session", async () => {

@@ -432,10 +432,32 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     }
   };
 
+  const runCommand = (command: string): void => {
+    const previousMissionId = store.getState().activeMissionId;
+    if (command === "lesson:hint") {
+      const state = store.getState();
+      const mission = manifest.missions.find((item) => item.id === state.activeMissionId);
+      const used = state.activeMissionId ? state.missionProgress[state.activeMissionId]?.hintsUsed ?? 0 : 0;
+      lastHintText = mission?.hints[used] ?? "No more hints for this mission.";
+    }
+    applyCommand(command, store.getState(), dispatchLearningAction, renderer);
+    if (store.getState().activeMissionId !== previousMissionId) {
+      lastHintText = "";
+    }
+    renderState(store.getState());
+  };
+
+  const onCommandClick = (event: MouseEvent): void => {
+    const command = (event.target as Element | null)
+      ?.closest<HTMLElement>("[data-command]")
+      ?.dataset.command;
+    if (typeof command !== "string" || command.length === 0) return;
+    runCommand(command);
+  };
+
   const onInput = (action: InputAction): void => {
     const payload = asPayload(action.payload);
-    switch (action.type) {
-      case "grab": {
+    switch (action.type) {      case "grab": {
         activeParticle = typeof payload.source === "string" ? payload.source : null;
         if (activeParticle?.startsWith("tray:")) {
           renderer.beginDrag(activeParticle.replace("tray:", ""));
@@ -470,19 +492,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
         break;
       case "confirm":
         {
-          const command = typeof payload.command === "string" ? payload.command : "";
-          const previousMissionId = store.getState().activeMissionId;
-          if (command === "lesson:hint") {
-            const state = store.getState();
-            const mission = manifest.missions.find((item) => item.id === state.activeMissionId);
-            const used = state.activeMissionId ? state.missionProgress[state.activeMissionId]?.hintsUsed ?? 0 : 0;
-            lastHintText = mission?.hints[used] ?? "No more hints for this mission.";
-          }
-          applyCommand(command, store.getState(), dispatchLearningAction, renderer);
-          if (store.getState().activeMissionId !== previousMissionId) {
-            lastHintText = "";
-          }
-          renderState(store.getState());
+          runCommand(typeof payload.command === "string" ? payload.command : "");
         }
         break;
       case "back":
@@ -512,6 +522,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
       renderer.endDrag();
     },
   });
+  root.addEventListener("click", onCommandClick);
   renderState(store.getState());
   store.events.emit("module_started", {
     type: "module_started",
@@ -525,6 +536,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     narrationControls.removeEventListener("click", onNarrationAction);
     narrationSpeed.removeEventListener("change", onNarrationSpeedChange);
     root.removeEventListener("click", onEventsAction);
+    root.removeEventListener("click", onCommandClick);
     narrationPlayer.dispose();
     void disposeArControls().finally(() => renderer.dispose());
     root.replaceChildren();

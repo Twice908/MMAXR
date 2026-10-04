@@ -1,5 +1,5 @@
 {
-  "name": "@mma/engine-render",
+  "name": "@mma/engine-input",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -7,11 +7,12 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run tests",
+    "test:watch": "vitest tests"
   },
   "dependencies": {
     "@mma/engine-core": "workspace:*",
-    "@mma/engine-input": "workspace:*",
     "three": "0.186.1"
   },
   "devDependencies": {

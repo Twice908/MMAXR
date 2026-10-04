@@ -96,11 +96,27 @@ importers:
         specifier: workspace:*
         version: link:../schema
 
+  packages/engine-input:
+    dependencies:
+      '@mma/engine-core':
+        specifier: workspace:*
+        version: link:../engine-core
+      three:
+        specifier: 0.186.1
+        version: 0.186.1
+    devDependencies:
+      '@types/three':
+        specifier: 0.186.0
+        version: 0.186.0
+
   packages/engine-render:
     dependencies:
       '@mma/engine-core':
         specifier: workspace:*
         version: link:../engine-core
+      '@mma/engine-input':
+        specifier: workspace:*
+        version: link:../engine-input
       three:
         specifier: 0.186.1
         version: 0.186.1
@@ -123,6 +139,9 @@ importers:
       '@mma/engine-core':
         specifier: workspace:*
         version: link:../engine-core
+      '@mma/engine-input':
+        specifier: workspace:*
+        version: link:../engine-input
 
   packages/kits/chemistry:
     dependencies:
