@@ -16,7 +16,7 @@ export class MouseInputAdapter extends PointerAdapterBase {
 
   constructor(options: MouseInputOptions) {
     super(options);
-    this.rotateSensitivity = options.rotateSensitivity ?? 0.01;
+    this.rotateSensitivity = options.rotateSensitivity ?? 1;
     this.wheelScaleSensitivity = options.wheelScaleSensitivity ?? 0.001;
 
     this.root.addEventListener("mousedown", this.onDown);
@@ -110,28 +110,14 @@ export class MouseInputAdapter extends PointerAdapterBase {
       return;
     }
 
-    if (this.target) {
-      this.dispatcher.emit({
-        type: "move",
-        payload: {
-          source: "mouse",
-          target: this.target,
-          x: event.clientX,
-          y: event.clientY,
-          deltaX: dx,
-          deltaY: dy,
-        },
-      });
-    } else {
-      this.dispatcher.emit({
-        type: "rotate",
-        payload: {
-          source: "mouse",
-          deltaX: dx * this.rotateSensitivity,
-          deltaY: dy * this.rotateSensitivity,
-        },
-      });
-    }
+    this.dispatcher.emit({
+      type: "rotate",
+      payload: {
+        source: "mouse",
+        deltaX: dx * this.rotateSensitivity,
+        deltaY: dy * this.rotateSensitivity,
+      },
+    });
   };
 
   private readonly onUp = (event: MouseEvent): void => {
