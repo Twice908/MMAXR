@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { arTelemetryEventSchema, telemetryEventSchema } from "./telemetry-event.js";
+import {
+  arTelemetryEventSchema,
+  cameraViewTelemetryEventSchema,
+  telemetryEventSchema,
+} from "./telemetry-event.js";
 
 const validEvent = {
   eventId: "550e8400-e29b-41d4-a716-446655440000",
@@ -80,6 +84,32 @@ describe("telemetryEventSchema", () => {
       ...validEvent,
       type: "ar_error",
       payload: { reasonCode: "camera_upload_failed" },
+    }).success).toBe(false);
+  });
+
+  it("validates local camera view lifecycle telemetry with duration and reason", () => {
+    const started = {
+      ...validEvent,
+      type: "camera_view_started",
+      payload: { durationSec: 0, errorReasonCode: "none" },
+      device: { mode: "screen", tier: "mid" },
+    };
+    const ended = {
+      ...validEvent,
+      type: "camera_view_ended",
+      payload: { durationSec: 18, errorReasonCode: "none" },
+      device: { mode: "screen", tier: "mid" },
+    };
+    expect(cameraViewTelemetryEventSchema.safeParse(started).success).toBe(true);
+    expect(cameraViewTelemetryEventSchema.safeParse(ended).success).toBe(true);
+    expect(telemetryEventSchema.safeParse(started).success).toBe(true);
+    expect(cameraViewTelemetryEventSchema.safeParse({
+      ...ended,
+      payload: { durationSec: -1, errorReasonCode: "none" },
+    }).success).toBe(false);
+    expect(cameraViewTelemetryEventSchema.safeParse({
+      ...ended,
+      payload: { durationSec: 0, errorReasonCode: "frame_uploaded" },
     }).success).toBe(false);
   });
 });

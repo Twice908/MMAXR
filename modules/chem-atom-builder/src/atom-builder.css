@@ -132,7 +132,7 @@
 .ar-status { position: fixed; z-index: 29; right: 12px; bottom: max(62px, env(safe-area-inset-bottom)); left: 12px; width: fit-content; max-width: min(540px, calc(100vw - 24px)); padding: var(--glass-pad-pill); border: var(--glass-border-width) solid var(--glass-border-color); border-radius: var(--glass-radius-pill); color: var(--glass-text); background: var(--glass-bg-strong); box-shadow: var(--glass-highlight), var(--glass-shadow); font-size: 13px; line-height: 1.4; }
 .ar-exit { position: fixed; z-index: 30; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); min-height: var(--glass-tap-min); padding: var(--glass-pad-pill); border: var(--glass-border-width) solid var(--glass-border-color); border-radius: var(--glass-radius-button); color: var(--glass-danger-text); background: var(--glass-danger-bg); box-shadow: var(--glass-highlight), var(--glass-shadow); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
 .ar-exit:disabled { opacity: .8; cursor: wait; }
-.ar-overlay-panel { position: fixed; z-index: 20; right: auto; bottom: max(12px, env(safe-area-inset-bottom)); left: max(12px, env(safe-area-inset-left)); width: min(540px, calc(100vw - max(12px, env(safe-area-inset-left)) - max(12px, env(safe-area-inset-right)))); max-height: min(42dvh, 420px); box-sizing: border-box; overflow: auto; padding: var(--glass-pad-panel); border: var(--glass-border-width) solid var(--glass-border-color); border-radius: var(--glass-radius-panel); color: var(--glass-text); background: var(--glass-bg-strong); box-shadow: var(--glass-highlight), var(--glass-shadow); }
+.ar-overlay-panel { position: fixed; z-index: 20; right: auto; bottom: max(12px, env(safe-area-inset-bottom)); left: max(12px, env(safe-area-inset-left)); width: min(540px, calc(100vw - max(12px, env(safe-area-inset-left)) - max(12px, env(safe-area-inset-right)))); max-height: min(42dvh, 420px); box-sizing: border-box; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; padding: var(--glass-pad-panel); border: var(--glass-border-width) solid var(--glass-border-color); border-radius: var(--glass-radius-panel); color: var(--glass-text); background: var(--glass-bg-strong); box-shadow: var(--glass-highlight), var(--glass-shadow); }
 .ar-panel-heading { min-height: 40px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .ar-panel-mission-title { min-width: 0; margin: 0; overflow: hidden; padding: var(--glass-pad-pill); border: var(--glass-border-width) solid var(--glass-border-color); border-radius: var(--glass-radius-pill); color: var(--glass-text); background: var(--glass-bg-strong); box-shadow: var(--glass-highlight), var(--glass-shadow); font-family: Georgia, "Times New Roman", serif; font-size: 16px; text-overflow: ellipsis; white-space: nowrap; }
 .ar-panel-heading button { flex: 0 0 auto; min-height: var(--glass-tap-min); padding: var(--glass-pad-pill); border: var(--glass-border-width) solid var(--glass-border-color); border-radius: var(--glass-radius-pill); color: var(--glass-text); background: var(--glass-bg-strong); box-shadow: var(--glass-highlight), var(--glass-shadow); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
@@ -165,7 +165,12 @@
 .ar-active .ar-overlay-panel .particle-rail { padding: 4px 0; border: 0; }
 .ar-active .ar-overlay-panel .particle-row { min-height: 48px; }
 .ar-active .ar-overlay-panel .rail-footer { display: none; }
-.ar-active .tray-particle { display: none !important; }
+.ar-active .ar-overlay-panel .tray-particle {
+  flex: 0 0 var(--glass-tap-min);
+  width: var(--glass-tap-min);
+  height: var(--glass-tap-min);
+  touch-action: none;
+}
 .ar-active .builder-header,
 .ar-active .lesson-panel,
 .ar-active .narration-hud,

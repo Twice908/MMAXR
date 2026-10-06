@@ -7,6 +7,9 @@ declare global {
     __dispatchMockXrSelect: (target: Element) => void;
     readonly __mockXrSelectCount: number;
     __setMockXrCamera: (x: number, y: number, z: number) => void;
+    __cameraStreams: MediaStream[];
+    __cameraGetUserMediaCalls: MediaStreamConstraints[];
+    __cameraFailureName?: string;
   }
 }
 
@@ -50,6 +53,40 @@ test("lazy-loads Atom Builder and mounts the screen canvas", async ({ page }) =>
   await expect.poll(async () => canvas.evaluate((element) => element.clientWidth)).toBeGreaterThan(0);
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await expectCanvasHasRenderedPixels(page, canvas);
+});
+
+test("hides camera view only for touch-first AR devices or missing camera access", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "xr", {
+      configurable: true,
+      value: { isSessionSupported: async () => true },
+    });
+    const nativeMatchMedia = window.matchMedia.bind(window);
+    window.matchMedia = (query: string): MediaQueryList => {
+      const result = nativeMatchMedia(query);
+      if (query === "(any-pointer: fine)") {
+        Object.defineProperty(result, "matches", { configurable: true, value: false });
+      }
+      return result;
+    };
+  });
+  await page.goto("http://127.0.0.1:5174");
+  await expect(page.getByRole("button", { name: "Camera view" })).toBeHidden();
+  await expect(page.locator(".camera-view-reason")).toContainText("touch-first device");
+
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "xr", {
+      configurable: true,
+      value: { isSessionSupported: async () => false },
+    });
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: undefined,
+    });
+  });
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Camera view" })).toBeHidden();
+  await expect(page.locator(".camera-view-reason")).toContainText("does not provide camera access");
 });
 
 test("mounts and emits telemetry when crypto.randomUUID is unavailable", async ({ page }) => {
@@ -731,7 +768,7 @@ test("mocked AR keeps the atom world-fixed and exposes the lesson through its ov
   expect(expandedPanelBounds?.width).toBeLessThanOrEqual(390 - 24);
   await expect(panel.locator(".narration-controls")).toBeVisible();
   await expect(panel.locator(".particle-rail")).toBeVisible();
-  await expect(panel.locator(".tray-particle").first()).toBeHidden();
+  await expect(panel.locator(".tray-particle").first()).toBeVisible();
   await expect(panel.locator("#assessment-card")).toBeHidden();
   const controlGlassStyles = await page.evaluate(() => {
     const root = getComputedStyle(document.documentElement);
@@ -937,6 +974,228 @@ test("explains camera use before permission and returns cleanly after denial", a
     "permission_denied",
   );
   expect(browserErrors).toEqual([]);
+});
+
+test("desktop keeps camera view available when an XR emulator reports immersive AR", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "xr", {
+      configurable: true,
+      value: { isSessionSupported: async () => true },
+    });
+  });
+  await page.goto("http://127.0.0.1:5174");
+
+  await expect(page.getByRole("button", { name: "View in AR" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Camera view" })).toBeVisible();
+  await expect(page.locator(".camera-view-diagnostic")).toBeHidden();
+});
+
+test("reports the hidden camera-view reason for a touch-first AR device", async ({ page }) => {
+  const diagnostics: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "info") diagnostics.push(message.text());
+  });
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "xr", {
+      configurable: true,
+      value: { isSessionSupported: async () => true },
+    });
+    const nativeMatchMedia = window.matchMedia.bind(window);
+    window.matchMedia = (query: string): MediaQueryList => {
+      const result = nativeMatchMedia(query);
+      if (query === "(any-pointer: fine)") {
+        Object.defineProperty(result, "matches", { configurable: true, value: false });
+      }
+      return result;
+    };
+  });
+  await page.goto("http://127.0.0.1:5174");
+
+  const hiddenReason =
+    "Camera view is hidden because immersive AR is available on a touch-first device.";
+  await expect(page.getByRole("button", { name: "Camera view" })).toBeHidden();
+  await expect(page.locator(".camera-view-reason")).toContainText(hiddenReason);
+  expect(diagnostics).toContain(`Camera view hidden: ${hiddenReason}`);
+
+  await page.getByRole("button", { name: "Events" }).click();
+  await expect(page.locator(".camera-view-diagnostic")).toContainText(
+    `Camera view hidden: ${hiddenReason}`,
+  );
+});
+
+test("desktop camera view uses a live mirrored video behind the atom and stops every track on exit", async ({ page }) => {
+  await page.addInitScript(() => {
+    const mediaDevices = navigator.mediaDevices;
+    const originalGetUserMedia = mediaDevices.getUserMedia.bind(mediaDevices);
+    Object.defineProperty(window, "__cameraStreams", { value: [] });
+    Object.defineProperty(window, "__cameraGetUserMediaCalls", { value: [] });
+    Object.defineProperty(mediaDevices, "getUserMedia", {
+      configurable: true,
+      value: async (constraints: MediaStreamConstraints) => {
+        window.__cameraGetUserMediaCalls.push(constraints);
+        if (window.__cameraFailureName) {
+          throw new DOMException("Mock camera failure", window.__cameraFailureName);
+        }
+        const stream = await originalGetUserMedia(constraints);
+        window.__cameraStreams.push(stream);
+        return stream;
+      },
+    });
+  });
+  await page.goto("http://127.0.0.1:5174");
+  await expect(page.getByRole("heading", { name: "Atom Builder" })).toBeVisible();
+  const before = await page.evaluate(() => ({
+    number: document.querySelector("#atomic-number")?.textContent,
+    progress: document.querySelector("#mission-progress")?.textContent,
+  }));
+  const cameraButton = page.getByRole("button", { name: "Camera view" });
+  await expect(cameraButton).toBeVisible();
+  await cameraButton.click();
+  const dialog = page.getByRole("dialog", { name: "Start camera view?" });
+  await expect(dialog).toContainText("shown on this screen only");
+  await expect(dialog).toContainText("Nothing is recorded or uploaded");
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  expect(await page.evaluate(() => window.__cameraGetUserMediaCalls.length)).toBe(0);
+
+  await cameraButton.click();
+  await page.getByRole("dialog", { name: "Start camera view?" })
+    .getByRole("button", { name: "Start" }).click();
+  const video = page.locator("#atom-scene video.camera-view-video");
+  await expect(video).toBeVisible();
+  await expect.poll(() => video.evaluate((element) => (element as HTMLVideoElement).videoWidth))
+    .toBeGreaterThan(0);
+  await expect(page.getByRole("button", { name: "Exit camera view" })).toBeVisible();
+  expect(await video.evaluate((element) => ({
+    muted: (element as HTMLVideoElement).muted,
+    inline: (element as HTMLVideoElement).playsInline,
+    mirrored: element.classList.contains("camera-view-video--mirrored"),
+    objectFit: getComputedStyle(element).objectFit,
+    position: getComputedStyle(element).position,
+    zIndex: getComputedStyle(element).zIndex,
+  }))).toEqual({
+    muted: true,
+    inline: true,
+    mirrored: true,
+    objectFit: "cover",
+    position: "fixed",
+    zIndex: "0",
+  });
+  expect(await page.locator("#atom-scene canvas").evaluate((element) => ({
+    transform: getComputedStyle(element).transform,
+    zIndex: getComputedStyle(element).zIndex,
+  }))).toEqual({ transform: "none", zIndex: "1" });
+  const videoBounds = await video.boundingBox();
+  expect(videoBounds?.width).toBe(await page.evaluate(() => window.innerWidth));
+  expect(videoBounds?.height).toBe(await page.evaluate(() => window.innerHeight));
+  expect(await page.evaluate(() => window.__cameraGetUserMediaCalls[0]?.video))
+    .toMatchObject({ facingMode: { ideal: "user" } });
+  await expect(page.locator("html")).toHaveClass(/camera-active/);
+  await expect(page.locator("body")).toHaveClass(/camera-active/);
+  await expect(page.locator("#atom-scene canvas")).toBeVisible();
+  expect(await page.locator("#atom-scene canvas").evaluate((element) => {
+    const gl = element.getContext("webgl2");
+    return gl?.getParameter(gl.COLOR_CLEAR_VALUE)[3];
+  })).toBe(0);
+  await page.getByRole("button", { name: "Events" }).click();
+  await expect(page.locator('#dev-event-list [data-event-type="camera_view_started"]')).toHaveCount(1);
+
+  await page.getByRole("button", { name: "Exit camera view" }).click();
+  await expect(video).toHaveCount(0);
+  await expect(page.locator("html")).not.toHaveClass(/camera-active/);
+  await expect(page.locator("body")).not.toHaveClass(/camera-active/);
+  await expect(page.locator("#atom-scene canvas")).toBeVisible();
+  expect(await page.locator("#atom-scene canvas").evaluate((element) => {
+    const gl = element.getContext("webgl2");
+    return gl?.getParameter(gl.COLOR_CLEAR_VALUE)[3];
+  })).toBe(1);
+  await expect(page.getByRole("button", { name: "Camera view" })).toBeVisible();
+  expect(await page.evaluate(() => window.__cameraStreams[0]?.getTracks().map((track) => track.readyState)))
+    .toEqual(["ended"]);
+  await expect(page.locator('#dev-event-list [data-event-type="camera_view_ended"]')).toContainText("none");
+  expect(await page.evaluate(() => ({
+    number: document.querySelector("#atomic-number")?.textContent,
+    progress: document.querySelector("#mission-progress")?.textContent,
+  }))).toEqual(before);
+});
+
+for (const [name, reason, message] of [
+  ["NotAllowedError", "permission_denied", "Camera access was not allowed"],
+  ["NotFoundError", "no_camera", "No camera was found"],
+  ["NotReadableError", "camera_in_use", "camera is busy"],
+]) {
+test(`camera view returns to screen mode after ${name}`, async ({ page }) => {
+  await page.addInitScript((failureName) => {
+    Object.defineProperty(navigator, "xr", {
+      configurable: true,
+      value: { isSessionSupported: async () => false },
+    });
+    Object.defineProperty(navigator.mediaDevices, "getUserMedia", {
+      configurable: true,
+      value: async () => {
+        throw new DOMException("Mock camera failure", failureName);
+      },
+    });
+  }, name);
+  await page.goto("http://127.0.0.1:5174");
+  const numberBefore = await page.locator("#atomic-number").textContent();
+  await page.getByRole("button", { name: "Camera view" }).click();
+  await page.getByRole("dialog", { name: "Start camera view?" })
+    .getByRole("button", { name: "Start" }).click();
+  await expect(page.locator(".camera-view-status")).toContainText(message);
+  await expect(page.locator(".camera-view-video")).toHaveCount(0);
+  await expect(page.locator("html")).not.toHaveClass(/camera-active/);
+  await expect(page.locator("#atom-scene canvas")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Camera view" })).toBeVisible();
+  expect(await page.locator("#atomic-number").textContent()).toBe(numberBefore);
+  await page.getByRole("button", { name: "Events" }).click();
+  await expect(page.locator('#dev-event-list [data-event-type="camera_view_ended"]')).toContainText(reason);
+});
+}
+
+test("camera view stops all tracks when the tab hides or the camera disconnects", async ({ page }) => {
+  await page.addInitScript(() => {
+    const mediaDevices = navigator.mediaDevices;
+    const originalGetUserMedia = mediaDevices.getUserMedia.bind(mediaDevices);
+    Object.defineProperty(window, "__cameraStreams", { value: [] });
+    Object.defineProperty(mediaDevices, "getUserMedia", {
+      configurable: true,
+      value: async (constraints: MediaStreamConstraints) => {
+        const stream = await originalGetUserMedia(constraints);
+        window.__cameraStreams.push(stream);
+        return stream;
+      },
+    });
+  });
+  await page.goto("http://127.0.0.1:5174");
+  await page.getByRole("button", { name: "Camera view" }).click();
+  await page.getByRole("dialog", { name: "Start camera view?" })
+    .getByRole("button", { name: "Start" }).click();
+  await expect(page.locator(".camera-view-video")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Exit camera view" })).toBeVisible();
+
+  await page.evaluate(() => {
+    const track = window.__cameraStreams[0]?.getVideoTracks()[0];
+    if (!track) throw new Error("Fake camera track is missing");
+    track.dispatchEvent(new Event("ended"));
+  });
+  await expect(page.locator(".camera-view-status")).toContainText("camera disconnected");
+  await expect(page.locator(".camera-view-video")).toHaveCount(0);
+  expect(await page.evaluate(() => window.__cameraStreams[0]?.getTracks().map((track) => track.readyState)))
+    .toEqual(["ended"]);
+
+  await page.getByRole("button", { name: "Camera view" }).click();
+  await page.getByRole("dialog", { name: "Start camera view?" })
+    .getByRole("button", { name: "Start" }).click();
+  await expect(page.locator(".camera-view-video")).toBeVisible();
+  await page.evaluate(() => {
+    Object.defineProperty(document, "hidden", { configurable: true, value: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await expect(page.locator(".camera-view-status")).toContainText("tab is hidden");
+  await expect(page.locator(".camera-view-video")).toHaveCount(0);
+  expect(await page.evaluate(() => window.__cameraStreams[1]?.getTracks().map((track) => track.readyState)))
+    .toEqual(["ended"]);
+  await expect(page.locator("html")).not.toHaveClass(/camera-active/);
 });
 
 async function installMockXr(page: import("@playwright/test").Page): Promise<void> {

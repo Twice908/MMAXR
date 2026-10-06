@@ -44,6 +44,7 @@ export {
 } from "./screen-snap.js";
 export {
   ScreenSceneRenderer,
+  setScreenRendererTransparentBackground,
   type ArRenderDiagnostics,
   type ArViewGesture,
   type ArViewTransform,

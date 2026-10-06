@@ -7,7 +7,14 @@ export default defineConfig({
   use: {
     browserName: "chromium",
     launchOptions: {
-      args: ["--enable-webgl", "--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
+      args: [
+        "--enable-webgl",
+        "--use-gl=angle",
+        "--use-angle=swiftshader",
+        "--enable-unsafe-swiftshader",
+        "--use-fake-device-for-media-stream",
+        "--use-fake-ui-for-media-stream",
+      ],
     },
   },
   webServer: {
