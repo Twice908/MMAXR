@@ -149,6 +149,14 @@ function matchesGoal(state: unknown, goal: Readonly<Record<string, unknown>>): b
   );
 }
 
+/** Match every key in a partial goal against the corresponding module state value. */
+export function matchesPartialState(
+  state: unknown,
+  goal: Readonly<Record<string, unknown>>,
+): boolean {
+  return matchesGoal(state, goal);
+}
+
 function jsonEqual(left: unknown, right: unknown): boolean {
   if (Object.is(left, right)) {
     return true;

@@ -10,12 +10,15 @@
     "@mma/chem-atom-builder": "workspace:*",
     "@mma/engine-core": "workspace:*",
     "@mma/engine-render": "workspace:*",
+    "@mma/kit-physics-optics": "workspace:*",
+    "three": "0.186.1",
     "@mma/schema": "workspace:*"
   },
   "devDependencies": {
     "@mma/generate-narration": "workspace:*",
     "piper-tts-web": "1.1.2",
     "vite": "8.3.1",
+    "@types/three": "0.186.0",
     "wasm-media-encoders": "0.7.0"
   }
 }

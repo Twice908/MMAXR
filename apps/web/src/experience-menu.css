@@ -1,0 +1,93 @@
+.experience-menu {
+  position: relative;
+  z-index: 30;
+  flex: 0 0 auto;
+}
+
+.experience-menu-button,
+.experience-menu-panel {
+  border: var(--glass-border-width) solid var(--glass-border-color);
+  border-radius: var(--glass-radius-button);
+  color: var(--glass-text);
+  background: var(--glass-bg-strong);
+  box-shadow: var(--glass-highlight), var(--glass-shadow);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+
+.experience-menu-button {
+  display: inline-flex;
+  min-width: var(--glass-tap-min);
+  min-height: var(--glass-tap-min);
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: var(--glass-pad-pill);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.experience-menu-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.experience-menu-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  display: grid;
+  width: min(280px, calc(100vw - 24px));
+  max-height: min(70dvh, 520px);
+  gap: 4px;
+  overflow-y: auto;
+  padding: 8px;
+  border-radius: var(--glass-radius-panel);
+}
+
+.experience-menu-panel[hidden] {
+  display: none;
+}
+
+.experience-menu-panel a {
+  display: flex;
+  min-height: var(--glass-tap-min);
+  align-items: center;
+  padding: var(--glass-pad-pill);
+  border-radius: var(--glass-radius-pill);
+  color: var(--glass-text);
+  text-decoration: none;
+}
+
+.experience-menu-panel a.is-current {
+  color: var(--glass-primary-text);
+  background: var(--glass-primary-bg);
+}
+
+.experience-menu-button:focus-visible,
+.experience-menu-panel a:focus-visible {
+  outline: 3px solid var(--glass-primary-bg);
+  outline-offset: 2px;
+}
+
+.camera-active .experience-menu-label {
+  display: none;
+}
+
+.camera-active .experience-menu-button {
+  width: var(--glass-tap-min);
+  padding: 0;
+}
+
+.ar-active .experience-menu {
+  display: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .experience-menu *,
+  .experience-menu *::before,
+  .experience-menu *::after {
+    transition-duration: 0.01ms !important;
+  }
+}

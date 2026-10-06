@@ -35,6 +35,12 @@ const coreEventTypeSchema = z.enum([
   "ar_error",
   "camera_view_started",
   "camera_view_ended",
+  "step_started",
+  "step_completed",
+  "prediction_made",
+  "measurement_submitted",
+  "playground_entered",
+  "experience_completed",
 ]);
 
 const telemetryEnvelopeSchema = z

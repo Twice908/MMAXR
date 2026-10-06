@@ -1,0 +1,63 @@
+@import "../../../modules/chem-atom-builder/src/glass-tokens.css";
+
+.visual-gallery {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  color: var(--glass-text);
+  background: var(--glass-bg-strong);
+}
+
+.visual-gallery-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--glass-pad-pill);
+  padding: var(--glass-pad-panel);
+}
+
+.visual-gallery h1,
+.visual-gallery p {
+  margin: 0;
+}
+
+.visual-gallery-scenes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--glass-pad-pill);
+}
+
+.visual-gallery-scenes button,
+.visual-gallery-labels,
+.visual-gallery-stage-mode {
+  min-height: var(--glass-tap-min);
+  padding: var(--glass-pad-pill);
+  border: var(--glass-border-width) solid var(--glass-border-color);
+  border-radius: var(--glass-radius-pill);
+  color: var(--glass-text);
+  background: var(--glass-bg-strong);
+  box-shadow: var(--glass-highlight), var(--glass-shadow);
+  font: inherit;
+  cursor: pointer;
+}
+
+.visual-gallery-scenes button[aria-pressed="true"],
+.visual-gallery-labels[aria-pressed="true"] {
+  color: var(--glass-primary-text);
+  background: var(--glass-primary-bg);
+}
+
+.visual-gallery-scenes button:focus-visible,
+.visual-gallery-labels:focus-visible,
+.visual-gallery-stage-mode:focus-visible {
+  outline: var(--glass-border-width) solid var(--glass-primary-bg);
+}
+
+.visual-gallery canvas {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  touch-action: none;
+}

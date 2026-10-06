@@ -2,6 +2,7 @@ packages:
   - "apps/*"
   - "packages/*"
   - "packages/kits/*"
+  - "packages/kits/physics/*"
   - "modules/*"
   - "tools/*"
 allowBuilds:

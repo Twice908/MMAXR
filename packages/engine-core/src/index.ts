@@ -23,6 +23,7 @@ export {
   createMissionProgress,
   evaluateMission,
   failMission,
+  matchesPartialState,
   requestMissionHint,
   startMission,
   type MissionDefinition,

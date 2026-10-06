@@ -13,8 +13,53 @@ declare global {
   }
 }
 
+const MODULE_URL = "http://127.0.0.1:5174/#/module/chem.atom-builder";
+
+test("shows the three subjects without loading an experience", async ({ page }) => {
+  const requests: string[] = [];
+  page.on("request", (request) => requests.push(request.url()));
+  await page.goto("http://127.0.0.1:5174/#/");
+  await expect(page.getByRole("heading", { name: "Welcome. What would you like to explore?" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Chemistry, 1 experience" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Physics, 0 experiences" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Biology, 0 experiences" })).toBeVisible();
+  await expect(page.getByText("Experiences are on the way")).toHaveCount(2);
+  await expect(page.locator("#atom-scene canvas")).toHaveCount(0);
+  expect(requests.some((url) => /(?:^|\/)three(?:\.module)?\.js/.test(url))).toBe(false);
+});
+
+test("navigates from Chemistry to Atom Builder and back", async ({ page }) => {
+  await page.goto("http://127.0.0.1:5174/#/");
+  await page.getByRole("link", { name: "Chemistry, 1 experience" }).click();
+  await expect(page).toHaveURL(/#\/subject\/chemistry$/);
+  await page.getByRole("link", { name: /Atom Builder/ }).click();
+  await expect(page.getByRole("heading", { name: "Atom Builder" })).toBeVisible();
+  await expect(page.locator("#atom-scene canvas")).toBeVisible();
+  await page.getByRole("link", { name: "Back to Chemistry" }).click();
+  await expect(page).toHaveURL(/#\/subject\/chemistry$/);
+  await expect(page.getByRole("heading", { name: "Chemistry" })).toBeVisible();
+  await page.getByRole("link", { name: "Back to Start" }).click();
+  await expect(page).toHaveURL(/#\/$/);
+  await expect(page.getByRole("heading", { name: "Welcome. What would you like to explore?" })).toBeVisible();
+});
+
+test("returns to Start with a notice for an unknown route", async ({ page }) => {
+  await page.goto("http://127.0.0.1:5174/#/not-a-route");
+  await expect(page.getByRole("status")).toContainText("That page was not found");
+  await expect(page.getByRole("link", { name: "Chemistry, 1 experience" })).toBeVisible();
+});
+
+test("opens a module from the legacy query and exposes developer tools", async ({ page }) => {
+  await page.goto("http://127.0.0.1:5174/?module=chem.atom-builder");
+  await expect(page.getByRole("heading", { name: "Atom Builder" })).toBeVisible();
+  await page.goto("http://127.0.0.1:5174/#/");
+  await expect(page.getByRole("heading", { name: "Developer tools" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Visual gallery" })).toHaveAttribute("href", /\?gallery/);
+  await expect(page.getByRole("link", { name: "Narration generator" })).toHaveAttribute("href", /\?narration-generator/);
+});
+
 test("lazy-loads Atom Builder and mounts the screen canvas", async ({ page }) => {
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto(MODULE_URL);
   await expect(page.getByRole("heading", { name: "Atom Builder" })).toBeVisible();
   const canvas = page.locator("#atom-scene canvas");
   await expect(canvas).toBeVisible();
@@ -70,7 +115,7 @@ test("hides camera view only for touch-first AR devices or missing camera access
       return result;
     };
   });
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto(MODULE_URL);
   await expect(page.getByRole("button", { name: "Camera view" })).toBeHidden();
   await expect(page.locator(".camera-view-reason")).toContainText("touch-first device");
 
@@ -98,7 +143,7 @@ test("mounts and emits telemetry when crypto.randomUUID is unavailable", async (
       value: undefined,
     });
   });
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto(MODULE_URL);
   await expect(page.getByRole("heading", { name: "Build carbon-12" })).toBeVisible();
   await page.getByRole("button", { name: "Events" }).click();
   await expect(page.locator("#dev-event-panel")).toContainText("mission_started");
@@ -106,7 +151,7 @@ test("mounts and emits telemetry when crypto.randomUUID is unavailable", async (
 });
 
 test("waits for a gesture before playing bundled mock narration", async ({ page }) => {
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto(MODULE_URL);
   const enableSound = page.getByRole("button", { name: "Tap to enable sound" });
   await expect(enableSound).toBeVisible();
 
@@ -121,7 +166,7 @@ test("waits for a gesture before playing bundled mock narration", async ({ page 
 test("plays bundled Piper MP3 and loads its timed captions", async ({ page }) => {
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto(MODULE_URL);
   const eventPanel = page.locator("#dev-event-panel");
   await page.getByRole("button", { name: "Events" }).click();
   await page.getByRole("button", { name: "Tap to enable sound" }).click();
@@ -139,7 +184,7 @@ test("changes narration speed mid-cue without playback errors", async ({ page })
   page.on("console", (message) => {
     if (message.type() === "error") playbackErrors.push(message.text());
   });
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto(MODULE_URL);
   await page.getByRole("button", { name: "Events" }).click();
   await page.getByRole("button", { name: "Tap to enable sound" }).click();
   await expect(page.locator("#dev-event-panel")).toContainText("narration_played");
@@ -155,7 +200,7 @@ test("changes narration speed mid-cue without playback errors", async ({ page })
 });
 
 test("loads the opt-in audible mock assets in development", async ({ page }) => {
-  await page.goto("http://127.0.0.1:5174/?narrationAudio=audible-test");
+  await page.goto("http://127.0.0.1:5174/?narrationAudio=audible-test#/module/chem.atom-builder");
   const eventPanel = page.locator("#dev-event-panel");
   await page.getByRole("button", { name: "Events" }).click();
   await page.getByRole("button", { name: "Tap to enable sound" }).click();
@@ -207,7 +252,7 @@ test("committed narration MP3s decode as plausible non-silent speech", async ({ 
     };
   }));
 
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto(MODULE_URL);
   const metrics = await page.evaluate(async (assets) => {
     const context = new AudioContext();
     try {
@@ -257,7 +302,7 @@ test("shows a sound-blocked hint when HTML audio play is rejected after a tap", 
       return Promise.reject(new DOMException("Playback is not allowed", "NotAllowedError"));
     };
   });
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto(MODULE_URL);
   await page.getByRole("button", { name: "Tap to enable sound" }).click();
   await expect(page.locator("#narration-audio-status")).toHaveText("Sound blocked. Tap to try again.");
   await expect(page.getByRole("button", { name: "Tap to enable sound" })).toBeVisible();
@@ -267,7 +312,7 @@ test("shows a sound-blocked hint when HTML audio play is rejected after a tap", 
 });
 
 test("restores narration preferences after reload but still requires a sound gesture", async ({ page }) => {
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto(MODULE_URL);
   await page.getByRole("button", { name: "Tap to enable sound" }).click();
   await expect(page.locator("#narration-audio-status")).toHaveText("Sound enabled");
   await page.getByRole("button", { name: "Mute", exact: true }).click();
@@ -298,7 +343,7 @@ test("restores narration preferences after reload but still requires a sound ges
 });
 
 test("completes every mission muted with captions, including M2", async ({ page }) => {
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto(MODULE_URL);
   await expect(page.getByRole("heading", { name: "Build carbon-12" })).toBeVisible();
   await expect(page.locator("#mission-progress")).toHaveText("Progress 1/4");
   await expect(page.locator("#narration-caption")).toContainText("Build carbon-12");
@@ -380,7 +425,7 @@ test("opens recent events after M2 and reports no browser console errors", async
     }
   });
   page.on("pageerror", (error) => consoleErrors.push(error.message));
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto(MODULE_URL);
   await addParticles(page, "Add proton", 5);
   await addParticles(page, "Add neutron", 6);
   await addParticles(page, "Add electron", 5);
@@ -410,7 +455,7 @@ test("opens recent events after M2 and reports no browser console errors", async
 });
 
 test("shows the next electron shell and keeps the drag label off the drop point", async ({ page }) => {
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto(MODULE_URL);
   const canvas = page.locator("#atom-scene canvas");
   await expect(canvas).toBeVisible();
   await page.getByRole("button", { name: "Add electron" }).click();
@@ -454,7 +499,7 @@ test("hides AR entry and explains unsupported devices", async ({ page }) => {
       value: { isSessionSupported: async () => false },
     });
   });
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto(MODULE_URL);
 
   await expect(page.getByRole("button", { name: "View in AR" })).toBeHidden();
   await expect(page.locator("#ar-support-message")).toContainText(
@@ -476,7 +521,7 @@ test("AR overlay is transparent and camera explanation has two visible actions",
       },
     });
   });
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto(MODULE_URL);
   await page.getByRole("button", { name: "View in AR" }).click();
 
   const dialog = page.getByRole("dialog", { name: "View the atom in AR?" });
@@ -537,7 +582,7 @@ test("AR overlay is transparent and camera explanation has two visible actions",
 
 test("glass surfaces use tokens and fall back for reduced transparency", async ({ page }) => {
   await installMockXr(page);
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto(MODULE_URL);
   await page.getByRole("button", { name: "View in AR" }).click();
   const dialog = page.getByRole("dialog", { name: "View the atom in AR?" });
   await expect(dialog).toBeVisible();
@@ -597,7 +642,7 @@ test("glass surfaces use tokens and fall back for reduced transparency", async (
 test("mocked AR keeps the atom world-fixed and exposes the lesson through its overlay", async ({ page }) => {
   await installMockXr(page);
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto(MODULE_URL);
   await page.getByRole("button", { name: "View in AR" }).click();
   const dialog = page.getByRole("dialog", { name: "View the atom in AR?" });
   await dialog.getByRole("button", { name: "Start AR" }).click();
@@ -655,7 +700,7 @@ test("mocked AR keeps the atom world-fixed and exposes the lesson through its ov
       configurable: true,
       value: () => false,
     });
-    const root = document.querySelector<HTMLElement>("#app");
+    const root = document.querySelector<HTMLElement>(".module-mount");
     if (!root) {
       throw new Error("App overlay root is missing");
     }
@@ -901,7 +946,7 @@ test("mocked AR keeps the atom world-fixed and exposes the lesson through its ov
 test("mocked AR shows one local comfort break reminder after ten minutes", async ({ page }) => {
   await page.clock.install();
   await installMockXr(page);
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto(MODULE_URL);
   await page.getByRole("button", { name: "View in AR" }).click();
   await page.getByRole("dialog", { name: "View the atom in AR?" })
     .getByRole("button", { name: "Start AR" }).click();
@@ -953,7 +998,7 @@ test("explains camera use before permission and returns cleanly after denial", a
       },
     });
   });
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto(MODULE_URL);
 
   const viewInAr = page.getByRole("button", { name: "View in AR" });
   await expect(viewInAr).toBeVisible();
@@ -983,7 +1028,7 @@ test("desktop keeps camera view available when an XR emulator reports immersive 
       value: { isSessionSupported: async () => true },
     });
   });
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto(MODULE_URL);
 
   await expect(page.getByRole("button", { name: "View in AR" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Camera view" })).toBeVisible();
@@ -1009,7 +1054,7 @@ test("reports the hidden camera-view reason for a touch-first AR device", async 
       return result;
     };
   });
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto(MODULE_URL);
 
   const hiddenReason =
     "Camera view is hidden because immersive AR is available on a touch-first device.";
@@ -1042,7 +1087,7 @@ test("desktop camera view uses a live mirrored video behind the atom and stops e
       },
     });
   });
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto(MODULE_URL);
   await expect(page.getByRole("heading", { name: "Atom Builder" })).toBeVisible();
   const before = await page.evaluate(() => ({
     number: document.querySelector("#atomic-number")?.textContent,
@@ -1136,7 +1181,7 @@ test(`camera view returns to screen mode after ${name}`, async ({ page }) => {
       },
     });
   }, name);
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto(MODULE_URL);
   const numberBefore = await page.locator("#atomic-number").textContent();
   await page.getByRole("button", { name: "Camera view" }).click();
   await page.getByRole("dialog", { name: "Start camera view?" })
@@ -1166,7 +1211,7 @@ test("camera view stops all tracks when the tab hides or the camera disconnects"
       },
     });
   });
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto(MODULE_URL);
   await page.getByRole("button", { name: "Camera view" }).click();
   await page.getByRole("dialog", { name: "Start camera view?" })
     .getByRole("button", { name: "Start" }).click();
@@ -1196,6 +1241,41 @@ test("camera view stops all tracks when the tab hides or the camera disconnects"
   expect(await page.evaluate(() => window.__cameraStreams[1]?.getTracks().map((track) => track.readyState)))
     .toEqual(["ended"]);
   await expect(page.locator("html")).not.toHaveClass(/camera-active/);
+});
+
+test("leaving during camera view stops its fake media tracks without console errors", async ({ page }) => {
+  const consoleErrors: string[] = [];
+  const pageErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.addInitScript(() => {
+    const mediaDevices = navigator.mediaDevices;
+    const originalGetUserMedia = mediaDevices.getUserMedia.bind(mediaDevices);
+    Object.defineProperty(window, "__cameraStreams", { value: [] });
+    Object.defineProperty(mediaDevices, "getUserMedia", {
+      configurable: true,
+      value: async (constraints: MediaStreamConstraints) => {
+        const stream = await originalGetUserMedia(constraints);
+        window.__cameraStreams.push(stream);
+        return stream;
+      },
+    });
+  });
+  await page.goto(MODULE_URL);
+  await page.getByRole("button", { name: "Camera view" }).click();
+  await page.getByRole("dialog", { name: "Start camera view?" })
+    .getByRole("button", { name: "Start" }).click();
+  await expect(page.locator(".camera-view-video")).toBeVisible();
+  await page.getByRole("link", { name: "Back to Chemistry" }).click();
+  await expect(page).toHaveURL(/#\/subject\/chemistry$/);
+  await expect(page.locator(".camera-view-video")).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() =>
+    window.__cameraStreams[0]?.getTracks().map((track) => track.readyState),
+  )).toEqual(["ended"]);
+  expect(consoleErrors).toEqual([]);
+  expect(pageErrors).toEqual([]);
 });
 
 async function installMockXr(page: import("@playwright/test").Page): Promise<void> {

@@ -35,6 +35,7 @@ const narrationCueSchema = z
     fallbackAudio: z.string().min(1).optional(),
     captions: z.string().min(1).optional(),
     captionText: z.string().min(1).optional(),
+    reviewed: z.boolean().optional(),
   })
   .strict()
   .refine((cue) => cue.captions !== undefined || cue.captionText !== undefined, {
@@ -58,7 +59,7 @@ const narrationSchema = z
 const levelSchema = z
   .object({
     id: identifierSchema,
-    classes: z.array(z.number().int().positive()).min(1),
+    classes: z.array(z.number().int().positive()).min(1).optional(),
     features: z.array(identifierSchema).min(1),
   })
   .strict();
@@ -96,6 +97,94 @@ const missionSchema = z
   })
   .strict();
 
+const experienceLevelSchema = z.enum(["basic", "extended"]);
+const copyValueSchema = z
+  .object({
+    default: z.string().min(1).optional(),
+    basic: z.string().min(1).optional(),
+    extended: z.string().min(1).optional(),
+  })
+  .strict()
+  .refine((value) => value.default !== undefined || value.basic !== undefined || value.extended !== undefined, {
+    message: "Copy entries must define at least one text variant",
+  });
+
+const experienceStepBaseSchema = z.object({
+  id: identifierSchema,
+  titleKey: identifierSchema,
+  promptKey: identifierSchema,
+  level: experienceLevelSchema.optional(),
+  cueId: identifierSchema.optional(),
+  hints: z.tuple([identifierSchema, identifierSchema, identifierSchema]),
+});
+
+const acceptedValueRuleSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("one_of"), values: z.array(z.union([z.string(), z.number(), z.boolean(), z.null()])) }).strict(),
+  z.object({ kind: z.literal("number"), expected: z.number(), tolerance: z.number().nonnegative() }).strict(),
+]);
+
+const experienceStepSchema = z.discriminatedUnion("type", [
+  experienceStepBaseSchema.extend({ type: z.literal("narrate") }).strict(),
+  experienceStepBaseSchema
+    .extend({
+      type: z.literal("predict"),
+      options: z.array(identifierSchema).min(1),
+      correctOptionId: identifierSchema,
+    })
+    .strict(),
+  experienceStepBaseSchema
+    .extend({ type: z.literal("manipulate"), goal: z.record(z.string(), z.json()) })
+    .strict()
+    .refine((step) => Object.keys(step.goal).length > 0, {
+      message: "Manipulate goal must not be empty",
+    }),
+  experienceStepBaseSchema
+    .extend({
+      type: z.literal("measure"),
+      expected: z.number(),
+      tolerance: z.number().nonnegative(),
+      unit: z.string().min(1),
+    })
+    .strict(),
+  experienceStepBaseSchema
+    .extend({
+      type: z.literal("table"),
+      requiredRows: z
+        .array(z.object({ id: identifierSchema, accepted: acceptedValueRuleSchema }).strict())
+        .min(1),
+    })
+    .strict(),
+  experienceStepBaseSchema
+    .extend({
+      type: z.literal("conclude"),
+      options: z.array(identifierSchema).min(1),
+      correctOptionId: identifierSchema,
+    })
+    .strict(),
+  experienceStepBaseSchema
+    .extend({ type: z.literal("check"), assessmentIds: z.array(identifierSchema).min(1) })
+    .strict(),
+]).superRefine((step, context) => {
+  if ((step.type === "predict" || step.type === "conclude") && !step.options.includes(step.correctOptionId)) {
+    context.addIssue({
+      code: "custom",
+      path: ["correctOptionId"],
+      message: `Step "${step.id}" correctOptionId must be one of its options`,
+    });
+  }
+});
+
+export const experienceSchema = z
+  .object({
+    levels: z.array(experienceLevelSchema).min(1),
+    steps: z.array(experienceStepSchema).min(1),
+    copy: z.record(identifierSchema, copyValueSchema),
+    playground: z.object({ enabled: z.boolean(), tools: z.array(z.string()) }).strict(),
+  })
+  .strict();
+
+const assessmentItemSchema = z.object({ id: identifierSchema, reviewed: z.boolean() }).strict();
+
 export const moduleManifestSchema = z
   .object({
     schemaVersion: z.string().min(1),
@@ -114,6 +203,8 @@ export const moduleManifestSchema = z
     assets: z.array(assetSchema),
     interactions: interactionsSchema,
     missions: z.array(missionSchema),
+    assessments: z.array(assessmentItemSchema).optional(),
+    experience: experienceSchema.optional(),
     rulesPlugin: z.string().min(1),
     narration: narrationSchema.optional(),
   })
@@ -129,7 +220,7 @@ export const moduleManifestSchema = z
       }
     }
 
-    if (manifest.releaseStatus === "release") {
+    if (manifest.releaseStatus === "release" && manifest.experience === undefined) {
       if (manifest.interactions.missions.length === 0 || manifest.missions.length === 0) {
         context.addIssue({
           code: "custom",
@@ -160,6 +251,131 @@ export const moduleManifestSchema = z
           path: ["narration", "cues"],
           message: "Narration cue IDs must be unique",
         });
+      }
+
+      if (manifest.experience) {
+        const experience = manifest.experience;
+        const assessmentIds = new Set((manifest.assessments ?? []).map(({ id }) => id));
+        const cueIds = new Set(manifest.narration?.cues.map(({ id }) => id) ?? []);
+        if (new Set(experience.levels).size !== experience.levels.length) {
+          context.addIssue({
+            code: "custom",
+            path: ["experience", "levels"],
+            message: "Experience level values must be unique",
+          });
+        }
+        const seenStepIds = new Set<string>();
+        for (const [stepIndex, step] of experience.steps.entries()) {
+          const stepPath = ["experience", "steps", stepIndex];
+          if (seenStepIds.has(step.id)) {
+            context.addIssue({
+              code: "custom",
+              path: [...stepPath, "id"],
+              message: `Step "${step.id}" has a duplicate ID`,
+            });
+          }
+          seenStepIds.add(step.id);
+          if (step.level !== undefined && !experience.levels.includes(step.level)) {
+            context.addIssue({
+              code: "custom",
+              path: [...stepPath, "level"],
+              message: `Step "${step.id}" uses a level not declared by the experience`,
+            });
+          }
+          if (step.cueId !== undefined && !cueIds.has(step.cueId)) {
+            context.addIssue({
+              code: "custom",
+              path: [...stepPath, "cueId"],
+              message: `Step "${step.id}" references missing narration cue "${step.cueId}"`,
+            });
+          }
+          if (step.type === "check") {
+            for (const assessmentId of step.assessmentIds) {
+              if (!assessmentIds.has(assessmentId)) {
+                context.addIssue({
+                  code: "custom",
+                  path: [...stepPath, "assessmentIds"],
+                  message: `Step "${step.id}" references missing assessment "${assessmentId}"`,
+                });
+              }
+            }
+          }
+
+          const keys = [
+            step.titleKey,
+            step.promptKey,
+            ...step.hints,
+            ...(step.type === "predict" || step.type === "conclude" ? step.options : []),
+          ];
+          const activeLevels =
+            step.level === undefined ? experience.levels : [step.level];
+          for (const key of keys) {
+            const value = experience.copy[key];
+            if (value === undefined) {
+              context.addIssue({
+                code: "custom",
+                path: [...stepPath],
+                message: `Step "${step.id}" references missing copy key "${key}"`,
+              });
+              continue;
+            }
+            for (const level of activeLevels) {
+              if (value[level] === undefined && value.default === undefined) {
+                context.addIssue({
+                  code: "custom",
+                  path: ["experience", "copy", key],
+                  message: `Step "${step.id}" copy key "${key}" has no text for level "${level}"`,
+                });
+              }
+            }
+          }
+        }
+
+        if (manifest.releaseStatus === "release") {
+          if (!experience.playground.enabled) {
+            context.addIssue({
+              code: "custom",
+              path: ["experience", "playground", "enabled"],
+              message: "Release experiences must enable playground mode",
+            });
+          }
+          if (
+            !experience.steps.some(({ type }) =>
+              type === "manipulate" || type === "predict" || type === "measure",
+            )
+          ) {
+            context.addIssue({
+              code: "custom",
+              path: ["experience", "steps"],
+              message: "Release experiences must define a Mission-layer step",
+            });
+          }
+          if (!experience.steps.some(({ type }) => type === "check")) {
+            context.addIssue({
+              code: "custom",
+              path: ["experience", "steps"],
+              message: "Release experiences must define a Check-layer step",
+            });
+          }
+          for (const [index, cue] of (manifest.narration?.cues ?? []).entries()) {
+            if (cue.reviewed !== true) {
+              context.addIssue({
+                code: "custom",
+                path: ["narration", "cues", index, "reviewed"],
+                message: `Narration cue "${cue.id}" must be reviewed for release`,
+              });
+            }
+          }
+          for (const [index, assessment] of (manifest.assessments ?? []).entries()) {
+            if (!assessment.reviewed) {
+              context.addIssue({
+                code: "custom",
+                path: ["assessments", index, "reviewed"],
+                message: `Assessment "${assessment.id}" must be reviewed for release`,
+              });
+            }
+          }
+        }
       }
       for (const [index, cue] of manifest.narration.cues.entries()) {
         if (cue.missionId && !missionIds.includes(cue.missionId)) {
@@ -218,3 +434,4 @@ export const moduleManifestSchema = z
   });
 
 export type ModuleManifest = z.infer<typeof moduleManifestSchema>;
+export type ManifestExperience = z.infer<typeof experienceSchema>;

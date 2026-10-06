@@ -7,6 +7,8 @@ export type CurriculumBoard = "CBSE" | "ICSE" | "STATE";
 export interface ConceptDefinition {
   readonly classes: readonly number[];
   readonly boards: readonly CurriculumBoard[];
+  readonly title?: string;
+  readonly description?: string;
 }
 
 /** The authoritative concept registry consumed by manifest validation. */

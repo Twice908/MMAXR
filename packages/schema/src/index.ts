@@ -1,5 +1,7 @@
 export {
+  experienceSchema,
   moduleManifestSchema,
+  type ManifestExperience,
   type ModuleManifest,
 } from "./module-manifest.js";
 export {

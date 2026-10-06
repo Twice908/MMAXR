@@ -9,7 +9,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
  * the tray-aware picking, or the drop reducer regresses.
  */
 
-const APP_URL = "http://127.0.0.1:5174";
+const APP_URL = "http://127.0.0.1:5174/#/module/chem.atom-builder";
 const CAMERA_FOV = 42;
 const SCENE_SCALE = 14;
 

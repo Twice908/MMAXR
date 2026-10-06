@@ -7,23 +7,47 @@ import {
 } from "../src/index.js";
 
 describe("concept registry", () => {
-  it("maps all requested concepts to Class 9-10 and the three boards", () => {
+  it("maps all concepts to their configured classes and the three boards", () => {
     expect(validateConceptRegistry(concepts)).toEqual([]);
     expect(Object.keys(conceptRegistry)).toEqual([
       "sci.chem.atom.structure",
       "sci.chem.atom.shells",
       "sci.chem.atom.ions",
       "sci.chem.atom.isotopes",
+      "sci.phys.light.reflection.plane",
+      "sci.phys.light.image.plane",
+      "sci.phys.light.mirrors.combination",
     ]);
+    for (const id of Object.keys(conceptRegistry).slice(0, 4)) {
+      expect(conceptRegistry[id]?.classes).toEqual([9, 10]);
+    }
+    for (const id of Object.keys(conceptRegistry).slice(4)) {
+      expect(conceptRegistry[id]?.classes).toEqual([6]);
+    }
     for (const definition of Object.values(conceptRegistry)) {
-      expect(definition.classes).toEqual([9, 10]);
       expect(definition.boards).toEqual(["CBSE", "ICSE", "STATE"]);
     }
   });
 
-  it("recognizes registered IDs and rejects unknown IDs", () => {
-    expect(isKnownConceptId("sci.chem.atom.ions")).toBe(true);
+  it("recognizes new registered IDs and rejects unknown IDs", () => {
+    expect(isKnownConceptId("sci.phys.light.reflection.plane")).toBe(true);
+    expect(isKnownConceptId("sci.phys.light.image.plane")).toBe(true);
+    expect(isKnownConceptId("sci.phys.light.mirrors.combination")).toBe(true);
     expect(isKnownConceptId("sci.chem.atom.unknown")).toBe(false);
+  });
+
+  it("keeps concept IDs, titles, and descriptions free of standard-specific terms", () => {
+    const standardSpecificTerm = /\b(std|standard|class|grade|olympiad|homi|bhabha|exam)\b/i;
+
+    for (const [conceptId, definition] of Object.entries(conceptRegistry)) {
+      expect(conceptId).not.toMatch(standardSpecificTerm);
+      if (definition.title !== undefined) {
+        expect(definition.title).not.toMatch(standardSpecificTerm);
+      }
+      if (definition.description !== undefined) {
+        expect(definition.description).not.toMatch(standardSpecificTerm);
+      }
+    }
   });
 
   it("reports malformed registry entries", () => {

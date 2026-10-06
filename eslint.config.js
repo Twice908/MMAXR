@@ -8,7 +8,7 @@ export default tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ["packages/schema/**/*.ts"],
+    files: ["packages/schema/src/**/*.ts"],
     rules: {
       "no-restricted-imports": [
         "error",
@@ -18,6 +18,29 @@ export default tseslint.config(
             "@mma/engine-*",
             "@mma/kits/*",
             "@mma/modules/*",
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ["packages/schema/src/**/*.test.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            { group: ["@mma/web"] },
+            { group: ["@mma/kits/*"] },
+            { group: ["@mma/modules/*"] },
+            { group: ["@mma/engine-guided"], allowTypeImports: true },
+            { group: ["../../engine-guided/**"], allowTypeImports: true },
+            { group: ["@mma/engine-core"] },
+            { group: ["@mma/engine-input"] },
+            { group: ["@mma/engine-xr"] },
+            { group: ["@mma/engine-assess"] },
+            { group: ["@mma/engine-render"] },
+            { group: ["@mma/engine-voice"] },
           ],
         },
       ],
@@ -77,6 +100,59 @@ export default tseslint.config(
         { name: "crypto", message: "Inject an ID generator instead of using ambient randomness." },
       ],
       "no-console": "error",
+    },
+  },
+  {
+    files: ["packages/kits/physics/optics/**/*.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            "@mma/engine-core",
+            "@mma/modules/*",
+            "@mma/web",
+            "@mma/api",
+            "**/engine-core/**",
+            "**/modules/**",
+            "**/apps/**",
+            "three",
+            "three/*",
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ["packages/engine-guided/src/**/*.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            "@mma/curriculum",
+            "@mma/schema",
+            "@mma/kit-*",
+            "@mma/kits/*",
+            "@mma/modules/*",
+            "@mma/engine-assess",
+            "@mma/engine-input",
+            "@mma/engine-render",
+            "@mma/engine-voice",
+            "@mma/engine-xr",
+            "@mma/web",
+            "@mma/api",
+            "**/kits/**",
+            "**/modules/**",
+            "**/engine-render/**",
+            "**/engine-voice/**",
+            "**/engine-xr/**",
+            "**/apps/**",
+            "three",
+            "three/*",
+          ],
+        },
+      ],
     },
   },
 );

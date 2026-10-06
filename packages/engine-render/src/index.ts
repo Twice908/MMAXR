@@ -60,3 +60,21 @@ export {
   type ScreenSceneFrame,
   type SphereBatch,
 } from "./screen-renderer.js";
+export { arcPoints, type ArcGeometry, type Point2 } from "./visuals/arc.js";
+export { AngleArc, type AngleArcOptions } from "./visuals/angle-arc.js";
+export { BeamLine, type BeamLineOptions } from "./visuals/beam-line.js";
+export { dashPolyline } from "./visuals/dash.js";
+export { gridSegments, type GridSegment } from "./visuals/grid-segments.js";
+export { LabStage, type LabStageOptions } from "./visuals/lab-stage.js";
+export {
+  LabelSprite,
+  type LabelCanvas,
+  type LabelCanvasFactory,
+  type LabelCanvasContext,
+  type LabelSpriteOptions,
+} from "./visuals/label-sprite.js";
+export { PointMarker, type PointMarkerKind, type PointMarkerOptions } from "./visuals/point-marker.js";
+export { createPlaneMapper, type PlaneMapper, type PlaneMapperOptions } from "./visuals/plane-mapper.js";
+export { ribbonVertices, type RibbonGeometry } from "./visuals/ribbon.js";
+export { TextCard, type TextCardOptions } from "./visuals/text-card.js";
+export { visualTokens, type VisualTokens } from "./visuals/tokens.js";

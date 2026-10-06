@@ -14,5 +14,23 @@
   "sci.chem.atom.isotopes": {
     "classes": [9, 10],
     "boards": ["CBSE", "ICSE", "STATE"]
+  },
+  "sci.phys.light.reflection.plane": {
+    "title": "Reflection from a plane mirror",
+    "description": "A plane mirror reflects light and changes its direction.",
+    "classes": [6],
+    "boards": ["CBSE", "ICSE", "STATE"]
+  },
+  "sci.phys.light.image.plane": {
+    "title": "Image formation by a plane mirror",
+    "description": "A plane mirror forms an image that appears behind the mirror.",
+    "classes": [6],
+    "boards": ["CBSE", "ICSE", "STATE"]
+  },
+  "sci.phys.light.mirrors.combination": {
+    "title": "Combination of plane mirrors",
+    "description": "Two or more plane mirrors can produce multiple images.",
+    "classes": [6],
+    "boards": ["CBSE", "ICSE", "STATE"]
   }
 }

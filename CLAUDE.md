@@ -12,6 +12,7 @@ Current status (update this block as work completes):
 - Done: Phase 2a screen-mode scripted narration player, ten reviewed English scripts, browser-only Piper generation, MP3 playback, and silent fallback.
 - Done: Phase 3a-4a phone AR lesson flow with a world-fixed atom, DOM controls, a collapsible lesson panel, comfort safeguards, and touch-only view controls (pinch scale, one-finger rotation, reset); AR particle dragging is not enabled.
 - Done: Desktop screen camera view with local-only video, screen input, and clean media-track teardown; it does not use world tracking.
+- Done: Web Start page, subject pages, hash routes, manifest catalogue, and developer tool links; routes are documented in `docs/routes.md`.
 - Next: Review the eight assessment items and verify generated narration on desktop and phone.
 - Not started: Phase 2b live voice guide, remaining XR work (including 3a-4b and VR), portal link (Phase 4).
 
@@ -89,6 +90,7 @@ Also: new logic has unit tests; public APIs have TSDoc; no leftover debug code; 
 - Schemas: `packages/schema` (`module-manifest.ts`, `telemetry-event.ts`).
 - Engine: `packages/engine-core` (store, actions, events, missions).
 - Chemistry rules: `packages/kits/chemistry`.
+- Optics rules: `packages/kits/physics/optics`.
 - Narration: `packages/engine-voice`; mock asset generator: `tools/generate-narration`.
 - Decisions: `docs/adr/`.
 - Device testing record: `docs/device-matrix.md`.

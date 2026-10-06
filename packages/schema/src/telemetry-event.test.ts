@@ -112,4 +112,24 @@ describe("telemetryEventSchema", () => {
       payload: { durationSec: 0, errorReasonCode: "frame_uploaded" },
     }).success).toBe(false);
   });
+
+  it.each([
+    "step_started",
+    "step_completed",
+    "prediction_made",
+    "measurement_submitted",
+    "playground_entered",
+    "experience_completed",
+  ])("accepts guided telemetry type %s", (type) => {
+    expect(telemetryEventSchema.safeParse({ ...validEvent, type, payload: { stepId: "count-step" } }).success)
+      .toBe(true);
+  });
+
+  it("allows stepId in the existing hint_used payload", () => {
+    expect(telemetryEventSchema.safeParse({
+      ...validEvent,
+      type: "hint_used",
+      payload: { stepId: "count-step", hintLevel: "nudge" },
+    }).success).toBe(true);
+  });
 });
