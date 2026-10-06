@@ -859,7 +859,9 @@ function bounceParticle(element: HTMLElement | null): void {
 }
 
 function isArHudTarget(target: EventTarget | null): boolean {
-  return target instanceof Element && target.closest(
+  // Tray particles stay draggable: their gestures must reach the input adapter,
+  // while every other panel gesture is left to native overlay scrolling.
+  return target instanceof Element && target.closest("[data-particle]") === null && target.closest(
     ".ar-overlay-panel, .ar-exit, .ar-status, .ar-break-reminder, .ar-diagnostics, .ar-confirmation",
   ) !== null;
 }

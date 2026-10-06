@@ -139,6 +139,62 @@ export function mountCameraView(options: CameraViewOptions): () => void {
   status.setAttribute("aria-live", "polite");
   status.hidden = true;
 
+  const panel = document.createElement("section");
+  panel.className = "camera-view-panel is-collapsed";
+  panel.setAttribute("aria-label", "Camera view controls");
+  panel.hidden = true;
+  const panelHeading = document.createElement("header");
+  panelHeading.className = "camera-view-panel-heading";
+  const panelToggle = document.createElement("button");
+  panelToggle.type = "button";
+  panelToggle.dataset.cameraAction = "panel-toggle";
+  panelToggle.setAttribute("aria-expanded", "false");
+  panelToggle.textContent = "Show panel";
+  panelHeading.append(panelToggle);
+  panel.append(panelHeading);
+
+  const missionTitle = root.querySelector<HTMLElement>("#mission-title");
+  const inspector = root.querySelector<HTMLElement>(".atom-inspector");
+  const panelSelectors = [
+    "#lesson-panel", ".narration-hud", "#assessment-card",
+    "#lesson-summary", "#free-play-status", ".particle-rail",
+  ].map((selector) => root.querySelector<HTMLElement>(selector));
+  const panelContents = panelSelectors.filter((element): element is HTMLElement => element !== null);
+  if (!missionTitle || !inspector || panelContents.length !== panelSelectors.length) {
+    throw new Error("Camera view controls could not find the panel contents.");
+  }
+
+  const placements = new Map<HTMLElement, { parent: Element; next: Element | null }>();
+  const moveIntoPanel = (element: HTMLElement, into: HTMLElement, before: Element | null = null): void => {
+    if (!placements.has(element)) {
+      placements.set(element, { parent: element.parentElement ?? root, next: element.nextElementSibling });
+    }
+    into.insertBefore(element, before);
+  };
+  const restorePlacement = (element: HTMLElement): void => {
+    const spot = placements.get(element);
+    if (!spot) {
+      return;
+    }
+    placements.delete(element);
+    spot.parent.insertBefore(element, spot.next?.parentNode === spot.parent ? spot.next : null);
+  };
+  const restorePlacements = (): void => {
+    for (const element of [...placements.keys()].reverse()) {
+      restorePlacement(element);
+    }
+  };
+  const setPanelCollapsed = (collapsed: boolean): void => {
+    panel.classList.toggle("is-collapsed", collapsed);
+    panelToggle.textContent = collapsed ? "Show panel" : "Hide panel";
+    panelToggle.setAttribute("aria-expanded", String(!collapsed));
+    if (collapsed) {
+      restorePlacement(inspector);
+    } else {
+      moveIntoPanel(inspector, panel);
+    }
+  };
+
   const diagnostic = options.diagnostics
     ? document.createElement("p")
     : null;
@@ -158,6 +214,12 @@ export function mountCameraView(options: CameraViewOptions): () => void {
   }
   heading.append(button, reason);
   root.append(dialog, exit, status);
+  const builder = root.querySelector<HTMLElement>(".atom-builder");
+  if (!builder) {
+    throw new Error("Camera view controls could not find the atom builder.");
+  }
+  // The panel lives inside the builder so the module's particle and panel colours resolve.
+  builder.append(panel);
 
   let disposed = false;
   let starting = false;
@@ -198,6 +260,9 @@ export function mountCameraView(options: CameraViewOptions): () => void {
     stream = null;
     video = null;
     exit.hidden = true;
+    setPanelCollapsed(true);
+    restorePlacements();
+    panel.hidden = true;
     removeActivePresentation();
   };
   const endCameraView = (
@@ -276,6 +341,12 @@ export function mountCameraView(options: CameraViewOptions): () => void {
       reason.hidden = true;
       exit.hidden = false;
       setStatus("");
+      for (const element of panelContents) {
+        moveIntoPanel(element, panel);
+      }
+      moveIntoPanel(missionTitle, panelHeading, panelToggle);
+      panel.hidden = false;
+      setPanelCollapsed(true);
       emitTelemetry("camera_view_started", 0, "none");
     } catch (error) {
       if (disposed || token !== requestToken) {
@@ -297,19 +368,18 @@ export function mountCameraView(options: CameraViewOptions): () => void {
     endCameraView("page_hidden", "Camera view stopped. You are back in screen mode.");
   };
   const isCameraHudTarget = (target: EventTarget | null): boolean =>
-    target instanceof Element && target.closest(
-      ".builder-header, .lesson-panel, .narration-hud, .particle-rail, .atom-inspector, " +
+    target instanceof Element && target.closest(".particle-rail, [data-particle]") === null && target.closest(
+      ".builder-header, .lesson-panel, .narration-hud, .atom-inspector, " +
       ".scene-heading, .assessment-card, .lesson-summary, .free-play-status, .dev-events-toggle, " +
-      ".dev-event-panel, .camera-view-entry, .camera-view-exit, .camera-view-confirmation, .camera-view-status",
+      ".dev-event-panel, .camera-view-entry, .camera-view-exit, .camera-view-confirmation, .camera-view-status, " +
+      ".camera-view-panel",
     ) !== null;
   const onCameraHudInput = (event: Event): void => {
     if (!root.classList.contains("camera-active") || !isCameraHudTarget(event.target)) {
       return;
     }
+    // Panels keep native wheel and touch scrolling; the renderer never sees these gestures.
     event.stopPropagation();
-    if (event.type === "wheel") {
-      event.preventDefault();
-    }
   };
   const onButtonClick = (): void => {
     setStatus("");
@@ -328,9 +398,13 @@ export function mountCameraView(options: CameraViewOptions): () => void {
   const onExitClick = (): void => {
     endCameraView("none", "Camera view ended. You are back in screen mode.");
   };
+  const onPanelToggleClick = (): void => {
+    setPanelCollapsed(!panel.classList.contains("is-collapsed"));
+  };
   button.addEventListener("click", onButtonClick);
   dialog.addEventListener("click", onDialogClick);
   exit.addEventListener("click", onExitClick);
+  panelToggle.addEventListener("click", onPanelToggleClick);
   environment.document.addEventListener("visibilitychange", onVisibilityChange);
   environment.document.defaultView?.addEventListener("pagehide", onPageHide);
   root.addEventListener("pointerdown", onCameraHudInput, true);
@@ -361,6 +435,7 @@ export function mountCameraView(options: CameraViewOptions): () => void {
     button.removeEventListener("click", onButtonClick);
     dialog.removeEventListener("click", onDialogClick);
     exit.removeEventListener("click", onExitClick);
+    panelToggle.removeEventListener("click", onPanelToggleClick);
     environment.document.removeEventListener("visibilitychange", onVisibilityChange);
     environment.document.defaultView?.removeEventListener("pagehide", onPageHide);
     root.removeEventListener("pointerdown", onCameraHudInput, true);
@@ -381,6 +456,7 @@ export function mountCameraView(options: CameraViewOptions): () => void {
     dialog.remove();
     exit.remove();
     status.remove();
+    panel.remove();
     diagnostic?.remove();
   };
 }

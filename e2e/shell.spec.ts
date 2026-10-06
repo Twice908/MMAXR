@@ -768,7 +768,7 @@ test("mocked AR keeps the atom world-fixed and exposes the lesson through its ov
   expect(expandedPanelBounds?.width).toBeLessThanOrEqual(390 - 24);
   await expect(panel.locator(".narration-controls")).toBeVisible();
   await expect(panel.locator(".particle-rail")).toBeVisible();
-  await expect(panel.locator(".tray-particle").first()).toBeHidden();
+  await expect(panel.locator(".tray-particle").first()).toBeVisible();
   await expect(panel.locator("#assessment-card")).toBeHidden();
   const controlGlassStyles = await page.evaluate(() => {
     const root = getComputedStyle(document.documentElement);
