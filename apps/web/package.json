@@ -10,6 +10,7 @@
     "@mma/chem-atom-builder": "workspace:*",
     "@mma/engine-core": "workspace:*",
     "@mma/engine-render": "workspace:*",
+    "@mma/physics-plane-mirror": "workspace:*",
     "@mma/kit-physics-optics": "workspace:*",
     "three": "0.186.1",
     "@mma/schema": "workspace:*"

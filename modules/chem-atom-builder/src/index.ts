@@ -110,6 +110,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
           <h2 id="mission-title">Build carbon-12</h2>
           <p id="mission-goal">Build a neutral carbon atom with 6 protons, 6 neutrons, and 6 electrons.</p>
           <p class="mission-progress" id="mission-progress">Progress 0/4</p>
+        </div>
         <div class="lesson-controls">
           <button type="button" data-command="lesson:hint">Hint</button>
           <button type="button" data-command="lesson:check">Check</button>
@@ -512,7 +513,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
           if (root.classList.contains("ar-active") && payload.source === "touch") {
             renderer.scaleArView(payload.delta);
           } else {
-            renderer.scale(payload.delta);
+            renderer.scale(payload.source === "touch" ? -payload.delta : payload.delta);
           }
         }
         break;

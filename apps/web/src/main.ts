@@ -260,24 +260,26 @@ async function mountModule(
       catalogue,
     });
 
-    const idGenerator = engineCore.createIdGenerator({
-      crypto: globalThis.crypto,
-      now: Date.now,
-    });
-    disposeCameraView = cameraView.mountCameraView({
-      root: moduleRoot,
-      sceneHost,
-      telemetryContext: {
-        studentRef: idGenerator(),
-        sessionId: idGenerator(),
-        moduleId: manifest.id,
-        moduleVersion: "0.0.0",
-        device: { mode: "screen", tier: "mid" },
-      },
-      clock: () => new Date().toISOString(),
-      idGenerator,
-      diagnostics: import.meta.env.DEV,
-    });
+    if (runtime.cameraView !== false) {
+      const idGenerator = engineCore.createIdGenerator({
+        crypto: globalThis.crypto,
+        now: Date.now,
+      });
+      disposeCameraView = cameraView.mountCameraView({
+        root: moduleRoot,
+        sceneHost,
+        telemetryContext: {
+          studentRef: idGenerator(),
+          sessionId: idGenerator(),
+          moduleId: manifest.id,
+          moduleVersion: "0.0.0",
+          device: { mode: "screen", tier: "mid" },
+        },
+        clock: () => new Date().toISOString(),
+        idGenerator,
+        diagnostics: import.meta.env.DEV,
+      });
+    }
     moduleTeardown = () => {
       disposeCameraView?.();
       disposeExperienceMenu?.();

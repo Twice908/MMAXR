@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildCatalogue, type CatalogueManifest } from "./catalogue.js";
+import {
+  buildCatalogue,
+  loadCatalogue,
+  loadModuleRuntime,
+  type CatalogueManifest,
+} from "./catalogue.js";
 
 const manifests: readonly CatalogueManifest[] = [
   {
@@ -51,5 +56,22 @@ describe("module catalogue", () => {
 
   it("keeps draft experiences and marks them when configured on", () => {
     expect(buildCatalogue(manifests, true).map(({ isDraft }) => isDraft)).toEqual([true, false, true]);
+  });
+
+  it("registers and lazily loads the plane-mirror module", async () => {
+    const catalogue = await loadCatalogue();
+    expect(catalogue).toContainEqual(expect.objectContaining({
+      id: "physics.plane-mirror",
+      subject: "physics",
+      title: "Reflection from a Plane Mirror",
+      isDraft: true,
+    }));
+    const runtime = await loadModuleRuntime("physics.plane-mirror");
+    expect(runtime?.manifest).toMatchObject({
+      id: "physics.plane-mirror",
+      modes: ["screen"],
+    });
+    expect(runtime?.cameraView).toBe(false);
+    expect(runtime?.mount).toBeTypeOf("function");
   });
 });

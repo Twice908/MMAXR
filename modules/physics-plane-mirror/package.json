@@ -1,0 +1,23 @@
+{
+  "name": "@mma/physics-plane-mirror",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@mma/engine-core": "workspace:*",
+    "@mma/engine-guided": "workspace:*",
+    "@mma/engine-render": "workspace:*",
+    "@mma/kit-physics-optics": "workspace:*",
+    "@mma/schema": "workspace:*",
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "@types/three": "0.186.0"
+  }
+}

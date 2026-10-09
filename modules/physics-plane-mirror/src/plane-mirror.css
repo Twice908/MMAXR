@@ -1,0 +1,240 @@
+@import "../../chem-atom-builder/src/glass-tokens.css";
+
+.plane-mirror {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: 100%;
+  min-height: 100dvh;
+  color: var(--glass-text);
+  background: var(--glass-bg-strong);
+}
+
+.plane-mirror-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--glass-pad-panel);
+  padding: var(--glass-pad-panel);
+}
+
+.plane-mirror-header h1,
+.plane-mirror-header p {
+  margin: 0;
+}
+
+.plane-mirror-guided {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--glass-pad-panel);
+  align-items: center;
+  margin: 0 var(--glass-pad-panel) var(--glass-pad-panel);
+  padding: var(--glass-pad-panel);
+  border: var(--glass-border-width) solid var(--glass-border-color);
+  border-radius: var(--glass-radius-panel);
+  background: var(--glass-bg-strong);
+  box-shadow: var(--glass-highlight), var(--glass-shadow);
+}
+
+.plane-mirror-guided-copy h2,
+.plane-mirror-guided-copy p,
+.plane-mirror-guided-footer p {
+  margin: 0;
+}
+
+.plane-mirror-guided-copy h2 {
+  margin-bottom: var(--glass-pad-pill);
+}
+
+.plane-mirror-guided-progress {
+  margin-bottom: var(--glass-pad-pill) !important;
+  font-size: 0.875rem;
+  opacity: 0.8;
+}
+
+.plane-mirror-guided-actions,
+.plane-mirror-guided-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--glass-pad-pill);
+}
+
+.plane-mirror-guided-actions label {
+  display: grid;
+  gap: var(--glass-pad-pill);
+}
+
+.plane-mirror-guided-actions button,
+.plane-mirror-guided-actions select,
+.plane-mirror-guided-actions input,
+.plane-mirror-guided-footer button {
+  min-height: var(--glass-tap-min);
+  padding: 0.5rem 0.75rem;
+  border: var(--glass-border-width) solid var(--glass-border-color);
+  border-radius: var(--glass-radius-pill);
+  color: var(--glass-text);
+  background: var(--glass-bg-strong);
+  font: inherit;
+}
+
+.plane-mirror-guided-actions button,
+.plane-mirror-guided-footer button {
+  cursor: pointer;
+}
+
+.plane-mirror-guided-actions button:focus-visible,
+.plane-mirror-guided-actions select:focus-visible,
+.plane-mirror-guided-actions input:focus-visible,
+.plane-mirror-guided-footer button:focus-visible {
+  outline: 2px solid var(--glass-primary-bg);
+  outline-offset: 3px;
+}
+
+.plane-mirror-guided-footer {
+  grid-column: 1 / -1;
+  justify-content: space-between;
+}
+
+.plane-mirror-guided-footer [role="status"]:empty {
+  display: none;
+}
+
+.plane-mirror-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 22rem);
+  gap: var(--glass-pad-panel);
+  min-height: 0;
+  padding: 0 var(--glass-pad-panel) var(--glass-pad-panel);
+}
+
+.plane-mirror-view {
+  position: relative;
+  min-width: 0;
+  min-height: 24rem;
+  overflow: hidden;
+  border: var(--glass-border-width) solid var(--glass-border-color);
+  border-radius: var(--glass-radius-panel);
+  background: var(--glass-bg-strong);
+  touch-action: none;
+}
+
+.plane-mirror-view canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.plane-mirror-source-handle {
+  position: absolute;
+  z-index: 1;
+  width: var(--glass-tap-min);
+  height: var(--glass-tap-min);
+  padding: 0;
+  transform: translate(-50%, -50%);
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: grab;
+  touch-action: none;
+}
+
+.plane-mirror-source-handle:active {
+  cursor: grabbing;
+}
+
+.plane-mirror-source-handle:focus-visible,
+.plane-mirror-controls input:focus-visible {
+  outline: 2px solid var(--glass-primary-bg);
+  outline-offset: 3px;
+}
+
+.plane-mirror-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--glass-pad-panel);
+  align-self: start;
+  padding: var(--glass-pad-panel);
+  border: var(--glass-border-width) solid var(--glass-border-color);
+  border-radius: var(--glass-radius-panel);
+  background: var(--glass-bg-strong);
+  box-shadow: var(--glass-highlight), var(--glass-shadow);
+}
+
+.plane-mirror-controls h2,
+.plane-mirror-controls p {
+  margin: 0;
+}
+
+.plane-mirror-controls label {
+  display: grid;
+  gap: var(--glass-pad-pill);
+}
+
+.plane-mirror-controls input {
+  width: 100%;
+  accent-color: var(--glass-primary-bg);
+}
+
+.plane-mirror-readouts {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--glass-pad-pill);
+  margin: 0;
+}
+
+.plane-mirror-readouts dt,
+.plane-mirror-readouts dd {
+  margin: 0;
+}
+
+.plane-mirror-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--glass-pad-pill);
+  font-size: 0.875rem;
+}
+
+.plane-mirror-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.plane-mirror-swatch {
+  width: 0.75rem;
+  height: 0.2rem;
+  border-radius: 1rem;
+  background: currentColor;
+}
+
+.plane-mirror-key--direct {
+  color: #ffffff;
+}
+
+.plane-mirror-key--virtual {
+  color: #88ccff;
+}
+
+@media (max-width: 760px) {
+  .plane-mirror-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .plane-mirror-content {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(20rem, 1fr) auto;
+  }
+
+  .plane-mirror-guided {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .plane-mirror-guided-footer {
+    grid-column: auto;
+  }
+
+  .plane-mirror-view {
+    min-height: 20rem;
+  }
+}

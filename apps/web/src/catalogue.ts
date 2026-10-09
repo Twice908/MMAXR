@@ -29,6 +29,7 @@ export interface ModuleRuntime {
     readonly modes: readonly string[];
   };
   readonly mount: (root: HTMLElement, options: { readonly diagnostics?: boolean }) => () => void;
+  readonly cameraView?: boolean;
 }
 
 /** The fixed subject navigation, including subjects with no current entries. */
@@ -56,6 +57,18 @@ const moduleRegistry: readonly ModuleRegistration[] = [
       return {
         manifest: module.manifest,
         mount: (root, options) => module.mountAtomBuilder(root, options),
+      };
+    },
+  },
+  {
+    id: "physics.plane-mirror",
+    loadManifest: async () => (await import("../../../modules/physics-plane-mirror/module.json")).default,
+    loadModule: async () => {
+      const module = await import("@mma/physics-plane-mirror");
+      return {
+        manifest: module.manifest,
+        mount: (root, options) => module.mountPlaneMirror(root, options),
+        cameraView: false,
       };
     },
   },

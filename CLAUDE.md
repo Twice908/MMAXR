@@ -13,7 +13,9 @@ Current status (update this block as work completes):
 - Done: Phase 3a-4a phone AR lesson flow with a world-fixed atom, DOM controls, a collapsible lesson panel, comfort safeguards, and touch-only view controls (pinch scale, one-finger rotation, reset); AR particle dragging is not enabled.
 - Done: Desktop screen camera view with local-only video, screen input, and clean media-track teardown; it does not use world tracking.
 - Done: Web Start page, subject pages, hash routes, manifest catalogue, and developer tool links; routes are documented in `docs/routes.md`.
-- Next: Review the eight assessment items and verify generated narration on desktop and phone.
+- Done: B4a plane-mirror module with dispatch-driven source movement, kit-derived rays/angles/image, and visual-gallery registration.
+- Done: B4b plane-mirror guided walkthrough using the existing guided runner, B4a scene, and local progress resume; final review content remains deferred.
+- Next: B4c reviewed plane-mirror checks and narration; Atom Builder assessment and narration review remain.
 - Not started: Phase 2b live voice guide, remaining XR work (including 3a-4b and VR), portal link (Phase 4).
 
 ## 2. Phase gates (do not build ahead)

@@ -1,0 +1,162 @@
+{
+  "schemaVersion": "1.0",
+  "releaseStatus": "draft",
+  "id": "physics.plane-mirror",
+  "title": { "en": "Reflection from a Plane Mirror" },
+  "subject": "physics",
+  "kit": "physics.optics",
+  "concepts": [
+    "sci.phys.light.reflection.plane",
+    "sci.phys.light.image.plane"
+  ],
+  "boards": ["general"],
+  "levels": [
+    { "id": "basic", "features": ["move-source", "observe-rays"] },
+    { "id": "extended", "features": ["compare-distances", "measure-angles"] }
+  ],
+  "modes": ["screen"],
+  "estimatedMinutes": 6,
+  "assets": [],
+  "interactions": {
+    "manipulate": ["move-light-source"],
+    "simulate": ["trace-visible-rays", "locate-virtual-image"],
+    "missions": ["observe-plane-mirror"],
+    "check": ["assess.phys.light.reflection.plane.pending"]
+  },
+  "missions": [
+    {
+      "id": "observe-plane-mirror",
+      "title": "Explore a plane mirror",
+      "goalText": "Move the light source. Watch the reflected ray and compare the source with its virtual image.",
+      "goal": { "observed": true },
+      "hints": []
+    }
+  ],
+  "assessments": [
+    { "id": "assess.phys.light.reflection.plane.pending", "reviewed": false }
+  ],
+  "experience": {
+    "levels": ["basic"],
+    "steps": [
+      {
+        "id": "observe-setup",
+        "type": "narrate",
+        "titleKey": "observe-title",
+        "promptKey": "observe-prompt",
+        "hints": ["observe-hint-1", "observe-hint-2", "observe-hint-3"]
+      },
+      {
+        "id": "introduce-reflection",
+        "type": "narrate",
+        "titleKey": "relationship-title",
+        "promptKey": "relationship-prompt",
+        "hints": ["relationship-hint-1", "relationship-hint-2", "relationship-hint-3"]
+      },
+      {
+        "id": "predict-angles",
+        "type": "predict",
+        "titleKey": "predict-title",
+        "promptKey": "predict-prompt",
+        "options": ["angles-equal", "angles-different"],
+        "correctOptionId": "angles-equal",
+        "hints": ["predict-hint-1", "predict-hint-2", "predict-hint-3"]
+      },
+      {
+        "id": "move-source",
+        "type": "manipulate",
+        "titleKey": "move-title",
+        "promptKey": "move-prompt",
+        "goal": { "sourceMoved": true },
+        "hints": ["move-hint-1", "move-hint-2", "move-hint-3"]
+      },
+      {
+        "id": "measure-angles",
+        "type": "measure",
+        "titleKey": "measure-title",
+        "promptKey": "measure-prompt",
+        "expected": 0,
+        "tolerance": 0.2,
+        "unit": "degrees",
+        "hints": ["measure-hint-1", "measure-hint-2", "measure-hint-3"]
+      },
+      {
+        "id": "record-observations",
+        "type": "table",
+        "titleKey": "record-title",
+        "promptKey": "record-prompt",
+        "requiredRows": [
+          { "id": "angle-observation", "accepted": { "kind": "one_of", "values": ["equal"] } },
+          { "id": "image-observation", "accepted": { "kind": "one_of", "values": ["equal"] } }
+        ],
+        "hints": ["record-hint-1", "record-hint-2", "record-hint-3"]
+      },
+      {
+        "id": "conclude",
+        "type": "conclude",
+        "titleKey": "conclude-title",
+        "promptKey": "conclude-prompt",
+        "options": ["angles-equal", "angles-different"],
+        "correctOptionId": "angles-equal",
+        "hints": ["conclude-hint-1", "conclude-hint-2", "conclude-hint-3"]
+      },
+      {
+        "id": "check",
+        "type": "check",
+        "titleKey": "check-title",
+        "promptKey": "check-prompt",
+        "assessmentIds": ["assess.phys.light.reflection.plane.pending"],
+        "hints": ["check-hint-1", "check-hint-2", "check-hint-3"]
+      }
+    ],
+    "copy": {
+      "observe-title": { "default": "Look at the setup" },
+      "observe-prompt": { "default": "Find the mirror, the light source, the ray, and the virtual image. Continue when you are ready." },
+      "observe-hint-1": { "default": "Look for the solid and dashed ray paths." },
+      "observe-hint-2": { "default": "The hollow marker is the virtual image." },
+      "observe-hint-3": { "default": "The mirror separates the source from its image." },
+      "relationship-title": { "default": "Notice the angles" },
+      "relationship-prompt": { "default": "The angles are measured from the normal, the line at right angles to the mirror. Compare the two angle readouts." },
+      "relationship-hint-1": { "default": "Find the normal at the reflection point." },
+      "relationship-hint-2": { "default": "Compare each ray with the normal." },
+      "relationship-hint-3": { "default": "Use the two angle readouts." },
+      "predict-title": { "default": "Make a prediction" },
+      "predict-prompt": { "default": "Before moving the source, predict how the angle of incidence compares with the angle of reflection." },
+      "angles-equal": { "default": "They are equal" },
+      "angles-different": { "default": "They are different" },
+      "predict-hint-1": { "default": "Think about how each angle is measured." },
+      "predict-hint-2": { "default": "Both angles use the normal as their reference." },
+      "predict-hint-3": { "default": "Choose the relationship you expect to observe." },
+      "move-title": { "default": "Move the light source" },
+      "move-prompt": { "default": "Drag the light source or change its distance. Watch both rays update." },
+      "move-hint-1": { "default": "Use the source marker or distance slider." },
+      "move-hint-2": { "default": "Move the source away from the mirror." },
+      "move-hint-3": { "default": "Move the source to a new distance from the mirror." },
+      "measure-title": { "default": "Compare the angle readouts" },
+      "measure-prompt": { "default": "Enter the difference between the two displayed angles, in degrees." },
+      "measure-hint-1": { "default": "Read both angle values beside the scene." },
+      "measure-hint-2": { "default": "Subtract the smaller displayed angle from the larger one." },
+      "measure-hint-3": { "default": "Enter 0 if the displayed angles match." },
+      "record-title": { "default": "Record what you observe" },
+      "record-prompt": { "default": "Record whether the two angle values match and whether the source and image are equally far from the mirror." },
+      "angle-observation-label": { "default": "The two angle values" },
+      "image-observation-label": { "default": "Source and image distances" },
+      "equal": { "default": "Match" },
+      "different": { "default": "Do not match" },
+      "record-hint-1": { "default": "Compare the incidence and reflection readouts." },
+      "record-hint-2": { "default": "Compare the source distance with the image distance readout." },
+      "record-hint-3": { "default": "Choose “Match” for both observations." },
+      "conclude-title": { "default": "State the relationship" },
+      "conclude-prompt": { "default": "Which relationship between the angle of incidence and the angle of reflection did the scene show?" },
+      "conclude-hint-1": { "default": "Use the values you measured." },
+      "conclude-hint-2": { "default": "Check your two recorded observations." },
+      "conclude-hint-3": { "default": "Choose the relationship that matches the readouts." },
+      "check-title": { "default": "Review checkpoint" },
+      "check-prompt": { "default": "Your conclusion is recorded. Continue to finish this guided walkthrough." },
+      "check-hint-1": { "default": "Review your conclusion." },
+      "check-hint-2": { "default": "Use the angle readouts as evidence." },
+      "check-hint-3": { "default": "Continue when you are ready." }
+    },
+    "playground": { "enabled": true, "tools": ["move-light-source", "measure-angles"] }
+  },
+  "rulesPlugin": "physics.plane-mirror"
+}

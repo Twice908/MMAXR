@@ -86,6 +86,7 @@ export function mountVisualGallery(root: HTMLElement): () => void {
   const mapper = createPlaneMapper({ scale: 1, origin: [0, 0, 0] });
   const scenes = [
     createSingleMirrorScene(mapper),
+    createPlaneMirrorScene(mapper),
     createTwoMirrorScene(mapper),
     createApparatusScene(mapper),
     createStageScene(mapper),
@@ -228,6 +229,24 @@ function createSingleMirrorScene(mapper: ReturnType<typeof createPlaneMapper>): 
   }
   nudgeOverlappingLabels(labels);
   return { id: "single-mirror", title: "Single mirror", group, labels };
+}
+
+function createPlaneMirrorScene(mapper: ReturnType<typeof createPlaneMapper>): GalleryScene {
+  const group = new Group();
+  const labels: LabelPlacement[] = [];
+  const mirror = new PlaneMirror({ x: 0, y: -2.5 }, { x: 0, y: 2.5 });
+  const object = { x: -1.8, y: 0.8 };
+  const eye = { x: -2.1, y: -1.2 };
+  addMirror(group, mirror, mapper);
+  const path = tracePlanePath(object, mirror, eye);
+  if (path.status === "ok") {
+    addPath(group, path.realPoints, path.virtualSegments, path.hits, [mirror], mapper, labels);
+    addMarker(group, "object", object, "Light source", mapper, labels);
+    addMarker(group, "eye", eye, "Eye", mapper, labels);
+    addMarker(group, "image", imageOfPoint(object, mirror).point, "Virtual image", mapper, labels);
+  }
+  nudgeOverlappingLabels(labels);
+  return { id: "plane-mirror", title: "Plane mirror", group, labels };
 }
 
 function createTwoMirrorScene(mapper: ReturnType<typeof createPlaneMapper>): GalleryScene {

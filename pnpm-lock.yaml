@@ -47,6 +47,9 @@ importers:
       '@mma/kit-physics-optics':
         specifier: workspace:*
         version: link:../../packages/kits/physics/optics
+      '@mma/physics-plane-mirror':
+        specifier: workspace:*
+        version: link:../../modules/physics-plane-mirror
       '@mma/schema':
         specifier: workspace:*
         version: link:../../packages/schema
@@ -93,6 +96,31 @@ importers:
       '@mma/schema':
         specifier: workspace:*
         version: link:../../packages/schema
+
+  modules/physics-plane-mirror:
+    dependencies:
+      '@mma/engine-core':
+        specifier: workspace:*
+        version: link:../../packages/engine-core
+      '@mma/engine-guided':
+        specifier: workspace:*
+        version: link:../../packages/engine-guided
+      '@mma/engine-render':
+        specifier: workspace:*
+        version: link:../../packages/engine-render
+      '@mma/kit-physics-optics':
+        specifier: workspace:*
+        version: link:../../packages/kits/physics/optics
+      '@mma/schema':
+        specifier: workspace:*
+        version: link:../../packages/schema
+      three:
+        specifier: 0.186.1
+        version: 0.186.1
+    devDependencies:
+      '@types/three':
+        specifier: 0.186.0
+        version: 0.186.0
 
   packages/curriculum: {}
 
