@@ -1,9 +1,12 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { spatialTokens } from "../../../packages/engine-render/src/spatial-tokens.js";
 
 const tokenFile = fileURLToPath(new URL("../src/glass-tokens.css", import.meta.url));
 const tokenCss = readFileSync(tokenFile, "utf8");
+const spatialTokenFile = fileURLToPath(new URL("../src/spatial-tokens.css", import.meta.url));
+const spatialTokenCss = readFileSync(spatialTokenFile, "utf8");
 const componentCssFile = fileURLToPath(new URL("../src/atom-builder.css", import.meta.url));
 const componentCss = readFileSync(componentCssFile, "utf8");
 const backdrops = [
@@ -107,6 +110,42 @@ function glassSurface(backdrop: Rgb, tokenName: "glass-bg" | "glass-bg-strong"):
   return composite(getColorToken(tokenName), backdrop);
 }
 
+function getSpatialToken(name: string): string {
+  const match = new RegExp(`--spatial-${name}:\\s*([^;]+);`).exec(spatialTokenCss);
+  if (!match) {
+    throw new Error(`Missing spatial token: --spatial-${name}`);
+  }
+  return match[1]!.trim();
+}
+
+function getSpatialColor(name: string): Rgba {
+  const value = getSpatialToken(name);
+  const rgba = /^rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)$/.exec(value);
+  if (rgba) {
+    return {
+      color: [Number(rgba[1]), Number(rgba[2]), Number(rgba[3])],
+      alpha: Number(rgba[4]),
+    };
+  }
+  const hex = /^#([0-9a-f]{6})$/i.exec(value);
+  if (!hex) {
+    throw new Error(`Unsupported spatial color token --spatial-${name}: ${value}`);
+  }
+  const valueHex = hex[1]!;
+  return {
+    color: [
+      Number.parseInt(valueHex.slice(0, 2), 16),
+      Number.parseInt(valueHex.slice(2, 4), 16),
+      Number.parseInt(valueHex.slice(4, 6), 16),
+    ],
+    alpha: 1,
+  };
+}
+
+function spatialSurface(backdrop: Rgb, tokenName: "surface" | "surface-strong"): Rgb {
+  return composite(getSpatialColor(tokenName), backdrop);
+}
+
 describe("glass contrast tokens", () => {
   it("documents every tunable variable directly above its declaration", () => {
     const declarations = [...tokenCss.matchAll(/^\s*(--[\w-]+):/gm)];
@@ -171,5 +210,36 @@ describe("glass contrast tokens", () => {
     ]);
     expect(dangerResult.ratio, `danger text fails on ${dangerResult.backdrop}`)
       .toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("keeps CSS spatial tokens identical to the typed canvas mirror", () => {
+    const declarations = [...spatialTokenCss.matchAll(/^\s*--spatial-([\w-]+):\s*([^;]+);/gm)];
+    const cssValues = Object.fromEntries(
+      declarations.map(([, kebabName, value]) => [
+        kebabName!.replace(/-([a-z])/g, (_match, letter: string) => letter.toUpperCase()),
+        value!.trim(),
+      ]),
+    );
+    expect(Object.keys(cssValues).sort()).toEqual(Object.keys(spatialTokens).sort());
+    expect(cssValues).toEqual(spatialTokens);
+  });
+
+  it("keeps spatial ink at WCAG AA over all reference backdrops", () => {
+    const bodyText = getSpatialColor("ink").color;
+    const mutedText = getSpatialColor("ink-muted").color;
+    for (const surfaceToken of ["surface", "surface-strong"] as const) {
+      const bodyResult = minimumRatio((backdrop) => [
+        bodyText,
+        spatialSurface(backdrop, surfaceToken),
+      ]);
+      const mutedResult = minimumRatio((backdrop) => [
+        mutedText,
+        spatialSurface(backdrop, surfaceToken),
+      ]);
+      expect(bodyResult.ratio, `${surfaceToken} body text fails on ${bodyResult.backdrop}`)
+        .toBeGreaterThanOrEqual(4.5);
+      expect(mutedResult.ratio, `${surfaceToken} muted text fails on ${mutedResult.backdrop}`)
+        .toBeGreaterThanOrEqual(4.5);
+    }
   });
 });

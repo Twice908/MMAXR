@@ -1,0 +1,50 @@
+:root {
+  /* Reference .glass surface rgba(255, 255, 255, .48), raised minimally for WCAG AA. */
+  --spatial-surface: rgba(255, 255, 255, 0.957);
+  /* The reference has no fallback value; opaque white preserves ink contrast without filters. */
+  --spatial-surface-strong: rgba(255, 255, 255, 1);
+  /* Reference light glass edge rgba(255, 255, 255, .84). */
+  --spatial-edge: rgba(255, 255, 255, 0.84);
+  /* Reference light glass border width: 1px. */
+  --spatial-edge-width: 1px;
+  /* Reference inset highlight inset 0 1px #ffffffd9. */
+  --spatial-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  /* Reference light glass shadow 0 20px 55px #66517618. */
+  --spatial-shadow: 0 20px 55px rgba(102, 81, 118, 0.094);
+  /* Reference logo glow 0 0 24px #b4cba9a8. */
+  --spatial-glow: 0 0 24px rgba(180, 203, 169, 0.659);
+  /* Reference panel radius: 24px. */
+  --spatial-radius-panel: 24px;
+  /* Reference sidebar radius: 26px. */
+  --spatial-radius-sidebar: 26px;
+  /* Reference topbar radius: 22px. */
+  --spatial-radius-topbar: 22px;
+  /* Reference light-mode ink #272331. */
+  --spatial-ink: #272331;
+  /* Reference light-mode muted ink #756d7c. */
+  --spatial-ink-muted: #756d7c;
+  /* Reference green accent #20b977. */
+  --spatial-accent-green: #20b977;
+  /* Reference lime accent #c8ec72. */
+  --spatial-accent-lime: #c8ec72;
+  /* Reference pink accent #f1b4d6. */
+  --spatial-accent-pink: #f1b4d6;
+  /* Reference lilac accent #bba7f2. */
+  --spatial-accent-lilac: #bba7f2;
+  /* Reference focus outline #48c58e. */
+  --spatial-focus: #48c58e;
+  /* Reference main panel padding: 22px. */
+  --spatial-pad-panel: 22px;
+  /* Reference sidebar padding: 17px. */
+  --spatial-pad-sidebar: 17px;
+  /* Reference control padding: 10px 14px. */
+  --spatial-pad-control: 10px 14px;
+  /* Reference main layout gap: 18px. */
+  --spatial-gap-layout: 18px;
+  /* Reference sidebar section gap: 22px. */
+  --spatial-gap-sidebar: 22px;
+  /* Reference control gap: 8px. */
+  --spatial-gap-control: 8px;
+  /* Reference heading letter-spacing: -.045em. */
+  --spatial-heading-letter-spacing: -0.045em;
+}

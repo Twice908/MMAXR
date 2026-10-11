@@ -23,7 +23,10 @@ import {
   arTouchGestureConfig,
   installZoomControls,
   screenZoomConfig,
+  spatialLayout,
   type InputAction,
+  type SpatialPanelEdgeHint,
+  type SpatialPanelSession,
 } from "@mma/engine-render";
 import {
   NarrationPlayer,
@@ -50,6 +53,16 @@ import {
   type AtomBuilderLearningState,
 } from "./learning.js";
 import { layoutAtom } from "./layout.js";
+import {
+  buildSpatialPanelItems,
+  readSpatialPanelSources,
+  routeSpatialAction,
+} from "./spatial-panels.js";
+import {
+  isSpatialPresentationMode,
+  setSpatialPanelsDomHidden,
+  tryCreateSpatialPanels,
+} from "./spatial-presentation.js";
 import "./glass-tokens.css";
 import "./atom-builder.css";
 
@@ -205,6 +218,118 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     host: sceneHost,
     ...(options.diagnostics === undefined ? {} : { diagnostics: options.diagnostics }),
   });
+  let spatialSession: SpatialPanelSession | null = null;
+  let spatialHintRoot: HTMLElement | null = null;
+  let spatialStyle: HTMLStyleElement | null = null;
+  let spatialExpanded = false;
+  let spatialFailureLogged = false;
+  let refreshSpatialPanels: () => void = () => undefined;
+  let routeSpatialPanelAction: (inputId: string) => void = () => undefined;
+  const clearSpatialPresentation = (): void => {
+    spatialSession?.dispose();
+    spatialSession = null;
+    spatialHintRoot?.remove();
+    spatialHintRoot = null;
+    spatialStyle?.remove();
+    spatialStyle = null;
+    setSpatialPanelsDomHidden(root, false);
+    root.classList.remove("spatial-dom-settings-open");
+  };
+  const failSpatialPresentation = (error: unknown): void => {
+    clearSpatialPresentation();
+    if (spatialFailureLogged) return;
+    spatialFailureLogged = true;
+    console.warn("Spatial panels unavailable; continuing with the DOM panels.", error);
+  };
+  const setSpatialPresentation = (
+    active: boolean,
+    mode: "ar" | "camera",
+    expanded?: boolean,
+  ): void => {
+    spatialExpanded = expanded ?? (spatialSession ? spatialExpanded : false);
+    if (!isSpatialPresentationMode(mode)) {
+      clearSpatialPresentation();
+      return;
+    }
+    if (!active) {
+      clearSpatialPresentation();
+      return;
+    }
+    if (spatialSession) {
+      try {
+        spatialSession.setExpanded(spatialExpanded);
+        refreshSpatialPanels();
+      } catch (error) {
+        failSpatialPresentation(error);
+      }
+      return;
+    }
+    try {
+      const items = buildSpatialPanelItems(readSpatialPanelSources(root));
+      const session = tryCreateSpatialPanels(
+        () => renderer.createSpatialPanelSession(
+          items,
+          (inputId) => routeSpatialPanelAction(inputId),
+          mode === "ar" ? root : undefined,
+        ),
+        failSpatialPresentation,
+      );
+      if (!session) return;
+      spatialSession = session;
+      session.setExpanded(spatialExpanded);
+      spatialStyle = document.createElement("style");
+      spatialStyle.textContent = `
+        .spatial-panels-active #lesson-panel,
+        .spatial-panels-active .narration-hud,
+        .spatial-panels-active #assessment-card,
+        .spatial-panels-active .lesson-summary,
+        .spatial-panels-active .free-play-status,
+        .spatial-panels-active .particle-rail,
+        .spatial-panels-active .atom-inspector,
+        .spatial-panels-active .camera-view-panel-heading #mission-title,
+        .spatial-panels-active #ar-panel-mission-title { display: none !important; }
+        .spatial-dom-settings-open .ar-overlay-panel :is(
+          .lesson-panel, #assessment-card, .lesson-summary, .free-play-status,
+          .particle-rail, .atom-inspector
+        ) { display: none !important; }
+        .spatial-dom-settings-open .ar-overlay-panel .narration-hud { display: grid !important; }
+        .spatial-edge-hints { position: fixed; inset: 0; z-index: 20; pointer-events: none; }
+        .spatial-edge-hint {
+          position: absolute; pointer-events: auto; transform: translate(-50%, -50%);
+          border: 1px solid rgba(255,255,255,.8); border-radius: 999px;
+          background: rgba(255,255,255,.84); color: #20222a; width: 36px; height: 36px;
+        }
+        .spatial-edge-hint:disabled { pointer-events: none; }
+      `;
+      root.append(spatialStyle);
+      if (spatialLayout.edgeHints) {
+        const hintRoot = document.createElement("div");
+        spatialHintRoot = hintRoot;
+        hintRoot.className = "spatial-edge-hints";
+        hintRoot.setAttribute("aria-label", "Panel direction hints");
+        const keys = ["mission", "particles", "elementInfo", "narration", "settings"] as const;
+        for (const key of keys) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "spatial-edge-hint";
+          button.dataset.panel = key;
+          button.setAttribute("aria-label", "Panel direction hint");
+          button.textContent = "›";
+          button.disabled = mode === "ar";
+          button.addEventListener("click", () => {
+            if (mode === "camera") spatialSession?.focusPanel(key);
+          });
+          hintRoot.append(button);
+        }
+        root.append(hintRoot);
+        session.setHintListener((hints) => renderSpatialHints(hintRoot, hints));
+      }
+      setSpatialPanelsDomHidden(root, true);
+      refreshSpatialPanels();
+    } catch (error) {
+      failSpatialPresentation(error);
+    }
+  };
   const disposeZoomControls = installZoomControls(
     renderer.canvas,
     () => renderer.getDistance(),
@@ -339,6 +464,16 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
       );
     },
     recordLocalEvent: recordLocalArEvent,
+    onSpatialActiveChange: (active) => setSpatialPresentation(active, "ar"),
+    onSpatialExpandedChange: (expanded) => {
+      spatialExpanded = expanded;
+      try {
+        spatialSession?.setExpanded(expanded);
+        refreshSpatialPanels();
+      } catch (error) {
+        failSpatialPresentation(error);
+      }
+    },
     ...(options.diagnostics === undefined ? {} : { diagnostics: options.diagnostics }),
   });
 
@@ -382,7 +517,10 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
       }
       return captionText;
     },
-    onViewChange: (state) => renderNarrationView(root, state),
+    onViewChange: (state) => {
+      renderNarrationView(root, state);
+      refreshSpatialPanels();
+    },
     onTelemetry: (event) => publishNarrationTelemetry(event, store.events, telemetryContext, clock, idGenerator),
   });
   const onNarrationAction = (event: MouseEvent): void => {
@@ -404,6 +542,43 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   };
   const onNarrationSpeedChange = (): void => {
     narrationPlayer.setSpeed(Number(narrationSpeed.value) as 0.75 | 1 | 1.25);
+  };
+  refreshSpatialPanels = () => {
+    try {
+      if (spatialSession) {
+        spatialSession.update(buildSpatialPanelItems(readSpatialPanelSources(root)));
+      }
+    } catch (error) {
+      failSpatialPresentation(error);
+    }
+  };
+  routeSpatialPanelAction = (inputId) => {
+    routeSpatialAction(inputId, {
+      runCommand,
+      onNarrationAction: (actionId) => {
+        const button = [...root.querySelectorAll<HTMLButtonElement>("[data-narration-action]")]
+          .find((candidate) => candidate.dataset.narrationAction === actionId);
+        button?.click();
+      },
+      onNarrationSpeedChange: (speed) => {
+        if (speed === "0.75" || speed === "1" || speed === "1.25") {
+          narrationSpeed.value = speed;
+        }
+        onNarrationSpeedChange();
+      },
+      onResetView: () => {
+        const resetView = root.querySelector<HTMLButtonElement>(
+          "[data-ar-action='reset-view'], [data-command='reset-view']",
+        );
+        resetView?.click();
+      },
+      onPanelToggle: () => {
+        const panelToggle = root.querySelector<HTMLButtonElement>(
+          "[data-ar-action='panel-toggle'], [data-camera-action='panel-toggle']",
+        );
+        panelToggle?.click();
+      },
+    });
   };
   narrationControls.addEventListener("click", onNarrationAction);
   narrationSpeed.addEventListener("change", onNarrationSpeedChange);
@@ -430,6 +605,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     feedback.classList.toggle("is-visible", chemistry.validationMessages.length > 0);
     renderer.update(layoutAtom(chemistry));
     renderLearningState(root, state, assessmentItems, assessmentsById, lastHintText);
+    refreshSpatialPanels();
   };
 
   const dispatchLearningAction = (action: EngineAction): void => {
@@ -479,6 +655,11 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
       ?.dataset.command;
     if (typeof command !== "string" || command.length === 0) return;
     runCommand(command);
+  };
+  const onSpatialPresentation = (event: Event): void => {
+    const detail = (event as CustomEvent<{ active?: boolean; expanded?: boolean }>).detail;
+    if (typeof detail?.active !== "boolean") return;
+    setSpatialPresentation(detail.active, "camera", detail.expanded ?? spatialExpanded);
   };
 
   const onInput = (action: InputAction): void => {
@@ -564,6 +745,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     },
   });
   root.addEventListener("click", onCommandClick);
+  root.addEventListener("mma:spatial-presentation", onSpatialPresentation);
   renderState(store.getState());
   store.events.emit("module_started", {
     type: "module_started",
@@ -580,6 +762,8 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     root.removeEventListener("click", onEventsAction);
     root.removeEventListener("mma:local-telemetry", onLocalTelemetry);
     root.removeEventListener("click", onCommandClick);
+    root.removeEventListener("mma:spatial-presentation", onSpatialPresentation);
+    clearSpatialPresentation();
     narrationPlayer.dispose();
     void disposeArControls().finally(() => renderer.dispose());
     root.replaceChildren();
@@ -837,6 +1021,24 @@ function renderNarrationView(root: HTMLElement, state: NarrationViewState): void
   );
 }
 
+function renderSpatialHints(
+  container: HTMLElement,
+  hints: readonly SpatialPanelEdgeHint[],
+): void {
+  for (const hint of hints) {
+    const button = container.querySelector<HTMLButtonElement>(`[data-panel="${hint.key}"]`);
+    if (!button) continue;
+    button.hidden = !hint.visible;
+    if (!hint.visible) continue;
+    const left = `${(hint.x * 100).toFixed(1)}vw`;
+    const top = `${(hint.y * 100).toFixed(1)}vh`;
+    const transform = `translate(-50%, -50%) rotate(${hint.angle.toFixed(2)}rad)`;
+    if (button.style.left !== left) button.style.left = left;
+    if (button.style.top !== top) button.style.top = top;
+    if (button.style.transform !== transform) button.style.transform = transform;
+  }
+}
+
 function asPayload(payload: InputAction["payload"]): Record<string, string | number | null> {
   return typeof payload === "object" && payload !== null && !Array.isArray(payload)
     ? payload as Record<string, string | number | null>
@@ -871,6 +1073,15 @@ function isArHudTarget(target: EventTarget | null): boolean {
   // Tray particles stay draggable: their gestures must reach the input adapter,
   // while every other panel gesture is left to native overlay scrolling.
   return target instanceof Element && target.closest("[data-particle]") === null && target.closest(
-    ".ar-overlay-panel, .ar-exit, .ar-status, .ar-break-reminder, .ar-diagnostics, .ar-confirmation",
+    ".ar-overlay-panel, .ar-exit, .spatial-settings-fallback, .spatial-edge-hints, " +
+    ".ar-status, .ar-break-reminder, .ar-diagnostics, .ar-confirmation",
   ) !== null;
 }
+export {
+  buildSpatialPanelItems,
+  readSpatialPanelSources,
+  routeSpatialAction,
+  type SpatialActionHandlers,
+  type SpatialPanelItems,
+  type SpatialPanelsSource,
+} from "./spatial-panels.js";

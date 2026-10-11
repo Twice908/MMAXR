@@ -1,4 +1,9 @@
 import * as THREE from "three";
+import { spatialLayout } from "./spatial-layout.js";
+import { createGlassPanel } from "./visuals/glass-panel.js";
+import type { GlassPanelItem } from "./visuals/panel-layout.js";
+import { calculateSpatialPanelPlacements } from "./visuals/spatial-placement.js";
+import { createSpatialPanelHost } from "./visuals/spatial-panel-host.js";
 import { selectSnapTarget } from "./snap-target.js";
 import { screenZoomConfig } from "./zoom-controls.js";
 export { screenZoomConfig } from "./zoom-controls.js";
@@ -51,6 +56,42 @@ export type QualityTier = "low" | "mid" | "high";
 export interface ScreenRendererOptions {
   readonly host: HTMLElement;
   readonly diagnostics?: boolean;
+}
+
+export interface SpatialPanelItems {
+  readonly mission: readonly GlassPanelItem[];
+  readonly particles: readonly GlassPanelItem[];
+  readonly elementInfo: readonly GlassPanelItem[];
+  readonly narration: readonly GlassPanelItem[];
+  readonly settings: readonly GlassPanelItem[];
+  readonly settingsToggles: Readonly<Record<string, boolean>>;
+}
+
+export interface SpatialPanelSession {
+  update(items: SpatialPanelItems): void;
+  setExpanded(expanded: boolean): void;
+  setHintListener(listener: ((hints: readonly SpatialPanelEdgeHint[]) => void) | null): void;
+  focusPanel(key: SpatialPanelEdgeHint["key"]): void;
+  dispose(): void;
+}
+
+export interface SpatialPanelEdgeHint {
+  readonly key: "mission" | "particles" | "elementInfo" | "narration" | "settings";
+  readonly visible: boolean;
+  readonly x: number;
+  readonly y: number;
+  readonly angle: number;
+}
+
+export function canCreateSpatialPanels(arActive: boolean, cameraViewActive: boolean): boolean {
+  return arActive || cameraViewActive;
+}
+
+export function shouldShowSpatialSettingsFallback(
+  arActive: boolean,
+  cameraViewActive: boolean,
+): boolean {
+  return arActive || cameraViewActive;
 }
 
 const SCREEN_BACKGROUND_MODE_EVENT = "mma:screen-background-mode";
@@ -221,10 +262,12 @@ export class ScreenSceneRenderer {
   private nucleusRadius = 0.2;
   private dragParticle: string | null = null;
   private arActive = false;
+  private cameraViewActive = false;
   private currentFrame: ScreenSceneFrame | null = null;
   private activeXRSession: XRSession | null = null;
   private xrRenderLoopRunning = false;
   private arDiagnosticsListener: ((diagnostics: ArRenderDiagnostics) => void) | null = null;
+  private spatialHintUpdater: (() => void) | null = null;
   private disposed = false;
 
   /** Create a WebGL canvas inside a host element and configure quality limits. */
@@ -434,6 +477,7 @@ export class ScreenSceneRenderer {
   ): void {
     this.arDiagnosticsListener = listener;
     this.publishArDiagnostics();
+    this.spatialHintUpdater?.();
   }
 
   /** Find the closest interactive scene surface under viewport coordinates. */
@@ -561,6 +605,173 @@ export class ScreenSceneRenderer {
     this.render();
   }
 
+  /** Create world-fixed glass panels for an active AR or screen-camera presentation. */
+  createSpatialPanelSession(
+    items: SpatialPanelItems,
+    onPanelAction: (inputId: string) => void,
+    arPointerTarget?: HTMLElement,
+  ): SpatialPanelSession {
+    if (!canCreateSpatialPanels(this.arActive, this.cameraViewActive)) {
+      throw new Error("Spatial panels require an active AR or camera-view presentation.");
+    }
+    const viewerCamera: THREE.Camera = this.arActive
+      ? this.renderer.xr.getCamera()
+      : this.camera;
+    viewerCamera.updateMatrixWorld();
+    const viewerQuaternion = viewerCamera.getWorldQuaternion(new THREE.Quaternion());
+    const anchor = this.arActive ? arWorldAnchorPosition : { x: 0, y: 0, z: 0 };
+    const viewport = arPointerTarget ?? this.canvas;
+    const placements = calculateSpatialPanelPlacements(
+      anchor,
+      viewerQuaternion,
+      viewport.clientWidth || window.innerWidth,
+      viewport.clientHeight || window.innerHeight,
+    );
+    const group = new THREE.Group();
+    group.name = "spatial-glass-panels";
+    this.scene.add(group);
+    const definitions = [
+      { id: "spatial-mission", key: "mission", layout: spatialLayout.mission, collapsible: false },
+      { id: "spatial-particles", key: "particles", layout: spatialLayout.particles, collapsible: true },
+      { id: "spatial-element-info", key: "elementInfo", layout: spatialLayout.elementInfo, collapsible: true },
+      { id: "spatial-narration", key: "narration", layout: spatialLayout.narrationSettings, collapsible: true },
+      { id: "spatial-settings", key: "settings", layout: spatialLayout.settings, collapsible: true },
+    ] as const;
+    const mounts: {
+      panel: ReturnType<typeof createGlassPanel>;
+      position: { x: number; y: number; z: number };
+      quaternion: THREE.Quaternion;
+      scale: number;
+      collapsible: boolean;
+    }[] = [];
+    const initialItems = items;
+    const worldPositions: Record<SpatialPanelEdgeHint["key"], THREE.Vector3> = {
+      mission: placements.mission.position,
+      particles: placements.particles.position,
+      elementInfo: placements.elementInfo.position,
+      narration: placements.narration.position,
+      settings: placements.settings.position,
+    };
+    let host: ReturnType<typeof createSpatialPanelHost> | null = null;
+    try {
+      for (const definition of definitions) {
+        const placement = placements[definition.key];
+        const panel = createGlassPanel({
+          id: definition.id,
+          widthM: definition.layout.expandedSize.width,
+          heightM: definition.layout.expandedSize.height,
+          surface: "uniform",
+          ...(definition.key === "mission" ? { title: "Mission" } : {}),
+          items: initialItems[definition.key],
+          collapsed: definition.collapsible,
+        });
+        mounts.push({
+          panel,
+          position: placement.position,
+          quaternion: placement.quaternion,
+          scale: placement.scale,
+          collapsible: definition.collapsible,
+        });
+      }
+      const panelHost = createSpatialPanelHost({
+        group,
+        camera: viewerCamera,
+        pointerTarget: arPointerTarget ?? this.canvas,
+        panels: mounts,
+        onPanelAction,
+        ...(arPointerTarget
+          ? {
+              shouldIgnorePointerTarget: (target: EventTarget | null) =>
+                target instanceof Element && target.closest(
+                  "button, input, select, textarea, a, dialog, [data-ar-action], [data-camera-action]",
+                ) !== null,
+            }
+          : {}),
+      });
+      host = panelHost;
+      panelHost.update("spatial-settings", {
+        items: initialItems.settings,
+        toggles: initialItems.settingsToggles,
+      });
+      let hintListener: ((hints: readonly SpatialPanelEdgeHint[]) => void) | null = null;
+      const publishHints = (): void => {
+        if (!hintListener) return;
+        const activeCamera: THREE.Camera = this.arActive
+          ? this.renderer.xr.getCamera()
+          : this.camera;
+        activeCamera.updateMatrixWorld();
+        const hints = (Object.entries(worldPositions) as [SpatialPanelEdgeHint["key"], THREE.Vector3][])
+          .map(([key, worldPosition]) => {
+            const projected = worldPosition.clone().project(activeCamera);
+            const outside = Math.abs(projected.x) > 0.92 || Math.abs(projected.y) > 0.92 || projected.z > 1;
+            const x = THREE.MathUtils.clamp(projected.x, -0.92, 0.92);
+            const y = THREE.MathUtils.clamp(projected.y, -0.92, 0.92);
+            return {
+              key,
+              visible: outside,
+              x: (x + 1) / 2,
+              y: (1 - y) / 2,
+              angle: Math.atan2(projected.y - y, projected.x - x),
+            };
+          });
+        hintListener(hints);
+      };
+      this.render();
+      this.spatialHintUpdater = publishHints;
+      let disposed = false;
+      return {
+        update: (next) => {
+          if (disposed) return;
+          definitions.forEach((definition) => {
+            panelHost.update(
+              definition.id,
+              definition.key === "settings"
+                ? { items: next.settings, toggles: next.settingsToggles }
+                : next[definition.key],
+            );
+          });
+          this.render();
+        },
+        setExpanded: (expanded) => {
+          if (disposed) return;
+          panelHost.setExpanded(expanded);
+          this.render();
+        },
+        setHintListener: (listener) => {
+          hintListener = listener;
+          publishHints();
+        },
+        focusPanel: (key) => {
+          if (this.arActive || !worldPositions[key]) return;
+          const target = worldPositions[key];
+          this.yaw = -Math.atan2(target.x, this.distance - target.z);
+          this.pitch = -THREE.MathUtils.clamp(
+            Math.atan2(target.y, Math.hypot(this.distance - target.z, target.x)),
+            -1.15,
+            1.15,
+          );
+          this.updateCamera();
+        },
+        dispose: () => {
+          if (disposed) return;
+          disposed = true;
+          if (this.spatialHintUpdater === publishHints) this.spatialHintUpdater = null;
+          panelHost.dispose();
+          this.scene.remove(group);
+          this.render();
+        },
+      };
+    } catch (error) {
+      if (host) {
+        host.dispose();
+      } else {
+        for (const mount of mounts) mount.panel.dispose();
+      }
+      this.scene.remove(group);
+      throw error;
+    }
+  }
+
   /** Dispose browser observers, WebGL resources, and owned DOM nodes. */
   dispose(): void {
     if (this.disposed) {
@@ -609,6 +820,7 @@ export class ScreenSceneRenderer {
     if (typeof transparent !== "boolean" || this.arActive) {
       return;
     }
+    this.cameraViewActive = transparent;
     this.scene.background = transparent ? null : this.screenBackground;
     this.renderer.setClearColor(0x000000, transparent ? 0 : 1);
     this.render();

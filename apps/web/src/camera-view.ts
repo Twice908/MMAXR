@@ -5,7 +5,10 @@ import {
   cameraViewTelemetryEventSchema,
   type CameraViewErrorReasonCode,
 } from "@mma/schema";
-import { setScreenRendererTransparentBackground } from "@mma/engine-render";
+import {
+  setScreenRendererTransparentBackground,
+  shouldShowSpatialSettingsFallback,
+} from "@mma/engine-render";
 
 const localTelemetryEventName = "mma:local-telemetry";
 
@@ -133,6 +136,12 @@ export function mountCameraView(options: CameraViewOptions): () => void {
   exit.textContent = "Exit camera view";
   exit.hidden = true;
 
+  const settingsFallback = document.createElement("button");
+  settingsFallback.type = "button";
+  settingsFallback.className = "spatial-settings-fallback camera-spatial-settings-fallback";
+  settingsFallback.textContent = "Settings";
+  settingsFallback.hidden = true;
+
   const status = document.createElement("p");
   status.className = "camera-view-status";
   status.setAttribute("role", "status");
@@ -213,7 +222,7 @@ export function mountCameraView(options: CameraViewOptions): () => void {
     throw new Error("Camera view controls could not find the scene heading.");
   }
   heading.append(button, reason);
-  root.append(dialog, exit, status);
+  root.append(dialog, exit, settingsFallback, status);
   const builder = root.querySelector<HTMLElement>(".atom-builder");
   if (!builder) {
     throw new Error("Camera view controls could not find the atom builder.");
@@ -256,10 +265,14 @@ export function mountCameraView(options: CameraViewOptions): () => void {
     setScreenRendererTransparentBackground(sceneHost, false);
   };
   const cleanStream = (): void => {
+    root.dispatchEvent(new CustomEvent("mma:spatial-presentation", {
+      detail: { active: false, expanded: false },
+    }));
     stopCameraStream(stream, video);
     stream = null;
     video = null;
     exit.hidden = true;
+    settingsFallback.hidden = true;
     setPanelCollapsed(true);
     restorePlacements();
     panel.hidden = true;
@@ -340,6 +353,7 @@ export function mountCameraView(options: CameraViewOptions): () => void {
       button.hidden = true;
       reason.hidden = true;
       exit.hidden = false;
+      settingsFallback.hidden = !shouldShowSpatialSettingsFallback(false, activeSince !== null);
       setStatus("");
       for (const element of panelContents) {
         moveIntoPanel(element, panel);
@@ -347,6 +361,9 @@ export function mountCameraView(options: CameraViewOptions): () => void {
       moveIntoPanel(missionTitle, panelHeading, panelToggle);
       panel.hidden = false;
       setPanelCollapsed(true);
+      root.dispatchEvent(new CustomEvent("mma:spatial-presentation", {
+        detail: { active: true, expanded: false },
+      }));
       emitTelemetry("camera_view_started", 0, "none");
     } catch (error) {
       if (disposed || token !== requestToken) {
@@ -372,7 +389,7 @@ export function mountCameraView(options: CameraViewOptions): () => void {
       ".builder-header, .lesson-panel, .narration-hud, .atom-inspector, " +
       ".scene-heading, .assessment-card, .lesson-summary, .free-play-status, .dev-events-toggle, " +
       ".dev-event-panel, .camera-view-entry, .camera-view-exit, .camera-view-confirmation, .camera-view-status, " +
-      ".camera-view-panel",
+      ".camera-view-panel, .spatial-settings-fallback, .spatial-edge-hints",
     ) !== null;
   const onCameraHudInput = (event: Event): void => {
     if (!root.classList.contains("camera-active") || !isCameraHudTarget(event.target)) {
@@ -398,12 +415,29 @@ export function mountCameraView(options: CameraViewOptions): () => void {
   const onExitClick = (): void => {
     endCameraView("none", "Camera view ended. You are back in screen mode.");
   };
+  const onSettingsFallbackClick = (): void => {
+    const opening = !root.classList.contains("spatial-dom-settings-open");
+    root.classList.toggle("spatial-dom-settings-open", opening);
+    if (opening
+      ? panel.classList.contains("is-collapsed")
+      : !panel.classList.contains("is-collapsed")) {
+      panelToggle.click();
+    }
+    if (opening) root.querySelector<HTMLElement>(".narration-hud")?.scrollIntoView({ block: "nearest" });
+  };
   const onPanelToggleClick = (): void => {
     setPanelCollapsed(!panel.classList.contains("is-collapsed"));
+    root.dispatchEvent(new CustomEvent("mma:spatial-presentation", {
+      detail: {
+        active: true,
+        expanded: !panel.classList.contains("is-collapsed"),
+      },
+    }));
   };
   button.addEventListener("click", onButtonClick);
   dialog.addEventListener("click", onDialogClick);
   exit.addEventListener("click", onExitClick);
+  settingsFallback.addEventListener("click", onSettingsFallbackClick);
   panelToggle.addEventListener("click", onPanelToggleClick);
   environment.document.addEventListener("visibilitychange", onVisibilityChange);
   environment.document.defaultView?.addEventListener("pagehide", onPageHide);
@@ -435,6 +469,7 @@ export function mountCameraView(options: CameraViewOptions): () => void {
     button.removeEventListener("click", onButtonClick);
     dialog.removeEventListener("click", onDialogClick);
     exit.removeEventListener("click", onExitClick);
+    settingsFallback.removeEventListener("click", onSettingsFallbackClick);
     panelToggle.removeEventListener("click", onPanelToggleClick);
     environment.document.removeEventListener("visibilitychange", onVisibilityChange);
     environment.document.defaultView?.removeEventListener("pagehide", onPageHide);
@@ -455,6 +490,7 @@ export function mountCameraView(options: CameraViewOptions): () => void {
     reason.remove();
     dialog.remove();
     exit.remove();
+    settingsFallback.remove();
     status.remove();
     panel.remove();
     diagnostic?.remove();

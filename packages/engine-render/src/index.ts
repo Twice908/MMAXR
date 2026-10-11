@@ -49,6 +49,8 @@ export {
 } from "./screen-snap.js";
 export {
   ScreenSceneRenderer,
+  canCreateSpatialPanels,
+  shouldShowSpatialSettingsFallback,
   setScreenRendererTransparentBackground,
   type ArRenderDiagnostics,
   type ArViewGesture,
@@ -64,4 +66,38 @@ export {
   type ScreenRendererOptions,
   type ScreenSceneFrame,
   type SphereBatch,
+  type SpatialPanelEdgeHint,
+  type SpatialPanelItems,
+  type SpatialPanelSession,
 } from "./screen-renderer.js";
+export { spatialLayout, type SpatialLayout, type SpatialPanelLayout } from "./spatial-layout.js";
+export {
+  createGlassPanel,
+  type CreateGlassPanelOptions,
+  type GlassPanel,
+  type GlassPanelState,
+} from "./visuals/glass-panel.js";
+export { mountGlassPanelGallery } from "./visuals/glass-panel-gallery.js";
+export {
+  hitTest as hitTestPanel,
+  layoutPanel,
+  type GlassPanelButton,
+  type GlassPanelHeading,
+  type GlassPanelItem,
+  type GlassPanelRect,
+  type GlassPanelSize,
+  type GlassPanelText,
+  type GlassPanelToggle,
+} from "./visuals/panel-layout.js";
+export {
+  consumeSpatialPanelHit,
+  createSpatialPanelHost,
+  type SpatialPanelHostOptions,
+  type SpatialPanelMount,
+  type SpatialPanelPhase,
+} from "./visuals/spatial-panel-host.js";
+export {
+  calculateSpatialPanelPlacements,
+  type SpatialPanelKey,
+  type SpatialPanelPlacement,
+} from "./visuals/spatial-placement.js";

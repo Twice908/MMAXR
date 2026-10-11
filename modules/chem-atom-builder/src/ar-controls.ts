@@ -1,5 +1,5 @@
 import type { TelemetryContext } from "@mma/engine-core";
-import type { ScreenSceneRenderer } from "@mma/engine-render";
+import { shouldShowSpatialSettingsFallback, type ScreenSceneRenderer } from "@mma/engine-render";
 import {
   ArSessionController,
   ArSessionStartError,
@@ -18,6 +18,8 @@ export interface ArControlsOptions {
   readonly getActiveMissionId: () => string | null;
   readonly publishComfortBreakShown: (missionId: string | null) => void;
   readonly recordLocalEvent: (type: string, timestamp: string, detail: string) => void;
+  readonly onSpatialActiveChange?: (active: boolean) => void;
+  readonly onSpatialExpandedChange?: (expanded: boolean) => void;
   readonly diagnostics?: boolean;
 }
 
@@ -115,6 +117,7 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
     arPanel.classList.toggle("is-collapsed", collapsed);
     panelToggle.textContent = collapsed ? "Show panel" : "Hide panel";
     panelToggle.setAttribute("aria-expanded", String(!collapsed));
+    options.onSpatialExpandedChange?.(!collapsed);
   };
   const mountPanel = (): void => {
     if (panelMounted) {
@@ -147,6 +150,13 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
   exitButton.hidden = true;
   root.append(exitButton);
 
+  const settingsFallbackButton = document.createElement("button");
+  settingsFallbackButton.type = "button";
+  settingsFallbackButton.className = "spatial-settings-fallback ar-spatial-settings-fallback";
+  settingsFallbackButton.textContent = "Settings";
+  settingsFallbackButton.hidden = true;
+  root.append(settingsFallbackButton);
+
   const diagnostics = options.diagnostics ? document.createElement("output") : null;
   if (diagnostics) {
     diagnostics.className = "ar-diagnostics";
@@ -164,6 +174,7 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
   let disposed = false;
   const activeTargets = [document.documentElement, document.body, root];
   let sessionState = "idle";
+  let spatialActive = false;
   let grantedFeatures: readonly string[] = [];
   let cancelComfortBreak: (() => void) | null = null;
   const setStatus = (message: string): void => {
@@ -202,6 +213,11 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
         return;
       }
       const inAr = state.status === "active" || state.status === "ending";
+      const spatialShouldBeActive = state.status === "active";
+      if (spatialActive !== spatialShouldBeActive) {
+        spatialActive = spatialShouldBeActive;
+        options.onSpatialActiveChange?.(spatialActive);
+      }
       setArActiveState(inAr, activeTargets);
       sessionState = state.status;
       grantedFeatures = state.status === "active" ? state.grantedFeatures : [];
@@ -214,6 +230,10 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
         cancelComfortBreak = null;
       }
       exitButton.hidden = !inAr;
+      settingsFallbackButton.hidden = !shouldShowSpatialSettingsFallback(
+        spatialShouldBeActive,
+        false,
+      );
       exitButton.disabled = state.status !== "active";
       startButton.disabled = state.status === "requesting" || inAr;
       if (diagnostics) {
@@ -307,12 +327,22 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
       setPanelCollapsed(!arPanel.classList.contains("is-collapsed"));
     } else if (action === "reset-view") {
       renderer.resetArView();
+    } else if (action === "settings-fallback") {
+      const toggle = arPanel.querySelector<HTMLButtonElement>("[data-ar-action='panel-toggle']");
+      const opening = !root.classList.contains("spatial-dom-settings-open");
+      root.classList.toggle("spatial-dom-settings-open", opening);
+      if (opening
+        ? arPanel.classList.contains("is-collapsed")
+        : !arPanel.classList.contains("is-collapsed")) {
+        toggle?.click();
+      }
     }
   };
   const onBeforeXrSelect = (event: Event): void => {
     event.preventDefault();
   };
   root.addEventListener("click", onAction);
+  settingsFallbackButton.dataset.arAction = "settings-fallback";
   root.addEventListener("beforexrselect", onBeforeXrSelect);
 
   void detectArSupport().then((result) => {
@@ -339,6 +369,7 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
       dialog.close();
     }
     await controller.stop();
+    if (spatialActive) options.onSpatialActiveChange?.(false);
     unmountPanel();
     setArActiveState(false, activeTargets);
     renderer.setArDiagnosticsListener(null);
@@ -348,6 +379,7 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
     arPanel.remove();
     status.remove();
     exitButton.remove();
+    settingsFallbackButton.remove();
     breakReminder.remove();
     diagnostics?.remove();
   };

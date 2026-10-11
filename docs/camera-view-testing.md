@@ -19,6 +19,16 @@ recorded, captured, or uploaded.
 4. Exit, hide the tab, and simulate a disconnected or busy camera. Each path
    should remove the video, turn off the camera indicator, and return to screen
    mode without changing lesson state.
+5. While Camera view is active, confirm glass panels appear around the atom,
+   the mission panel stays expanded, side panels begin compact, and tapping a
+   side header expands it. Confirm panel actions work and the DOM controls
+   remain available. The **Settings** fallback should open the existing DOM
+   narration controls.
+6. Rotate the view until a panel leaves the viewport; use its edge hint to turn
+   toward it. Exit and re-enter twice, then confirm the panels and hints are
+   removed each time.
+7. Confirm the compact **Settings** panel reflects the DOM mute, captions, and
+   speed states; test replay, reset view, and show/hide panels.
 
 ## Phone checklist
 

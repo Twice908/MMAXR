@@ -13,7 +13,11 @@ const app: HTMLElement = appRoot;
 app.className = "app-shell";
 app.innerHTML = '<div class="shell-loading" role="status">Loading Atom Builder...</div>';
 
-if (import.meta.env.DEV && new URLSearchParams(window.location.search).has("narration-generator")) {
+if (import.meta.env.DEV && new URLSearchParams(window.location.search).has("glass-panels")) {
+  void import("@mma/engine-render")
+    .then(({ mountGlassPanelGallery }) => mountGlassPanelGallery(app))
+    .catch(showLoadError);
+} else if (import.meta.env.DEV && new URLSearchParams(window.location.search).has("narration-generator")) {
   void import("./narration-generator.js")
     .then(({ mountNarrationGenerator }) => mountNarrationGenerator(app))
     .catch(showLoadError);
