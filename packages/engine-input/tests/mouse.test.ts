@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { MouseInputAdapter } from "../src/mouse.js";
 import { InputEventBus } from "../src/event-bus.js";
-import { FakeDomElement, event } from "./helpers/fake-dom.js";
+import { FakeDomElement, event, wheelEvent } from "./helpers/fake-dom.js";
 import { createActionSink } from "./helpers/test-actions.js";
 
 describe("MouseInputAdapter", () => {
@@ -96,19 +96,12 @@ describe("MouseInputAdapter", () => {
     adapter.dispose();
   });
 
-  it("uses the wheel for scale", () => {
+  it("does not handle wheel zoom", () => {
     const { root, sink, adapter } = create();
 
-    const wheel = event("wheel", { deltaY: 120 });
-    root.dispatchEvent(wheel);
+    root.dispatchEvent(wheelEvent({ deltaY: 120 }));
 
-    expect(sink.actions[0]).toMatchObject({
-      type: "scale",
-      payload: {
-        source: "mouse",
-        delta: 0.12,
-      },
-    });
+    expect(sink.actions).toEqual([]);
 
     adapter.dispose();
   });

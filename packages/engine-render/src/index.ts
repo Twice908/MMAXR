@@ -32,6 +32,11 @@ export {
   type PointerSample,
 } from "./input-mapping.js";
 export { ScreenInputAdapter, type ScreenInputOptions } from "./screen-input.js";
+export {
+  installZoomControls,
+  screenZoomConfig,
+  type ZoomControlsConfig,
+} from "./zoom-controls.js";
 export { selectSnapTarget, type SnapCandidate } from "./snap-target.js";
 export {
   screenDropTolerancePx,

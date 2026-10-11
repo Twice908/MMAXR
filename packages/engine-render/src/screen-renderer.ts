@@ -1,5 +1,7 @@
 import * as THREE from "three";
 import { selectSnapTarget } from "./snap-target.js";
+import { screenZoomConfig } from "./zoom-controls.js";
+export { screenZoomConfig } from "./zoom-controls.js";
 import {
   screenDropTolerancePx,
   screenPixelsToWorldUnits,
@@ -214,7 +216,7 @@ export class ScreenSceneRenderer {
   private lastFrameTime = 0;
   private yaw = 0;
   private pitch = 0;
-  private distance = 14;
+  private distance: number = screenZoomConfig.defaultDistance;
   private arViewTransform: ArViewTransform = DEFAULT_AR_VIEW_TRANSFORM;
   private nucleusRadius = 0.2;
   private dragParticle: string | null = null;
@@ -500,7 +502,21 @@ export class ScreenSceneRenderer {
 
   /** Zoom the view within fixed comfortable camera-distance limits. */
   scale(delta: number): void {
-    this.distance = THREE.MathUtils.clamp(this.distance * (delta > 0 ? 1.12 : 0.89), 7, 26);
+    this.setDistance(this.distance * Math.exp(delta));
+  }
+
+  /** Read the current screen-mode camera distance. */
+  getDistance(): number {
+    return this.distance;
+  }
+
+  /** Set the screen-mode camera distance within its configured limits. */
+  setDistance(distance: number): void {
+    this.distance = THREE.MathUtils.clamp(
+      distance,
+      screenZoomConfig.minDistance,
+      screenZoomConfig.maxDistance,
+    );
     this.updateCamera();
   }
 
@@ -508,7 +524,7 @@ export class ScreenSceneRenderer {
   resetView(): void {
     this.yaw = 0;
     this.pitch = 0;
-    this.distance = 14;
+    this.distance = screenZoomConfig.defaultDistance;
     this.updateCamera();
   }
 

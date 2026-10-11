@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#eee3ef">
+<title>MMAXR · Cell Explorer — Glass & Glow</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
+:root{--ink:#272331;--muted:#756d7c;--green:#20b977;--lime:#c8ec72;--pink:#f1b4d6;--lilac:#bba7f2;--glass:rgba(255,255,255,.48);--edge:rgba(255,255,255,.84);--shadow:0 20px 55px #66517618,inset 0 1px #ffffffd9;--r:24px}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;color:var(--ink);font-family:'DM Sans',sans-serif;background:#eee6f0;overflow-x:hidden}
+button,input,select{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #48c58e;outline-offset:3px}
+.bg{position:fixed;z-index:-2;inset:0;background:radial-gradient(ellipse at 9% 4%,#f5bddaab,transparent 32%),radial-gradient(ellipse at 86% 10%,#bcaaf1a6,transparent 34%),radial-gradient(ellipse at 72% 86%,#a9edc6a1,transparent 35%),linear-gradient(140deg,#f8eff6,#e8e3f2 55%,#f4e9f1)}
+.bg:after{content:"";position:absolute;inset:0;opacity:.11;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.3'/%3E%3C/svg%3E")}
+.glass{background:var(--glass);border:1px solid var(--edge);box-shadow:var(--shadow);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px)}
+.app{width:min(1480px,100%);margin:auto;padding:18px;min-height:100vh}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:13px 17px;border-radius:22px;gap:16px}
+.brand{display:flex;align-items:center;gap:11px;font:800 1.04rem 'Manrope',sans-serif;letter-spacing:.13em;white-space:nowrap}
+.logo{height:34px;width:34px;border-radius:12px;background:conic-gradient(from 25deg,#20bd79,#c7ed70,#e8a9d2,#b9a5f2,#20bd79);box-shadow:0 5px 14px #20b97730}
+.breadcrumb{display:flex;gap:10px;align-items:center;color:var(--muted);font-size:.86rem}.breadcrumb b{color:var(--ink)}
+.top-actions,.head-actions{display:flex;gap:9px;align-items:center}
+.btn,.pill{border:1px solid #ffffffc9;border-radius:13px;padding:10px 13px;background:#ffffff72;color:var(--ink);font-weight:700;font-size:.82rem;box-shadow:0 5px 16px #6651760a;transition:.2s}
+.btn:hover,.pill:hover{transform:translateY(-1px);box-shadow:0 8px 20px #66517616}.btn.primary{background:linear-gradient(120deg,#1eb977,#65d78b 58%,#c7ed70);border-color:#ffffffa0;color:#153d2c}
+.pill{border-radius:999px;padding:10px 14px}
+.layout{display:grid;grid-template-columns:220px minmax(0,1fr);gap:18px;margin-top:18px}
+.sidebar{border-radius:24px;padding:18px 13px;display:flex;flex-direction:column;justify-content:space-between;gap:24px;min-height:calc(100vh - 110px);background:linear-gradient(160deg,#18b979ef,#56d18d 53%,#c5e96e)}
+.side-label{font-size:.68rem;text-transform:uppercase;letter-spacing:.16em;font-weight:800;color:#164a36b8;padding:5px 10px 10px}
+.side-nav{display:grid;gap:5px}.side-link{display:flex;align-items:center;gap:11px;width:100%;border:1px solid transparent;background:transparent;border-radius:14px;padding:11px 10px;text-align:left;color:#154631;font-weight:700;font-size:.83rem}
+.side-link .ico{width:31px;height:31px;display:grid;place-items:center;border-radius:10px;background:#ffffff55;font-size:1rem}.side-link.active{background:#ffffffb8;border-color:#ffffffd9;box-shadow:0 7px 18px #15593a12}
+.side-bottom{padding:15px;border:1px solid #ffffff7a;background:#ffffff36;border-radius:18px;color:#174631}.side-bottom strong{font:800 1rem Manrope}.side-bottom p{font-size:.78rem;line-height:1.55;margin:8px 0 13px;color:#245640}
+.main{min-width:0}.page-head{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;padding:4px 3px 17px}
+.eyebrow{font-size:.68rem;text-transform:uppercase;letter-spacing:.16em;font-weight:800;color:#8c6ca2}.page-head h1{font:800 clamp(1.9rem,3vw,2.55rem) Manrope,sans-serif;letter-spacing:-.05em;margin:5px 0}.page-head p{color:var(--muted);margin:0;font-size:.92rem;line-height:1.5}
+.workspace{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(290px,.8fr);gap:17px;align-items:start}
+.panel{border-radius:24px;padding:19px;min-width:0}.panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:15px}
+.panel-head h2{font:800 1rem Manrope,sans-serif;margin:0}.micro{font-size:.63rem;font-weight:800;letter-spacing:.12em;color:#91839c}
+.stage{position:relative;min-height:490px;overflow:hidden;border-radius:20px;border:1px solid #ffffffb8;background:radial-gradient(ellipse at 48% 46%,#ffffffb5,transparent 52%),linear-gradient(145deg,#f4dfee88,#d8d1f477 55%,#c9f0d988);display:grid;place-items:center;isolation:isolate}
+.stage-grid{position:absolute;inset:0;background-image:linear-gradient(#ffffff49 1px,transparent 1px),linear-gradient(90deg,#ffffff49 1px,transparent 1px);background-size:34px 34px;mask-image:linear-gradient(transparent,#000 15%,#000 85%,transparent);opacity:.55;transform:perspective(500px) rotateX(8deg) scale(1.15)}
+.halo{position:absolute;width:330px;height:330px;border-radius:50%;background:#d9f6dc78;filter:blur(35px);z-index:-1}
+.cell-model{position:relative;width:min(390px,75vw);height:320px;transform:rotate(-8deg);transition:transform .5s;filter:drop-shadow(0 22px 22px #65527b20)}
+.cell-shell{position:absolute;inset:15px 5px 20px;border-radius:48% 52% 49% 51%/47% 45% 55% 53%;background:linear-gradient(135deg,#ffffffb8,#f5cde8a8 34%,#bca7f27c 72%,#c6f1d8a8);border:3px solid #ffffffd9;box-shadow:inset 0 0 0 7px #e9c6f65c,inset 0 0 28px #a887cf40,0 10px 30px #6e568e18}
+.cell-shell:after{content:"";position:absolute;inset:11px;border-radius:inherit;border:1px solid #ffffff9e}
+.cytoplasm{position:absolute;inset:31px 25px 34px;border-radius:inherit;background:radial-gradient(ellipse at 25% 20%,#fff9 0,transparent 32%),linear-gradient(130deg,#f8d8efb8,#d8c8f3a3 56%,#d5f1d4b0);border:1px solid #ffffff8c}
+.organelle{position:absolute;z-index:2;cursor:pointer;transition:transform .25s,filter .25s;border:1px solid #ffffffbd;box-shadow:inset 0 2px 5px #ffffff85,0 5px 10px #55466d20}
+.organelle:hover,.organelle.selected{filter:brightness(1.08) drop-shadow(0 0 8px #ffffff);transform:scale(1.13)!important;outline:2px solid #ffffffd9}
+.nucleus{width:92px;height:85px;border-radius:50%;left:38%;top:34%;background:radial-gradient(circle at 30% 25%,#f7c7e7,#b995e5 58%,#8e75c8);box-shadow:inset -8px -8px 14px #7657b744,inset 5px 5px 10px #ffffff8f,0 0 0 5px #f2d5f89c}
+.nucleolus{width:25px;height:24px;left:49%;top:43%;border-radius:50%;background:radial-gradient(circle at 30% 25%,#ffdfef,#c35eab)}
+.mito{width:68px;height:29px;border-radius:60% 45% 58% 45%;background:linear-gradient(135deg,#ffcbad,#e9897f);left:14%;top:48%;transform:rotate(-25deg)}
+.mito:after{content:"";position:absolute;inset:6px 9px;border-top:2px solid #b95c61;border-bottom:2px solid #b95c61;border-radius:50%;transform:rotate(12deg)}
+.mito.two{left:62%;top:20%;transform:rotate(35deg) scale(.75)}
+.rough-er{width:74px;height:18px;border-radius:40%;left:54%;top:66%;transform:rotate(-20deg);background:repeating-linear-gradient(0deg,#a2b4ee,#a2b4ee 3px,#7d91d7 4px,#7d91d7 5px)}
+.smooth-er{width:59px;height:16px;border-radius:50%;left:24%;top:25%;transform:rotate(24deg);background:linear-gradient(90deg,#a3e4d3,#63bea9)}
+.golgi{position:absolute;width:50px;height:35px;left:20%;top:68%;transform:rotate(10deg);background:transparent;border:0;box-shadow:none}
+.golgi:before,.golgi:after,.golgi i{content:"";position:absolute;left:0;width:47px;height:7px;border-radius:50%;background:linear-gradient(90deg,#f4a6c8,#d878a7);border:1px solid #ffffffa8}
+.golgi:before{top:2px}.golgi:after{top:13px;left:5px}.golgi i{top:24px;left:10px;width:35px}
+.ribosome{width:8px;height:8px;border-radius:50%;background:#7d9e77;border:0;box-shadow:0 0 0 1px #ffffffaa}
+.r1{left:28%;top:42%}.r2{left:68%;top:51%}.r3{left:43%;top:73%}.r4{left:74%;top:34%}.r5{left:35%;top:61%}
+.lysosome{width:19px;height:19px;left:72%;top:69%;border-radius:50%;background:radial-gradient(circle at 30% 25%,#ffe5a3,#e9a843)}
+.vacuole{width:48px;height:34px;left:65%;top:43%;border-radius:45%;background:#9ddfe7b5}
+.cell-model.plant{width:min(390px,75vw);height:340px;transform:rotate(-3deg)}
+.plant .cell-shell{inset:8px 3px 10px;border-radius:24px 35px 25px 33px;background:linear-gradient(130deg,#e4f6c5,#b5e69a 42%,#87d4a5);border:8px solid #7fbe74;box-shadow:inset 0 0 0 4px #f3ffde,0 12px 25px #48794b25}
+.plant .cytoplasm{inset:23px 18px 22px;border-radius:18px 27px 18px 27px;background:linear-gradient(130deg,#edffd7d9,#c8efb7cc 55%,#e6f8d3)}
+.plant .nucleus{width:70px;height:66px;left:38%;top:34%;background:radial-gradient(circle at 30% 25%,#f8c7e7,#ad8adf 58%,#8066bd)}
+.plant .nucleolus{left:47%;top:42%;width:20px;height:20px}
+.chloroplast{width:45px;height:24px;border-radius:50%;background:linear-gradient(135deg,#c9f28b,#4eaa62);border:1px solid #efffd1;box-shadow:inset 0 0 0 3px #6dbb6b;left:13%;top:25%;transform:rotate(25deg)}
+.chloroplast:after{content:"";position:absolute;left:9px;right:9px;top:5px;height:12px;border-left:2px solid #3f9554;border-right:2px solid #3f9554}
+.ch2{left:65%;top:25%;transform:rotate(-20deg)}.ch3{left:14%;top:63%;transform:rotate(-18deg)}.ch4{left:68%;top:64%;transform:rotate(25deg)}
+.plant .vacuole{width:125px;height:105px;left:34%;top:37%;background:linear-gradient(140deg,#a9e9f4b8,#7bc9e2b0);border:2px solid #d9faff;box-shadow:inset 0 0 20px #ffffff70;border-radius:38% 45% 40% 48%}
+.plant .mito{width:49px;height:22px;left:18%;top:47%;transform:rotate(-25deg) scale(.8)}
+.plant .mito.two{left:66%;top:47%}
+.plant .rough-er{left:39%;top:23%;width:60px}.plant .smooth-er{left:27%;top:73%;width:48px}
+.plant .golgi{left:53%;top:73%;transform:scale(.8)}
+.plant .lysosome{left:24%;top:48%;width:14px;height:14px}
+.callout{position:absolute;z-index:4;display:flex;align-items:center;gap:7px;font-size:.7rem;font-weight:800;color:#63566f;background:#ffffffb8;border:1px solid #ffffffdd;border-radius:999px;padding:7px 10px;box-shadow:0 5px 14px #6c5a7c0c;backdrop-filter:blur(12px)}
+.callout:before{content:"";width:6px;height:6px;border-radius:50%;background:#22b879}.c1{top:10%;left:5%}.c2{right:4%;top:20%}.c3{left:4%;bottom:18%}.c4{right:5%;bottom:12%}
+.stage-caption{position:absolute;bottom:13px;left:15px;right:15px;display:flex;justify-content:space-between;gap:10px;color:#786c86;font-size:.68rem}
+.stage-controls{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px}.tool{border:1px solid #ffffffc9;background:#ffffff70;padding:9px 11px;border-radius:12px;font-size:.75rem;font-weight:700;color:#64586e}.tool.active{background:#ffffffc9;color:#286c4b;border-color:#a5e7c4}
+.right-stack{display:grid;gap:15px}.model-card{padding:19px;border-radius:23px;background:linear-gradient(145deg,#ffffffa6,#f0dff5a3 48%,#c9f1d6a8);border:1px solid #ffffffdc;box-shadow:var(--shadow)}
+.model-top{display:flex;justify-content:space-between;align-items:center;gap:8px}.model-top .tag{font-size:.65rem;font-weight:800;color:#2d8157;background:#e0f7e7;border-radius:999px;padding:6px 9px}
+.model-title{font:800 1.5rem Manrope,sans-serif;margin:10px 0 4px;letter-spacing:-.04em}.model-sub{color:var(--muted);font-size:.78rem;line-height:1.5}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:17px}.stat{background:#ffffff70;border:1px solid #ffffffc9;border-radius:14px;padding:11px}.stat span{display:block;color:#7d7187;font-size:.67rem}.stat b{display:block;margin-top:5px;font:800 .95rem Manrope}
+.form-row{display:grid;gap:7px;margin:14px 0}.form-row label,.range-row{font-size:.76rem;color:#6f647a;font-weight:700}.field{width:100%;padding:11px 12px;border-radius:12px;border:1px solid #ffffffd9;background:#ffffffa6;color:var(--ink)}
+.range-row{display:flex;justify-content:space-between;align-items:center;margin:14px 0 7px}.range-row b{color:#248457}.slider{width:100%;accent-color:#20b977}
+.organelle-list{display:grid;gap:7px}.org-row{display:flex;align-items:center;gap:10px;padding:9px;border:1px solid #ffffffa8;border-radius:13px;background:#ffffff50;text-align:left;color:var(--ink);width:100%}.org-row.active{background:#ffffffc9;border-color:#8be0b3}.swatch{width:28px;height:28px;border-radius:10px;flex:0 0 auto;box-shadow:inset 0 1px 3px #ffffffa0}.org-row strong{display:block;font-size:.78rem}.org-row small{display:block;color:var(--muted);font-size:.66rem;margin-top:2px}.org-row .arrow{margin-left:auto;color:#9a8da5}
+.info-card{padding:16px;border-radius:20px}.info-card h3{font:800 .95rem Manrope;margin:0 0 7px}.info-card p{font-size:.79rem;line-height:1.6;color:var(--muted);margin:0}.fact-row{display:flex;gap:9px;align-items:flex-start;padding:10px 0;border-bottom:1px solid #ffffff9c;font-size:.76rem;line-height:1.45}.fact-row:last-child{border-bottom:0;padding-bottom:0}.fact-dot{width:8px;height:8px;border-radius:50%;background:var(--green);margin-top:5px;flex:0 0 auto}
+.bottom-grid{display:grid;grid-template-columns:1.1fr 1fr;gap:16px;margin-top:17px}.mini-panel{padding:18px;border-radius:22px}.section-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.section-title h2{font:800 1rem Manrope;margin:0}.section-title span{font-size:.64rem;color:#8b7c96;font-weight:800;letter-spacing:.1em}
+.compare{display:grid;grid-template-columns:1fr 1fr;gap:10px}.compare-item{padding:13px;border:1px solid #ffffffc9;background:#ffffff62;border-radius:16px}.compare-item h3{font:800 .83rem Manrope;margin:0 0 7px}.compare-item p{font-size:.74rem;line-height:1.55;color:var(--muted);margin:0}
+.bottom-note{display:flex;justify-content:space-between;gap:12px;margin-top:17px;padding:13px 16px;border-radius:16px;font-size:.72rem;color:#786c82}.bottom-note strong{color:#42354f}footer{display:flex;justify-content:space-between;gap:12px;padding:18px 3px 8px;color:#92869a;font-size:.68rem}
+.spatial .layout{grid-template-columns:76px minmax(0,1fr)}.spatial .sidebar{padding:15px 9px}.spatial .side-link{justify-content:center;padding:9px}.spatial .side-link .txt,.spatial .side-label,.spatial .side-bottom{display:none}.spatial .side-link .ico{width:39px;height:39px}.spatial .stage{min-height:590px}.spatial .cell-model{transform:rotate(-8deg) scale(1.12)}.spatial .plant.cell-model{transform:rotate(-3deg) scale(1.1)}
+.hidden{display:none!important}
+@media(max-width:1050px){.layout{grid-template-columns:180px minmax(0,1fr)}.workspace{grid-template-columns:1fr}.right-stack{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}.right-stack .info-card{grid-column:span 2}.stage{min-height:460px}.spatial .layout{grid-template-columns:65px minmax(0,1fr)}}
+@media(max-width:700px){.app{padding:10px}.topbar{padding:11px 12px;gap:8px}.breadcrumb{display:none}.top-actions .pill{display:none}.layout,.spatial .layout{grid-template-columns:1fr;gap:12px}.sidebar,.spatial .sidebar{min-height:0;padding:8px;border-radius:18px;display:block}.side-nav{display:flex;overflow-x:auto;gap:5px}.side-label,.side-bottom{display:none}.side-link,.spatial .side-link{white-space:nowrap;width:auto;padding:8px 10px;justify-content:flex-start}.side-link .txt,.spatial .side-link .txt{display:inline}.side-link .ico,.spatial .side-link .ico{width:28px;height:28px}.sidebar>div+div{display:none}.page-head{align-items:flex-start;flex-direction:column;padding:4px 3px 13px;gap:12px}.head-actions{width:100%}.head-actions .btn{flex:1}.workspace{grid-template-columns:1fr}.right-stack{grid-template-columns:1fr}.right-stack .info-card{grid-column:auto}.stage{min-height:390px}.cell-model{transform:rotate(-8deg) scale(.84)}.plant.cell-model{transform:rotate(-3deg) scale(.83)}.spatial .stage{min-height:440px}.spatial .cell-model{transform:rotate(-8deg) scale(.9)}.spatial .plant.cell-model{transform:rotate(-3deg) scale(.9)}.bottom-grid{grid-template-columns:1fr}.bottom-note,footer{align-items:flex-start;flex-direction:column}.callout{font-size:.62rem;padding:6px 8px}.c1{left:3%}.c2{right:3%}.c3{left:3%}.c4{right:3%}}
+@media(max-width:420px){.stage{min-height:330px}.cell-model{transform:rotate(-8deg) scale(.68)}.plant.cell-model{transform:rotate(-3deg) scale(.68)}.spatial .cell-model{transform:rotate(-8deg) scale(.75)}.spatial .plant.cell-model{transform:rotate(-3deg) scale(.75)}.panel{padding:13px}.model-card{padding:15px}.page-head h1{font-size:1.85rem}.stage-controls .tool{flex:1}.compare{grid-template-columns:1fr}.callout{font-size:.58rem}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;scroll-behavior:auto!important;transition:none!important}}
+</style>
+</head>
+<body><div class="bg"></div><div class="app">
+<header class="topbar glass">
+  <a class="brand" href="#" aria-label="MMAXR home"><span class="logo"></span><span>MMAXR</span></a>
+  <div class="breadcrumb"><span>Workspace</span><span>›</span><b>Cell Explorer</b></div>
+  <div class="top-actions"><button class="pill" id="viewToggle">◉ Spatial view</button><button class="btn primary" id="resetTop">↺ Reset view</button></div>
+</header>
+<div class="layout">
+<aside class="sidebar glass">
+  <div><div class="side-label">Workspace</div><div class="side-nav">
+    <button class="side-link active"><span class="ico">◉</span><span class="txt">Cell Explorer</span></button>
+    <button class="side-link"><span class="ico">⚛</span><span class="txt">Atom Builder</span></button>
+    <button class="side-link"><span class="ico">⌘</span><span class="txt">Molecule Lab</span></button>
+    <button class="side-link"><span class="ico">◌</span><span class="txt">Saved Models</span></button>
+  </div></div>
+  <div><div class="side-label">Learn</div><div class="side-nav"><button class="side-link"><span class="ico">▤</span><span class="txt">Concept Library</span></button><button class="side-link"><span class="ico">◷</span><span class="txt">Recent Activity</span></button></div></div>
+  <div class="side-bottom"><strong>Look inside life.</strong><p>Explore organelles, compare cell types and inspect each structure in your own pace.</p><button class="btn" style="width:100%" id="guideBtn">Open quick guide ↗</button></div>
+</aside>
+<main class="main">
+  <div class="page-head"><div><div class="eyebrow">Interactive biology studio</div><h1>Cell Explorer</h1><p>Explore the structures that keep living cells working — from the nucleus to the smallest organelles.</p></div><div class="head-actions"><button class="btn" id="labelsBtn">⌖ Hide labels</button><button class="btn primary" id="resetBtn">↺ Reset model</button></div></div>
+  <div class="workspace">
+    <section class="panel glass">
+      <div class="panel-head"><h2 id="stageTitle">3D animal cell workspace</h2><span class="micro">MODEL PREVIEW · 01</span></div>
+      <div class="stage" id="stage">
+        <div class="stage-grid"></div><div class="halo"></div>
+        <div class="callout c1 label">Cell membrane</div><div class="callout c2 label">Nucleus</div><div class="callout c3 label">Mitochondrion</div><div class="callout c4 label" id="specialLabel">Golgi apparatus</div>
+        <div class="cell-model" id="cellModel" aria-label="Illustrative cell model">
+          <div class="cell-shell"></div><div class="cytoplasm"></div>
+          <button class="organelle nucleus selected" data-part="nucleus" aria-label="Nucleus"></button>
+          <button class="organelle nucleolus" data-part="nucleolus" aria-label="Nucleolus"></button>
+          <button class="organelle mito" data-part="mitochondria" aria-label="Mitochondrion"></button><button class="organelle mito two" data-part="mitochondria" aria-label="Mitochondrion"></button>
+          <button class="organelle rough-er" data-part="rough-er" aria-label="Rough endoplasmic reticulum"></button><button class="organelle smooth-er" data-part="smooth-er" aria-label="Smooth endoplasmic reticulum"></button>
+          <button class="organelle golgi" data-part="golgi" aria-label="Golgi apparatus"><i></i></button>
+          <button class="organelle ribosome r1" data-part="ribosomes" aria-label="Ribosome"></button><button class="organelle ribosome r2" data-part="ribosomes" aria-label="Ribosome"></button><button class="organelle ribosome r3" data-part="ribosomes" aria-label="Ribosome"></button><button class="organelle ribosome r4" data-part="ribosomes" aria-label="Ribosome"></button><button class="organelle ribosome r5" data-part="ribosomes" aria-label="Ribosome"></button>
+          <button class="organelle vacuole" data-part="vacuole" aria-label="Vacuole"></button><button class="organelle lysosome" data-part="lysosome" aria-label="Lysosome"></button>
+          <button class="organelle chloroplast ch1 hidden" data-part="chloroplast" aria-label="Chloroplast"></button><button class="organelle chloroplast ch2 hidden" data-part="chloroplast" aria-label="Chloroplast"></button><button class="organelle chloroplast ch3 hidden" data-part="chloroplast" aria-label="Chloroplast"></button><button class="organelle chloroplast ch4 hidden" data-part="chloroplast" aria-label="Chloroplast"></button>
+        </div>
+        <div class="stage-caption"><span id="modelCaption">Illustrative cell · structures not to scale</span><span>Drag / rotate controls are prototype placeholders</span></div>
+      </div>
+      <div class="stage-controls"><button class="tool active" id="orbitBtn">✥ Rotate model</button><button class="tool" id="explodeBtn">◉ Explore layers</button><button class="tool active" id="organelleBtn">⌖ Organelle select</button><button class="tool" id="expandBtn">⛶ Focus view</button></div>
+    </section>
+    <div class="right-stack">
+      <section class="model-card">
+        <div class="model-top"><span class="eyebrow">Selected model</span><span class="tag" id="modelTag">EUKARYOTIC</span></div>
+        <div class="model-title" id="modelName">Animal Cell</div><div class="model-sub" id="modelDesc">A flexible cell with a membrane boundary and no cell wall or chloroplasts.</div>
+        <div class="stats"><div class="stat"><span>Cell boundary</span><b id="boundaryStat">Membrane</b></div><div class="stat"><span>Typical shape</span><b id="shapeStat">Flexible</b></div><div class="stat"><span>Nucleus</span><b>Present</b></div><div class="stat"><span>Chloroplasts</span><b id="chloroStat">Absent</b></div></div>
+        <div class="form-row"><label for="cellType">Choose cell model</label><select id="cellType" class="field"><option value="animal">Animal cell</option><option value="plant">Plant cell</option></select></div>
+        <div class="range-row"><label for="scale">Model scale</label><b id="scaleVal">100%</b></div><input class="slider" id="scale" type="range" min="70" max="120" value="100">
+        <div class="range-row"><span>Show organelle labels</span><b id="labelState">On</b></div><button class="btn primary" id="focusBtn" style="width:100%;margin-top:12px">Inspect selected organelle ↗</button>
+      </section>
+      <section class="panel glass">
+        <div class="panel-head"><h2>Organelle explorer</h2><span class="micro">SELECT A PART</span></div>
+        <div class="organelle-list" id="organelleList">
+          <button class="org-row active" data-part="nucleus"><span class="swatch" style="background:linear-gradient(135deg,#f7c7e7,#a58ad8)"></span><span><strong>Nucleus</strong><small>Stores genetic information</small></span><span class="arrow">↗</span></button>
+          <button class="org-row" data-part="mitochondria"><span class="swatch" style="background:linear-gradient(135deg,#ffcfad,#e9897f)"></span><span><strong>Mitochondria</strong><small>Releases usable energy</small></span><span class="arrow">↗</span></button>
+          <button class="org-row" data-part="rough-er"><span class="swatch" style="background:linear-gradient(135deg,#b8c7fa,#7d91d7)"></span><span><strong>Endoplasmic reticulum</strong><small>Builds and moves cell products</small></span><span class="arrow">↗</span></button>
+          <button class="org-row" data-part="golgi"><span class="swatch" style="background:linear-gradient(135deg,#f4a6c8,#d878a7)"></span><span><strong>Golgi apparatus</strong><small>Modifies, sorts and packages</small></span><span class="arrow">↗</span></button>
+          <button class="org-row" data-part="vacuole"><span class="swatch" style="background:linear-gradient(135deg,#b9f2f4,#7bc9e2)"></span><span><strong>Vacuole</strong><small>Storage and water balance</small></span><span class="arrow">↗</span></button>
+          <button class="org-row plant-only hidden" data-part="chloroplast"><span class="swatch" style="background:linear-gradient(135deg,#c9f28b,#4eaa62)"></span><span><strong>Chloroplast</strong><small>Photosynthesis in plants</small></span><span class="arrow">↗</span></button>
+          <button class="org-row" data-part="membrane"><span class="swatch" style="background:linear-gradient(135deg,#ffffff,#c5a7e7)"></span><span><strong>Cell membrane</strong><small>Controls what enters and leaves</small></span><span class="arrow">↗</span></button>
+        </div>
+      </section>
+      <section class="info-card glass">
+        <h3 id="infoTitle">Nucleus</h3><p id="infoText">The nucleus contains most of the cell’s DNA and helps coordinate cell activities. The nucleolus inside it is involved in making ribosome components.</p>
+        <div class="fact-row"><span class="fact-dot"></span><span id="infoFact">Think of it as the cell’s information centre — not a literal “brain”.</span></div>
+      </section>
+    </div>
+  </div>
+  <div class="bottom-grid">
+    <section class="mini-panel glass"><div class="section-title"><h2>Plant vs animal cell</h2><span>QUICK COMPARISON</span></div><div class="compare"><div class="compare-item"><h3>🌱 Plant cell</h3><p>Cell wall, chloroplasts in photosynthetic cells, and usually a large central vacuole. Often appears more box-like.</p></div><div class="compare-item"><h3>◉ Animal cell</h3><p>No cell wall or chloroplasts. Usually has a more flexible outline and smaller vacuoles or vesicles.</p></div></div></section>
+    <section class="mini-panel glass"><div class="section-title"><h2>Learning checkpoints</h2><span>TRY THESE</span></div><div class="fact-row"><span class="fact-dot"></span><span>Tap an organelle in the model or list to inspect its role.</span></div><div class="fact-row"><span class="fact-dot"></span><span>Switch cell type and identify which structures appear or change.</span></div><div class="fact-row"><span class="fact-dot"></span><span>Use Explore layers to visually separate the cell boundary and interior.</span></div></section>
+  </div>
+  <div class="bottom-note glass"><span><strong>Learning preview</strong> · This is a stylised interactive UI prototype, not a biologically scaled 3D simulation.</span><span>Designed for desktop, tablet, mobile and future XR integration.</span></div>
+  <footer><span>MMAXR · Explore science spatially</span><span>Glass & Glow UI concept · 2026</span></footer>
+</main></div></div>
+<script>
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const data={
+ nucleus:{title:'Nucleus',text:'The nucleus contains most of the cell’s DNA and helps coordinate cell activities. The nucleolus inside it is involved in making ribosome components.',fact:'Think of it as the cell’s information centre — not a literal “brain”.'},
+ nucleolus:{title:'Nucleolus',text:'A dense region inside the nucleus where ribosomal RNA is made and ribosome subunits are assembled.',fact:'It is inside the nucleus, not a separate membrane-bound organelle.'},
+ mitochondria:{title:'Mitochondria',text:'Mitochondria carry out most aerobic cellular respiration in eukaryotic cells, transferring energy into ATP that cells can use.',fact:'Cells vary in mitochondrial number according to their energy needs.'},
+ 'rough-er':{title:'Endoplasmic reticulum',text:'The rough ER has ribosomes and helps make and process many proteins. The smooth ER helps make lipids and has other roles, including detoxification in some cells.',fact:'The ER is a connected membrane network, not just a single strip.'},
+ 'smooth-er':{title:'Smooth endoplasmic reticulum',text:'The smooth ER contributes to lipid synthesis, calcium storage and detoxification in certain cells.',fact:'It lacks the ribosomes that give rough ER its dotted appearance.'},
+ golgi:{title:'Golgi apparatus',text:'The Golgi modifies, sorts and packages proteins and lipids into vesicles for delivery to other parts of the cell or outside it.',fact:'Think of it as a sorting and dispatch centre.'},
+ ribosomes:{title:'Ribosomes',text:'Ribosomes translate messenger RNA to assemble amino acids into proteins. They may float in the cytoplasm or attach to rough ER.',fact:'Ribosomes are found in both plant and animal cells.'},
+ vacuole:{title:'Vacuole',text:'Vacuoles store water, ions, nutrients and waste. Mature plant cells typically have a large central vacuole that supports turgor pressure.',fact:'Animal cells may have smaller storage vesicles and vacuoles.'},
+ lysosome:{title:'Lysosome',text:'Lysosomes contain digestive enzymes that break down and recycle materials. Their roles can overlap with other compartments in different cell types.',fact:'Plant cells often use lytic vacuoles for many similar digestive roles.'},
+ chloroplast:{title:'Chloroplast',text:'Chloroplasts capture light energy for photosynthesis in plants and algae. They contain chlorophyll and their own genetic material.',fact:'Not every plant cell contains chloroplasts; many root cells do not.'},
+ membrane:{title:'Cell membrane',text:'The selectively permeable membrane surrounds the cytoplasm and regulates the movement of substances into and out of the cell.',fact:'Plant cells have a cell membrane just inside the cell wall.'}
+};
+let selected='nucleus',labelsOn=true,exploded=false,rotating=false,focused=false;
+function selectPart(part){
+ selected=part;const d=data[part]||data.nucleus;
+ $('#infoTitle').textContent=d.title;$('#infoText').textContent=d.text;$('#infoFact').textContent=d.fact;
+ $$('.organelle').forEach(el=>el.classList.toggle('selected',el.dataset.part===part));
+ $$('.org-row').forEach(el=>el.classList.toggle('active',el.dataset.part===part));
+}
+function setCell(type){
+ const plant=type==='plant';$('#cellModel').classList.toggle('plant',plant);
+ $('#modelName').textContent=plant?'Plant Cell':'Animal Cell';
+ $('#stageTitle').textContent=plant?'3D plant cell workspace':'3D animal cell workspace';
+ $('#modelDesc').textContent=plant?'A more rigid cell with a cell wall, chloroplasts in photosynthetic cells and a large central vacuole.':'A flexible cell with a membrane boundary and no cell wall or chloroplasts.';
+ $('#boundaryStat').textContent=plant?'Wall + membrane':'Membrane';$('#shapeStat').textContent=plant?'More box-like':'Flexible';$('#chloroStat').textContent=plant?'Present in photosynthetic cells':'Absent';
+ $('#modelTag').textContent=plant?'PLANT EUKARYOTE':'ANIMAL EUKARYOTE';$('#modelCaption').textContent=plant?'Illustrative plant cell · structures not to scale':'Illustrative animal cell · structures not to scale';
+ $('#specialLabel').textContent=plant?'Chloroplast':'Golgi apparatus';
+ $$('.chloroplast').forEach(el=>el.classList.toggle('hidden',!plant));
+ $$('.plant-only').forEach(el=>el.classList.toggle('hidden',!plant));
+ $('.vacuole').style.opacity=plant?'1':'.65';
+ if(plant && selected==='lysosome')selectPart('chloroplast');
+}
+$('#cellType').addEventListener('change',e=>setCell(e.target.value));
+$$('[data-part]').forEach(el=>el.addEventListener('click',()=>selectPart(el.dataset.part)));
+$('#scale').addEventListener('input',e=>{let v=+e.target.value;$('#scaleVal').textContent=v+'%';$('#cellModel').style.scale=(v/100).toFixed(2)});
+$('#labelsBtn').addEventListener('click',()=>{labelsOn=!labelsOn;$$('.label').forEach(el=>el.classList.toggle('hidden',!labelsOn));$('#labelsBtn').textContent=labelsOn?'⌖ Hide labels':'⌖ Show labels';$('#labelState').textContent=labelsOn?'On':'Off'});
+$('#orbitBtn').addEventListener('click',()=>{rotating=!rotating;$('#orbitBtn').classList.toggle('active',rotating);$('#cellModel').style.transition='transform .5s';$('#cellModel').style.animation=rotating?'slowOrbit 12s ease-in-out infinite alternate':'none';});
+$('#explodeBtn').addEventListener('click',()=>{exploded=!exploded;$('#explodeBtn').classList.toggle('active',exploded);$('#cellModel').classList.toggle('exploded',exploded);$$('.organelle').forEach((el,i)=>{el.style.translate=exploded?`${(i%3-1)*12}px ${((i%4)-1.5)*10}px`:'0 0'});});
+$('#organelleBtn').addEventListener('click',()=>{$('#organelleBtn').classList.toggle('active');$('#cellModel').classList.toggle('no-pick',!$('#organelleBtn').classList.contains('active'));});
+$('#expandBtn').addEventListener('click',()=>{focused=!focused;$('#stage').style.minHeight=focused?'650px':'';$('#expandBtn').classList.toggle('active',focused);$('#expandBtn').textContent=focused?'⛶ Exit focus':'⛶ Focus view'});
+function reset(){rotating=false;exploded=false;focused=false;$('#scale').value=100;$('#scaleVal').textContent='100%';$('#cellModel').style.scale='1';$('#cellModel').style.animation='none';$('#cellModel').style.transform='';$$('.organelle').forEach(el=>el.style.translate='0 0');$('#orbitBtn').classList.remove('active');$('#explodeBtn').classList.remove('active');$('#expandBtn').classList.remove('active');$('#expandBtn').textContent='⛶ Focus view';$('#stage').style.minHeight='';$('#cellType').value='animal';setCell('animal');selectPart('nucleus');}
+$('#resetBtn').addEventListener('click',reset);$('#resetTop').addEventListener('click',reset);
+$('#focusBtn').addEventListener('click',()=>{selectPart(selected);$('#infoTitle').scrollIntoView({behavior:'smooth',block:'center'})});
+$('#guideBtn').addEventListener('click',()=>alert('Quick guide: choose a cell type, select an organelle, then use Rotate model or Explore layers. This prototype uses illustrative 2D/CSS geometry as a stand-in for a future interactive 3D model.'));
+$('#viewToggle').addEventListener('click',function(){document.body.classList.toggle('spatial');this.textContent=document.body.classList.contains('spatial')?'◉ Standard view':'◉ Spatial view'});
+$$('.side-link').forEach(b=>b.addEventListener('click',()=>{$$('.side-link').forEach(x=>x.classList.remove('active'));b.classList.add('active')}));
+const style=document.createElement('style');style.textContent='@keyframes slowOrbit{0%{transform:rotate(-8deg) scale(1)}50%{transform:rotate(4deg) scale(1.03)}100%{transform:rotate(-5deg) scale(1)}}.no-pick .organelle{pointer-events:none}';document.head.appendChild(style);
+selectPart('nucleus');setCell('animal');
+</script></body></html>

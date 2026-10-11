@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#eee3ef"><title>MMAXR · Atom Builder — Glass & Glow</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
+:root{--ink:#272331;--muted:#756d7c;--green:#20b977;--lime:#c8ec72;--pink:#f1b4d6;--lilac:#bba7f2;--glass:rgba(255,255,255,.48);--edge:rgba(255,255,255,.84);--shadow:0 20px 55px #66517618,inset 0 1px #ffffffd9;--r:24px}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;color:var(--ink);font-family:'DM Sans',sans-serif;background:#eee6f0;overflow-x:hidden}
+button,input,select{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #48c58e;outline-offset:3px}
+.bg{position:fixed;z-index:-2;inset:0;background:radial-gradient(ellipse at 9% 4%,#f5bddaab,transparent 32%),radial-gradient(ellipse at 86% 10%,#bcaaf1a6,transparent 34%),radial-gradient(ellipse at 72% 86%,#a9edc6a1,transparent 35%),linear-gradient(140deg,#f8eff6,#e8e3f2 55%,#f4e9f1)}
+.bg:after{content:"";position:absolute;inset:0;opacity:.11;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.3'/%3E%3C/svg%3E")}
+.glass{background:var(--glass);border:1px solid var(--edge);box-shadow:var(--shadow);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px)}
+.app{width:min(1480px,100%);margin:auto;padding:18px;min-height:100vh}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:13px 17px;border-radius:22px;gap:16px}
+.brand{display:flex;align-items:center;gap:11px;font:800 1.04rem 'Manrope',sans-serif;letter-spacing:.13em;white-space:nowrap}
+.logo{height:34px;width:34px;border-radius:12px;background:conic-gradient(from 25deg,#20bd79,#c7ed70,#e8a9d2,#b9a5f2,#20bd79);box-shadow:0 0 24px #b4cba9a8;position:relative}.logo:after{content:"";position:absolute;inset:8px;border:1px solid #ffffffd9;border-radius:50%}
+.breadcrumb{font-size:.83rem;color:var(--muted);display:flex;gap:10px;align-items:center}.breadcrumb b{color:var(--ink);font-weight:700}.top-actions{display:flex;gap:9px;align-items:center}
+.pill,.btn{border:1px solid #ffffffc9;background:#ffffff76;border-radius:999px;padding:10px 14px;color:#51485a;font-weight:700;font-size:.8rem;display:inline-flex;gap:8px;align-items:center;justify-content:center}
+.btn.primary{background:linear-gradient(120deg,#18a96d,#27c58b 65%,#a8df79);border-color:#ffffff6b;color:white;box-shadow:0 9px 22px #29b77c3b}
+.layout{display:grid;grid-template-columns:220px minmax(0,1fr);gap:18px;margin-top:18px;align-items:start}
+.sidebar{border-radius:26px;padding:17px;position:sticky;top:18px;min-height:calc(100vh - 125px);display:flex;flex-direction:column;gap:22px}
+.side-label{font-size:.67rem;text-transform:uppercase;letter-spacing:.15em;color:#8b8191;font-weight:800;padding:0 11px;margin-bottom:8px}
+.side-nav{display:grid;gap:5px}.side-link{display:flex;align-items:center;gap:11px;padding:12px 11px;border-radius:14px;color:#696173;font-size:.87rem;text-align:left;border:1px solid transparent;background:transparent;width:100%}
+.side-link .ico{width:25px;height:25px;border-radius:9px;background:#ffffff87;display:grid;place-items:center;font-size:.88rem}
+.side-link.active{color:#12784e;background:linear-gradient(110deg,#c9f2dbd9,#e7f9d5b5);border-color:#ffffffd9;box-shadow:0 8px 20px #35b77d17;font-weight:700}
+.side-bottom{margin-top:auto;border-radius:18px;padding:15px;background:linear-gradient(145deg,#d7f5e4aa,#e9e1f7b8,#f8dce9a8);border:1px solid #ffffffc9}
+.side-bottom strong{font-size:.84rem;display:block;margin-bottom:5px}.side-bottom p{font-size:.74rem;color:#746b7d;line-height:1.5;margin:0 0 12px}
+.main{min-width:0;display:grid;gap:18px}
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;padding:15px 5px 3px}
+.eyebrow{font-size:.7rem;letter-spacing:.15em;text-transform:uppercase;color:#29946a;font-weight:800}
+h1,h2,h3,p{margin-top:0}h1,h2,h3{font-family:'Manrope',sans-serif;letter-spacing:-.045em}
+h1{font-size:clamp(2rem,4vw,3.1rem);line-height:1.05;margin:9px 0 10px;font-weight:700}
+.page-head p{color:var(--muted);margin:0;font-size:.93rem;line-height:1.6}.head-actions{display:flex;gap:8px;flex-wrap:wrap}
+.workspace{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(270px,.85fr);gap:18px;align-items:stretch}
+.panel{border-radius:var(--r);padding:22px;min-width:0}
+.panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
+.panel-head h2{font-size:1.05rem;letter-spacing:-.02em;margin:0}.micro{font-size:.73rem;color:var(--muted)}
+.stage{min-height:420px;position:relative;border-radius:20px;overflow:hidden;border:1px solid #ffffffb8;background:radial-gradient(ellipse at 50% 46%,#ffffffb0,transparent 35%),radial-gradient(ellipse at 20% 80%,#bcefd4b5,transparent 45%),radial-gradient(ellipse at 83% 22%,#e5c6f7c2,transparent 42%),#e9e1f0;display:grid;place-items:center}
+.stage:before,.stage:after{content:"";position:absolute;width:68%;height:43%;border:1px solid #ffffffb8;border-radius:50%;transform:rotate(-25deg);box-shadow:0 0 25px #ffffff40}.stage:after{width:86%;height:52%;transform:rotate(25deg);opacity:.72}
+.stage-grid{position:absolute;inset:0;background-image:linear-gradient(#ffffff32 1px,transparent 1px),linear-gradient(90deg,#ffffff32 1px,transparent 1px);background-size:38px 38px;mask-image:radial-gradient(ellipse at center,#000,transparent 76%);opacity:.45}
+.atom{width:220px;height:220px;position:relative;z-index:1;animation:float 7s ease-in-out infinite}
+.nucleus{position:absolute;width:70px;height:70px;border-radius:50%;left:50%;top:50%;transform:translate(-50%,-50%);background:radial-gradient(circle at 30% 24%,#fff,#c2b2f2 38%,#2cc387 82%);box-shadow:inset -8px -10px 17px #65528a45,0 0 38px #b5a5edab;border:1px solid #ffffffd9}
+.nucleus:before,.nucleus:after{content:"";position:absolute;width:22px;height:22px;border-radius:50%;background:linear-gradient(145deg,#fff,#eea9d3);left:12px;top:15px;box-shadow:19px 20px 0 #23bf85}
+.orbit{position:absolute;left:50%;top:50%;width:100%;height:44%;border:1.5px solid #8b7ba9a8;border-radius:50%;transform:translate(-50%,-50%) rotate(0deg)}
+.orbit:nth-child(2){transform:translate(-50%,-50%) rotate(60deg)}.orbit:nth-child(3){transform:translate(-50%,-50%) rotate(-60deg)}
+.electron{position:absolute;left:50%;top:0;width:16px;height:16px;border-radius:50%;background:radial-gradient(circle at 30% 25%,#fff,#32c985 70%);box-shadow:0 0 19px #30c889b0;transform:translate(-50%,-50%)}
+.atom-label{position:absolute;z-index:2;padding:9px 12px;border:1px solid #ffffffd6;border-radius:13px;background:#ffffff85;backdrop-filter:blur(12px);font-size:.72rem;box-shadow:0 8px 22px #8e7aa11c}
+.label-one{top:17%;left:7%}.label-two{right:6%;top:28%}.label-three{bottom:14%;left:13%}
+.stage-caption{position:absolute;bottom:13px;right:15px;color:#766b80;font-size:.67rem;z-index:2}
+.stage-controls{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:14px}
+.tool{border:1px solid #ffffffd1;background:#ffffff75;border-radius:13px;padding:10px 13px;color:#5b5365;font-size:.77rem;font-weight:700}
+.tool.active{background:#d9f5e4;color:#188657}
+.right-stack{display:grid;gap:18px;align-content:start}
+.element-card{border-radius:var(--r);padding:22px;overflow:hidden;position:relative;background:linear-gradient(145deg,#ffffff9c,#e7dff1a6 60%,#d8f5e3a6);border:1px solid #ffffffd9;box-shadow:var(--shadow)}
+.element-top{display:flex;justify-content:space-between;align-items:center}.element-symbol{font:800 3.6rem 'Manrope',sans-serif;line-height:1;letter-spacing:-.08em;color:#2aa976}.atomic-number{font-size:.8rem;color:#756a7e}.element-name{font:700 1.28rem 'Manrope',sans-serif;margin:13px 0 3px}.element-meta{color:#7c7184;font-size:.78rem}
+.data-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:19px}.data{padding:12px;border-radius:14px;background:#ffffff78;border:1px solid #ffffffa8}.data span{display:block;font-size:.68rem;color:#83788b;margin-bottom:5px}.data b{font-size:.91rem}
+.form-row{display:grid;gap:7px;margin:13px 0}.form-row label{font-size:.76rem;color:#706678;font-weight:700}.field{width:100%;min-width:0;padding:12px 13px;border-radius:13px;border:1px solid #ffffffdb;background:#ffffff87;color:#37303f;outline:none}.field::placeholder{color:#a49aa9}
+.subhead{font:700 .88rem 'Manrope',sans-serif;margin-bottom:12px}.range-row{display:flex;justify-content:space-between;align-items:center;font-size:.77rem;color:#72697b;margin:14px 0 8px}input[type=range]{width:100%;accent-color:#20b977}
+.bottom-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.mini-panel{border-radius:var(--r);padding:21px;min-width:0}.mini-panel h2{font-size:1.03rem;margin:0}.section-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px}
+.shells{display:flex;align-items:center;gap:7px;min-height:100px;padding:14px;border-radius:16px;background:#ffffff57;border:1px solid #ffffffb5;overflow:hidden}
+.shell{border-radius:50%;border:1px solid #ffffffd9;background:radial-gradient(circle at 30% 25%,#fff,#c5b4f2 48%,#b5efcf);box-shadow:0 6px 16px #8e7aa52b;flex:0 0 auto}.shell:nth-child(1){width:30px;height:30px}.shell:nth-child(2){width:48px;height:48px}.shell:nth-child(3){width:65px;height:65px}.shell:nth-child(4){width:82px;height:82px}
+.legend{display:grid;gap:10px}.legend-row{display:flex;align-items:center;gap:10px;font-size:.79rem;color:#6f6678}.dot{width:10px;height:10px;border-radius:50%;background:#2bc483;box-shadow:0 0 12px #2bc48355}.dot.pink{background:#eda8d0}.dot.lilac{background:#b6a0ed}.dot.lime{background:#c8ec72}
+.bottom-note{padding:17px 20px;border-radius:19px;display:flex;justify-content:space-between;gap:15px;align-items:center;color:#706779;font-size:.77rem}.bottom-note strong{color:#383142}
+footer{display:flex;justify-content:space-between;gap:12px;padding:20px 5px 8px;color:#887e90;font-size:.72rem}
+@keyframes float{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(-8px) rotate(2deg)}}
+body.spatial{background:#171827;color:#f6f0fb}body.spatial .bg{background:radial-gradient(ellipse at 18% 15%,#50345e,transparent 42%),radial-gradient(ellipse at 78% 78%,#145744,transparent 45%),linear-gradient(140deg,#171827,#27213a)}
+body.spatial .glass,body.spatial .panel,body.spatial .element-card,body.spatial .mini-panel,body.spatial .bottom-note{background:#ffffff0e;border-color:#ffffff2b;box-shadow:0 20px 60px #0002,inset 0 1px #ffffff1b}
+body.spatial .side-link,body.spatial .breadcrumb,body.spatial .page-head p,body.spatial .micro,body.spatial .side-bottom p,body.spatial .element-meta,body.spatial .data span,body.spatial .legend-row,body.spatial footer,body.spatial .bottom-note{color:#c6bdcf}
+body.spatial .side-link.active{background:#29bc7c27;color:#9af0c4}body.spatial h1,body.spatial h2,body.spatial h3,body.spatial .breadcrumb b,body.spatial .element-name,body.spatial .data b,body.spatial .bottom-note strong{color:#fff}
+body.spatial .field,body.spatial .tool,body.spatial .pill{background:#ffffff10;border-color:#ffffff2b;color:#f3eefa}body.spatial .stage{background:radial-gradient(ellipse at 50% 45%,#53456e,transparent 46%),linear-gradient(145deg,#29243b,#1e2930);border-color:#ffffff29}
+body.spatial .orbit{border-color:#d9c8f3a8}body.spatial .atom-label{background:#ffffff12;border-color:#ffffff35;color:#f7efff}
+@media(max-width:1050px){.layout{grid-template-columns:76px minmax(0,1fr)}.sidebar{padding:13px 9px;align-items:center}.side-label,.side-link .txt,.side-bottom{display:none}.side-nav{width:100%}.side-link{justify-content:center;padding:11px 5px}.side-link .ico{width:34px;height:34px}.brand .brand-name{display:none}.workspace{grid-template-columns:minmax(0,1.3fr) minmax(240px,.9fr)}}
+@media(max-width:760px){.app{padding:10px}.topbar{padding:11px 13px}.breadcrumb{display:none}.layout{grid-template-columns:1fr;gap:12px;margin-top:12px}.sidebar{position:static;min-height:0;padding:8px;border-radius:19px;display:block;overflow:auto}.side-nav{display:flex;gap:5px;min-width:max-content}.side-link{padding:7px 10px;gap:7px}.side-link .ico{height:29px;width:29px}.side-link .txt{display:inline}.side-label,.side-bottom{display:none}.side-nav:before{content:"";display:none}.page-head{align-items:flex-start;flex-direction:column;padding:10px 3px 0;gap:12px}.page-head h1{font-size:2.15rem}.workspace{grid-template-columns:1fr}.right-stack{grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch}.panel{padding:15px}.stage{min-height:340px}.atom{transform:scale(.86)}.element-card,.right-stack .panel{padding:16px}.bottom-grid{grid-template-columns:1fr}.head-actions{width:100%}.head-actions .btn{flex:1}.bottom-note{align-items:flex-start;flex-direction:column}}
+@media(max-width:480px){.top-actions .pill{display:none}.brand{font-size:.9rem;letter-spacing:.1em}.logo{width:30px;height:30px}.topbar{border-radius:18px}.right-stack{grid-template-columns:1fr}.stage{min-height:300px}.atom{transform:scale(.75)}.label-one{left:3%;top:14%}.label-two{right:3%;top:25%}.label-three{left:5%;bottom:10%}.panel-head{align-items:flex-start}.stage-controls .tool{flex:1}.bottom-grid{gap:12px}.shells{min-height:85px}.page-head h1{font-size:1.9rem}.head-actions .btn{font-size:.72rem;padding:10px 11px}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;scroll-behavior:auto!important;transition:none!important}}
+</style></head>
+<body><div class="bg"></div><div class="app">
+<header class="topbar glass"><a class="brand" href="#" aria-label="MMAXR home"><span class="logo"></span><span class="brand-name">MMAXR</span></a><div class="breadcrumb"><span>Workspace</span><span>›</span><b>Atom Builder</b></div><div class="top-actions"><button class="pill" id="viewToggle">◉ Spatial view</button><button class="btn primary">＋ New model</button></div></header>
+<div class="layout">
+<aside class="sidebar glass"><div><div class="side-label">Workspace</div><div class="side-nav">
+<button class="side-link active"><span class="ico">⚛</span><span class="txt">Atom Builder</span></button>
+<button class="side-link"><span class="ico">⌘</span><span class="txt">Molecule Lab</span></button>
+<button class="side-link"><span class="ico">▦</span><span class="txt">Periodic Table</span></button>
+<button class="side-link"><span class="ico">◌</span><span class="txt">Saved Models</span></button>
+</div></div><div><div class="side-label">Learn</div><div class="side-nav"><button class="side-link"><span class="ico">▤</span><span class="txt">Concept Library</span></button><button class="side-link"><span class="ico">◷</span><span class="txt">Recent Activity</span></button></div></div><div class="side-bottom"><strong>Explore in 3D</strong><p>Bring atomic structures to life in an immersive learning space.</p><button class="btn" style="width:100%">View guide ↗</button></div></aside>
+<main class="main">
+<div class="page-head"><div><div class="eyebrow">Interactive science studio</div><h1>Atom Builder</h1><p>Explore the building blocks of matter in a space designed for discovery.</p></div><div class="head-actions"><button class="btn">↺ Reset view</button><button class="btn primary">⇧ Export model</button></div></div>
+<div class="workspace">
+<section class="panel glass"><div class="panel-head"><h2>3D atom workspace</h2><span class="micro">PREVIEW MODE · 01</span></div><div class="stage"><div class="stage-grid"></div><span class="atom-label label-one">Electron cloud</span><span class="atom-label label-two">Energy shell</span><span class="atom-label label-three">Nucleus</span><div class="atom"><div class="orbit"><span class="electron"></span></div><div class="orbit"><span class="electron"></span></div><div class="orbit"><span class="electron"></span></div><div class="nucleus"></div></div><span class="stage-caption">Illustrative atom · not to scale</span></div><div class="stage-controls"><button class="tool active">✥ Orbit view</button><button class="tool">◉ Nucleus</button><button class="tool">⌖ Labels</button><button class="tool">⛶ Expand</button></div></section>
+<div class="right-stack">
+<section class="element-card"><div class="element-top"><span class="eyebrow">Selected element</span><span class="atomic-number">01 / 118</span></div><div class="element-symbol">H</div><div class="element-name">Hydrogen</div><div class="element-meta">Nonmetal · Period 1 · Group 1</div><div class="data-grid"><div class="data"><span>Protons</span><b>01</b></div><div class="data"><span>Neutrons</span><b>00</b></div><div class="data"><span>Electrons</span><b>01</b></div><div class="data"><span>Atomic mass</span><b>1.008 u</b></div></div></section>
+<section class="panel glass"><div class="panel-head"><h2>Model settings</h2><span class="micro">PLACEHOLDER</span></div><div class="form-row"><label for="element">Choose element</label><select id="element" class="field"><option>Hydrogen (H)</option><option>Helium (He)</option><option>Carbon (C)</option><option>Oxygen (O)</option><option>Sodium (Na)</option></select></div><div class="range-row"><label for="scale">Atom scale</label><b id="scaleVal">100%</b></div><input id="scale" type="range" min="60" max="140" value="100"><div class="range-row"><span>Electron visibility</span><b>On</b></div><button class="btn primary" style="width:100%;margin-top:15px">Apply settings</button></section>
+</div></div>
+<div class="bottom-grid">
+<section class="mini-panel glass"><div class="section-title"><h2>Electron shells</h2><span class="micro">VISUAL GUIDE</span></div><div class="shells"><span class="shell"></span><span class="shell"></span><span class="shell"></span><span class="shell"></span></div><p class="micro" style="line-height:1.6;margin:12px 0 0">A visual placeholder for electron energy levels and shell occupancy.</p></section>
+<section class="mini-panel glass"><div class="section-title"><h2>Model legend</h2><span class="micro">ATOM KEY</span></div><div class="legend"><div class="legend-row"><span class="dot"></span>Electrons <span style="margin-left:auto">Negative</span></div><div class="legend-row"><span class="dot pink"></span>Protons <span style="margin-left:auto">Positive</span></div><div class="legend-row"><span class="dot lilac"></span>Neutrons <span style="margin-left:auto">Neutral</span></div><div class="legend-row"><span class="dot lime"></span>Energy shells <span style="margin-left:auto">Orbitals</span></div></div></section>
+</div>
+<div class="bottom-note glass"><span><strong>Learning preview</strong> · Values and controls are illustrative placeholders.</span><span>Designed for desktop, tablet, mobile and future XR layouts.</span></div>
+<footer><span>MMAXR · Explore science spatially</span><span>Glass & Glow UI concept · 2026</span></footer>
+</main></div></div>
+<script>
+document.getElementById('viewToggle').addEventListener('click',function(){document.body.classList.toggle('spatial');this.textContent=document.body.classList.contains('spatial')?'◉ Standard view':'◉ Spatial view'});
+document.getElementById('scale').addEventListener('input',function(){document.getElementById('scaleVal').textContent=this.value+'%'});
+document.querySelectorAll('.side-link').forEach(function(b){b.addEventListener('click',function(){document.querySelectorAll('.side-link').forEach(x=>x.classList.remove('active'));this.classList.add('active')})});
+document.querySelectorAll('.stage-controls .tool').forEach(function(b){b.addEventListener('click',function(){document.querySelectorAll('.stage-controls .tool').forEach(x=>x.classList.remove('active'));this.classList.add('active')})});
+</script></body></html>

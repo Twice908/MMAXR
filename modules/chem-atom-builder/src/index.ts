@@ -21,6 +21,8 @@ import {
   ScreenInputAdapter,
   ScreenSceneRenderer,
   arTouchGestureConfig,
+  installZoomControls,
+  screenZoomConfig,
   type InputAction,
 } from "@mma/engine-render";
 import {
@@ -203,6 +205,12 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     host: sceneHost,
     ...(options.diagnostics === undefined ? {} : { diagnostics: options.diagnostics }),
   });
+  const disposeZoomControls = installZoomControls(
+    renderer.canvas,
+    () => renderer.getDistance(),
+    (distance) => renderer.setDistance(distance),
+    screenZoomConfig,
+  );
   const reducer = createAtomBuilderLearningReducer(manifest.missions, assessmentItems);
   const idGenerator = createIdGenerator({
     crypto: globalThis.crypto,
@@ -543,7 +551,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     dispatch: onInput,
     pickTarget: (x, y, source, pointerType) => renderer.pickTarget(x, y, source, pointerType),
     touch: {
-      pinchSensitivity: arTouchGestureConfig.pinchSensitivity,
+      pinchSensitivity: screenZoomConfig.pinchSensitivity,
       pinchDeadZonePx: arTouchGestureConfig.pinchDeadZonePx,
       dragThresholdPx: arTouchGestureConfig.dragThresholdPx,
       shouldIgnoreTarget: (target) =>
@@ -564,6 +572,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   store.dispatch({ type: "mission/start", payload: { missionId: manifest.missions[0]?.id ?? "" } });
 
   return () => {
+    disposeZoomControls();
     input.dispose();
     unsubscribe();
     narrationControls.removeEventListener("click", onNarrationAction);

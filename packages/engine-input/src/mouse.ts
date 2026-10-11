@@ -2,12 +2,10 @@ import { PointerAdapterBase, type PointerAdapterOptions } from "./pointer-base.j
 
 export interface MouseInputOptions extends PointerAdapterOptions {
   rotateSensitivity?: number;
-  wheelScaleSensitivity?: number;
 }
 
 export class MouseInputAdapter extends PointerAdapterBase {
   private readonly rotateSensitivity: number;
-  private readonly wheelScaleSensitivity: number;
   private active = false;
   private target: string | null = null;
   private traySource: string | null = null;
@@ -17,13 +15,11 @@ export class MouseInputAdapter extends PointerAdapterBase {
   constructor(options: MouseInputOptions) {
     super(options);
     this.rotateSensitivity = options.rotateSensitivity ?? 1;
-    this.wheelScaleSensitivity = options.wheelScaleSensitivity ?? 0.001;
 
     this.root.addEventListener("mousedown", this.onDown);
     this.root.addEventListener("mousemove", this.onMove);
     this.root.addEventListener("mouseup", this.onUp);
     this.root.addEventListener("mouseleave", this.onLeave);
-    this.root.addEventListener("wheel", this.onWheel, { passive: false });
     this.root.addEventListener("contextmenu", this.onContextMenu);
   }
 
@@ -32,7 +28,6 @@ export class MouseInputAdapter extends PointerAdapterBase {
     this.root.removeEventListener("mousemove", this.onMove);
     this.root.removeEventListener("mouseup", this.onUp);
     this.root.removeEventListener("mouseleave", this.onLeave);
-    this.root.removeEventListener("wheel", this.onWheel);
     this.root.removeEventListener("contextmenu", this.onContextMenu);
     super.dispose();
   }
@@ -164,17 +159,6 @@ export class MouseInputAdapter extends PointerAdapterBase {
     this.active = false;
     this.target = null;
     this.traySource = null;
-  };
-
-  private readonly onWheel = (event: WheelEvent): void => {
-    event.preventDefault();
-    this.dispatcher.emit({
-      type: "scale",
-      payload: {
-        source: "mouse",
-        delta: event.deltaY * this.wheelScaleSensitivity,
-      },
-    });
   };
 
   private readonly onContextMenu = (event: MouseEvent): void => {
