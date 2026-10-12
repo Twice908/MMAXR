@@ -66,6 +66,7 @@ import {
 } from "./spatial-presentation.js";
 import "./glass-tokens.css";
 import "./atom-builder.css";
+import { placeSpatialHint } from "./spatial-hints.js";
 
 interface LocalEventEntry {
   readonly type: string;
@@ -300,12 +301,13 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
         .spatial-panels-active .atom-inspector,
         .spatial-panels-active .camera-view-panel-heading #mission-title,
         .spatial-panels-active #ar-panel-mission-title { display: none !important; }
-        .spatial-dom-settings-open .ar-overlay-panel :is(
-          .lesson-panel, #assessment-card, .lesson-summary, .free-play-status,
-          .particle-rail, .atom-inspector
-        ) { display: none !important; }
-        .spatial-dom-settings-open .ar-overlay-panel .narration-hud { display: grid !important; }
-        .spatial-edge-hints { position: fixed; inset: 0; z-index: 20; pointer-events: none; }
+        .spatial-edge-hints {
+          position: fixed; inset: 0; z-index: 20; pointer-events: none; box-sizing: border-box;
+          padding: max(36px, calc(env(safe-area-inset-top) + 8px))
+            max(36px, calc(env(safe-area-inset-right) + 8px))
+            max(36px, calc(env(safe-area-inset-bottom) + 8px))
+            max(36px, calc(env(safe-area-inset-left) + 8px));
+        }
         .spatial-edge-hint {
           position: absolute; pointer-events: auto; transform: translate(-50%, -50%);
           border: 1px solid rgba(255,255,255,.8); border-radius: 999px;
@@ -1063,6 +1065,24 @@ function renderNarrationView(root: HTMLElement, state: NarrationViewState): void
   const captionsButton = requiredElement<HTMLButtonElement>(root, '[data-narration-action="captions"]');
   captionsButton.textContent = state.settings.captionsEnabled ? "Captions on" : "Captions off";
   captionsButton.setAttribute("aria-pressed", String(state.settings.captionsEnabled));
+  const settingsMute = root.querySelector<HTMLButtonElement>('[data-settings-action="mute"]');
+  if (settingsMute) {
+    settingsMute.textContent = muteButton.textContent;
+    settingsMute.setAttribute("aria-pressed", muteButton.getAttribute("aria-pressed") ?? "false");
+  }
+  const settingsCaptions = root.querySelector<HTMLButtonElement>('[data-settings-action="captions"]');
+  if (settingsCaptions) {
+    settingsCaptions.textContent = captionsButton.textContent;
+    settingsCaptions.setAttribute("aria-pressed", captionsButton.getAttribute("aria-pressed") ?? "false");
+  }
+  const settingsEnable = root.querySelector<HTMLButtonElement>('[data-settings-action="enable"]');
+  if (settingsEnable) {
+    settingsEnable.hidden = enableButton.hidden;
+    settingsEnable.disabled = enableButton.disabled;
+  }
+  for (const button of root.querySelectorAll<HTMLButtonElement>("[data-settings-speed]")) {
+    button.setAttribute("aria-pressed", String(button.dataset.settingsSpeed === String(state.settings.speed)));
+  }
 
   const audioStatus = requiredElement<HTMLElement>(root, "#narration-audio-status");
   audioStatus.setAttribute("role", state.audioError ? "alert" : "status");
@@ -1081,13 +1101,31 @@ function renderSpatialHints(
   container: HTMLElement,
   hints: readonly SpatialPanelEdgeHint[],
 ): void {
+  const rects = (selector: string): DOMRect[] => [...container.ownerDocument.querySelectorAll<HTMLElement>(selector)]
+    .filter((element) => !element.hidden && element.getClientRects().length > 0)
+    .map((element) => element.getBoundingClientRect());
+  const viewport = { width: container.ownerDocument.defaultView?.innerWidth ?? 0,
+    height: container.ownerDocument.defaultView?.innerHeight ?? 0 };
+  const style = container.ownerDocument.defaultView?.getComputedStyle(container);
+  const safeArea = {
+    top: Number.parseFloat(style?.paddingTop ?? "0") || 0,
+    right: Number.parseFloat(style?.paddingRight ?? "0") || 0,
+    bottom: Number.parseFloat(style?.paddingBottom ?? "0") || 0,
+    left: Number.parseFloat(style?.paddingLeft ?? "0") || 0,
+  };
+  const topControls = rects(".ar-exit, .spatial-settings-fallback");
+  const bottomControls = rects(".ar-overlay-panel, .camera-view-panel, .dom-settings-sheet");
+  const controls = [...topControls, ...bottomControls];
   for (const hint of hints) {
     const button = container.querySelector<HTMLButtonElement>(`[data-panel="${hint.key}"]`);
     if (!button) continue;
-    button.hidden = !hint.visible;
-    if (!hint.visible) continue;
-    const left = `${(hint.x * 100).toFixed(1)}vw`;
-    const top = `${(hint.y * 100).toFixed(1)}vh`;
+    const position = hint.visible
+      ? placeSpatialHint(hint, viewport, safeArea, topControls, bottomControls, controls)
+      : null;
+    button.hidden = position === null;
+    if (!position) continue;
+    const left = `${position.x.toFixed(1)}px`;
+    const top = `${position.y.toFixed(1)}px`;
     const transform = `translate(-50%, -50%) rotate(${hint.angle.toFixed(2)}rad)`;
     if (button.style.left !== left) button.style.left = left;
     if (button.style.top !== top) button.style.top = top;

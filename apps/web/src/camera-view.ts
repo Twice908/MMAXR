@@ -158,7 +158,7 @@ export function mountCameraView(options: CameraViewOptions): () => void {
   panelToggle.type = "button";
   panelToggle.dataset.cameraAction = "panel-toggle";
   panelToggle.setAttribute("aria-expanded", "false");
-  panelToggle.textContent = "Show panel";
+  panelToggle.textContent = "Expand panels";
   panelHeading.append(panelToggle);
   panel.append(panelHeading);
 
@@ -195,7 +195,7 @@ export function mountCameraView(options: CameraViewOptions): () => void {
   };
   const setPanelCollapsed = (collapsed: boolean): void => {
     panel.classList.toggle("is-collapsed", collapsed);
-    panelToggle.textContent = collapsed ? "Show panel" : "Hide panel";
+    panelToggle.textContent = collapsed ? "Expand panels" : "Collapse panels";
     panelToggle.setAttribute("aria-expanded", String(!collapsed));
     if (collapsed) {
       restorePlacement(inspector);
@@ -274,6 +274,7 @@ export function mountCameraView(options: CameraViewOptions): () => void {
     setScreenRendererTransparentBackground(sceneHost, false);
   };
   const cleanStream = (): void => {
+    root.dispatchEvent(new CustomEvent("mma:settings-close"));
     root.dispatchEvent(new CustomEvent("mma:spatial-presentation", {
       detail: { active: false, expanded: false },
     }));
@@ -425,14 +426,7 @@ export function mountCameraView(options: CameraViewOptions): () => void {
     endCameraView("none", "Camera view ended. You are back in screen mode.");
   };
   const onSettingsFallbackClick = (): void => {
-    const opening = !root.classList.contains("spatial-dom-settings-open");
-    root.classList.toggle("spatial-dom-settings-open", opening);
-    if (opening
-      ? panel.classList.contains("is-collapsed")
-      : !panel.classList.contains("is-collapsed")) {
-      panelToggle.click();
-    }
-    if (opening) root.querySelector<HTMLElement>(".narration-hud")?.scrollIntoView({ block: "nearest" });
+    root.dispatchEvent(new CustomEvent("mma:settings-toggle"));
   };
   const onPanelToggleClick = (): void => {
     setPanelCollapsed(!panel.classList.contains("is-collapsed"));

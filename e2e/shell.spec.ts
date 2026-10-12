@@ -147,7 +147,7 @@ test("changes narration speed mid-cue without playback errors", async ({ page })
   await page.getByRole("button", { name: "Events" }).click();
   await page.getByRole("button", { name: "Tap to enable sound" }).click();
   await expect(page.locator("#dev-event-panel")).toContainText("narration_played");
-  const speed = page.getByLabel("Narration speed");
+  const speed = page.locator("#narration-speed");
   await speed.selectOption("0.75");
   await expect(speed).toHaveValue("0.75");
   await speed.selectOption("1.25");
@@ -507,6 +507,31 @@ test("touch-first screen toolbar wraps controls and labels phone VR viewing", as
   expect(captionRect!.y).toBeGreaterThan(lastButton!.y + lastButton!.height);
 });
 
+test("settings sheet stays within forty percent and closes from the scrim or Settings", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("http://127.0.0.1:5174");
+  await expect(page.getByRole("heading", { name: "Atom Builder" })).toBeVisible();
+  await page.evaluate(() => {
+    document.querySelector("#app")?.dispatchEvent(new CustomEvent("mma:settings-toggle"));
+  });
+  const sheet = page.locator(".dom-settings-sheet");
+  await expect(sheet).toBeVisible();
+  const height = await sheet.evaluate((element) => element.getBoundingClientRect().height);
+  expect(height).toBeLessThanOrEqual(844 * 0.4 + 1);
+  await expect(sheet.getByRole("heading", { name: "Sound" })).toBeVisible();
+  await expect(sheet.getByRole("heading", { name: "Captions" })).toBeVisible();
+  await expect(sheet.getByRole("heading", { name: "Speed" })).toBeVisible();
+  await page.locator(".dom-settings-scrim").click({ position: { x: 3, y: 3 } });
+  await expect(sheet).toBeHidden();
+  await page.evaluate(() => {
+    document.querySelector("#app")?.dispatchEvent(new CustomEvent("mma:settings-toggle"));
+    const settings = document.querySelector<HTMLButtonElement>(".ar-spatial-settings-fallback");
+    if (settings) settings.hidden = false;
+  });
+  await page.locator(".ar-spatial-settings-fallback").click();
+  await expect(sheet).toBeHidden();
+});
+
 test("AR overlay is transparent and camera explanation has two visible actions", async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "xr", {
@@ -530,6 +555,14 @@ test("AR overlay is transparent and camera explanation has two visible actions",
   await expect(cancel).toBeVisible();
   await expect(start).toBeVisible();
   await expect(dialog.getByRole("button")).toHaveCount(2);
+  const modalSurface = await dialog.evaluate((element) => ({
+    surface: getComputedStyle(element).backgroundColor,
+    backdrop: getComputedStyle(element, "::backdrop").backgroundColor,
+    blur: getComputedStyle(element, "::backdrop").backdropFilter,
+  }));
+  expect(modalSurface.surface).toBe("rgba(255, 255, 255, 0.97)");
+  expect(modalSurface.backdrop).toBe("rgba(0, 0, 0, 0.58)");
+  expect(modalSurface.blur).toContain("blur");
   await expect(dialog).toContainText(
     "Stay seated, look around you, and keep an eye on your surroundings.",
   );
@@ -588,25 +621,18 @@ test("glass surfaces use tokens and fall back for reduced transparency", async (
 
   const normalDialogStyle = await dialog.evaluate((element) => {
     const style = getComputedStyle(element);
-    const root = getComputedStyle(document.documentElement);
     return {
       background: style.backgroundColor,
-      filter: style.backdropFilter,
-      glassBackground: root.getPropertyValue("--glass-bg").trim(),
-      strongBackground: root.getPropertyValue("--glass-bg-strong").trim(),
+      backdropFilter: getComputedStyle(element, "::backdrop").backdropFilter,
       supportsBackdropFilter: CSS.supports("backdrop-filter", "blur(1px)")
         || CSS.supports("-webkit-backdrop-filter", "blur(1px)"),
     };
   });
-  expect(normalDialogStyle.background).toBe(
-    normalDialogStyle.supportsBackdropFilter
-      ? normalDialogStyle.glassBackground
-      : normalDialogStyle.strongBackground,
-  );
+  expect(normalDialogStyle.background).toBe("rgba(255, 255, 255, 0.97)");
   if (normalDialogStyle.supportsBackdropFilter) {
-    expect(normalDialogStyle.filter).toContain("blur(14px)");
+    expect(normalDialogStyle.backdropFilter).toContain("blur(14px)");
   } else {
-    expect(normalDialogStyle.filter).toBe("none");
+    expect(normalDialogStyle.backdropFilter).toBe("none");
   }
 
   await page.emulateMedia({ reducedTransparency: "reduce" });
@@ -619,23 +645,19 @@ test("glass surfaces use tokens and fall back for reduced transparency", async (
   )).toBe(true);
   const reducedTransparencyStyle = await dialog.evaluate((element) => ({
     background: getComputedStyle(element).backgroundColor,
-    filter: getComputedStyle(element).backdropFilter,
-    strongBackground: getComputedStyle(document.documentElement)
-      .getPropertyValue("--glass-bg-strong").trim(),
+    backdropFilter: getComputedStyle(element, "::backdrop").backdropFilter,
   }));
-  expect(reducedTransparencyStyle.background).toBe(reducedTransparencyStyle.strongBackground);
-  expect(reducedTransparencyStyle.filter).toBe("none");
+  expect(reducedTransparencyStyle.background).toBe("rgba(255, 255, 255, 0.97)");
+  expect(reducedTransparencyStyle.backdropFilter).toBe("none");
 
   await transparencyEmulator.send("Emulation.setEmulatedMedia", { features: [] });
   await page.emulateMedia({ reducedTransparency: "no-preference", contrast: "more" });
   const highContrastStyle = await dialog.evaluate((element) => ({
     background: getComputedStyle(element).backgroundColor,
-    filter: getComputedStyle(element).backdropFilter,
-    strongBackground: getComputedStyle(document.documentElement)
-      .getPropertyValue("--glass-bg-strong").trim(),
+    backdropFilter: getComputedStyle(element, "::backdrop").backdropFilter,
   }));
-  expect(highContrastStyle.background).toBe(highContrastStyle.strongBackground);
-  expect(highContrastStyle.filter).toBe("none");
+  expect(highContrastStyle.background).toBe("rgba(255, 255, 255, 0.97)");
+  expect(highContrastStyle.backdropFilter).toBe("none");
 });
 
 test("a mid-start XR exception restores the screen renderer and lesson panels", async ({ page }) => {
@@ -836,7 +858,7 @@ test("mocked AR keeps the atom world-fixed and presents the lesson in spatial pa
   }));
   expect(viewStateAfterCameraMotion).toEqual(viewStateBeforeGestures);
 
-  await panel.getByRole("button", { name: "Show panel" }).click();
+  await panel.getByRole("button", { name: "Expand panels" }).click();
   await expect(panel).not.toHaveClass(/is-collapsed/);
   await expect(page.locator("#app")).toHaveClass(/spatial-panels-active/);
   await expect(panel.locator("#lesson-panel")).toBeHidden();

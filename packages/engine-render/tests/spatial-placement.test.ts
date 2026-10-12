@@ -4,7 +4,10 @@ import {
   canCreateSpatialPanels,
   shouldShowSpatialSettingsFallback,
 } from "../src/screen-renderer.js";
-import { calculateSpatialPanelPlacements } from "../src/visuals/spatial-placement.js";
+import {
+  calculateSpatialPanelPlacements,
+  gravityAlignedQuaternion,
+} from "../src/visuals/spatial-placement.js";
 
 describe("spatial panel placement", () => {
   it("places panels around the atom in the initial viewer orientation", () => {
@@ -30,6 +33,24 @@ describe("spatial panel placement", () => {
     expect(canCreateSpatialPanels(false, false)).toBe(false);
     expect(canCreateSpatialPanels(true, false)).toBe(true);
     expect(canCreateSpatialPanels(false, true)).toBe(true);
+  });
+
+  it("keeps panel orientation gravity-aligned for pitched, rolled, and vertical viewer poses", () => {
+    const worldUp = new THREE.Vector3(0, 1, 0);
+    const poses = [
+      new THREE.Euler(0.7, 1.1, 0.8),
+      new THREE.Euler(-0.9, -0.6, -1.2),
+      new THREE.Euler(Math.PI / 2, 0.4, 0.9),
+      new THREE.Euler(-Math.PI / 2, -1.3, 0.7),
+    ];
+
+    for (const pose of poses) {
+      const aligned = gravityAlignedQuaternion(new THREE.Quaternion().setFromEuler(pose));
+      const alignedUp = worldUp.clone().applyQuaternion(aligned);
+      expect(alignedUp.x).toBeCloseTo(0);
+      expect(alignedUp.y).toBeCloseTo(1);
+      expect(alignedUp.z).toBeCloseTo(0);
+    }
   });
 
   it("shows the DOM settings fallback only while AR or Camera is active", () => {

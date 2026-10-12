@@ -6,7 +6,7 @@
    appear around it; mission is expanded and side panels start compact.
 2. Tap a side-panel header to expand and collapse it. Tap panel controls and
    confirm the corresponding lesson or narration control responds once.
-3. Confirm **Exit AR**, **Settings**, **Reset view**, and **Show/Hide panel**
+3. Confirm **Exit AR**, **Settings**, **Reset view**, and **Expand/Collapse panels**
    remain usable. The Settings fallback should open the existing DOM controls.
    Rotate or scale the atom and verify the panels do not move with it.
 4. Confirm the compact Settings panel opens, its sound/captions/speed controls

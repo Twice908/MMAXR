@@ -92,6 +92,7 @@ Also: new logic has unit tests; public APIs have TSDoc; no leftover debug code; 
 - Narration: `packages/engine-voice`; mock asset generator: `tools/generate-narration`.
 - Decisions: `docs/adr/`.
 - Device testing record: `docs/device-matrix.md`.
+- Layout reference: `docs/layout.md` (screen, AR/camera overlays, safe zones, and spatial panel slots).
 
 ## 10. Project skills
 

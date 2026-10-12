@@ -24,6 +24,7 @@ export interface CreateGlassPanelOptions {
   readonly id: string;
   readonly widthM: number;
   readonly heightM: number;
+  readonly collapsedHeightM?: number;
   readonly surface: "uniform" | "framed";
   readonly title?: string;
   readonly items: readonly GlassPanelItem[];
@@ -37,6 +38,21 @@ export interface GlassPanel {
   setCollapsed(collapsed: boolean): void;
   setScale(scale: number): void;
   dispose(): void;
+}
+
+/** Return texture dimensions for the plane's currently displayed aspect ratio. */
+export function panelTextureDimensions(
+  widthM: number,
+  expandedHeightM: number,
+  collapsedHeightM: number,
+  collapsed: boolean,
+): Readonly<{ width: number; height: number }> {
+  const width = Math.round(CANVAS_WIDTH * Math.min(MAX_PIXEL_RATIO, 1));
+  const displayedHeight = collapsed ? collapsedHeightM : expandedHeightM;
+  return {
+    width,
+    height: Math.min(MAX_CANVAS_HEIGHT, Math.max(1, Math.round(width * displayedHeight / widthM))),
+  };
 }
 
 /** Build a view-only textured glass panel; it has no store or input listeners. */
@@ -83,7 +99,10 @@ export function createGlassPanel(options: CreateGlassPanelOptions): GlassPanel {
   let disposed = false;
   let uniformScale = 1;
   const expandedHeight = options.heightM;
-  const compactHeight = Math.min(expandedHeight, spatialLayout.particles.collapsedSize.height);
+  const compactHeight = Math.min(
+    expandedHeight,
+    options.collapsedHeightM ?? spatialLayout.particles.collapsedSize.height,
+  );
   const disposeResources = (): void => {
     if (disposed) return;
     disposed = true;
@@ -92,29 +111,36 @@ export function createGlassPanel(options: CreateGlassPanelOptions): GlassPanel {
     geometry.dispose();
   };
 
-  const compactItems = (): readonly GlassPanelItem[] => {
+  const compactItems = (heightPx: number): readonly GlassPanelItem[] => {
     const activeItems = displayItems();
     const titleText = options.title ?? activeItems.find((item) => item.kind === "heading")?.text ?? "";
     const summaryText = activeItems.find((item) => item.kind === "text")?.text
       ?? activeItems.find((item) => item.kind !== "heading")?.text
       ?? "";
+    const compactFontSize = Math.max(
+      spatialLayout.minTextSizePx,
+      Math.floor(heightPx * 0.25),
+    );
     return [
-      { kind: "heading", text: titleText },
-      ...(summaryText ? [{ kind: "text" as const, text: summaryText }] : []),
+      { kind: "heading", text: titleText, fontSizePx: compactFontSize },
+      ...(summaryText
+        ? [{ kind: "text" as const, text: summaryText, fontSizePx: compactFontSize }]
+        : []),
     ];
   };
 
   const draw = (): void => {
     if (!dirty || disposed) return;
     dirty = false;
-    const activeHeightM = collapsed ? compactHeight : expandedHeight;
-    const height = Math.min(
-      MAX_CANVAS_HEIGHT,
-      Math.max(1, Math.round(canvasWidth * activeHeightM / options.widthM)),
-    );
+    const height = panelTextureDimensions(
+      options.widthM,
+      expandedHeight,
+      compactHeight,
+      collapsed,
+    ).height;
     if (canvas.height !== height) canvas.height = height;
     context.clearRect(0, 0, canvas.width, canvas.height);
-    const drawnItems = collapsed ? compactItems() : displayItems();
+    const drawnItems = collapsed ? compactItems(canvas.height) : displayItems();
     rects = layoutPanel(drawnItems, { width: canvas.width, height: canvas.height });
     drawSurface(context, canvas.width, canvas.height, options.surface);
     drawItems(context, rects, toggles, hoveredInputId, pressedInputId);

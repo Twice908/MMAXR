@@ -2,7 +2,10 @@ import * as THREE from "three";
 import { spatialLayout } from "./spatial-layout.js";
 import { createGlassPanel } from "./visuals/glass-panel.js";
 import type { GlassPanelItem } from "./visuals/panel-layout.js";
-import { calculateSpatialPanelPlacements } from "./visuals/spatial-placement.js";
+import {
+  calculateSpatialPanelPlacements,
+  gravityAlignedQuaternion,
+} from "./visuals/spatial-placement.js";
 import { createSpatialPanelHost } from "./visuals/spatial-panel-host.js";
 import { selectSnapTarget } from "./snap-target.js";
 import { screenZoomConfig } from "./zoom-controls.js";
@@ -24,6 +27,15 @@ export interface Position3 {
   readonly x: number;
   readonly y: number;
   readonly z: number;
+}
+
+/** Show the surface reticle only while a phone placement can be selected. */
+export function shouldShowArReticle(
+  phoneHitTestActive: boolean,
+  repositioningActive: boolean,
+  hasHitTestPose: boolean,
+): boolean {
+  return phoneHitTestActive && repositioningActive && hasHitTestPose;
 }
 
 /** Repeated sphere instances rendered with one draw call per group. */
@@ -389,6 +401,8 @@ export class ScreenSceneRenderer {
   private arViewerOrientation = new THREE.Quaternion();
   private arViewerOrigin = new THREE.Vector3();
   private phoneHitTestActive = false;
+  private phonePlacementRepositioning = false;
+  private phoneAtomPlaced = false;
   private vrEnvironment: VrEnvironment | null = null;
   private vrFloorUsesViewerFallback = false;
   private xrRenderLoopRunning = false;
@@ -565,6 +579,8 @@ export class ScreenSceneRenderer {
     this.arPlacementSide = 0;
     this.initialArPlacement = null;
     this.phoneHitTestActive = false;
+    this.phonePlacementRepositioning = false;
+    this.phoneAtomPlaced = false;
     this.arViewTransform = DEFAULT_AR_VIEW_TRANSFORM;
     this.arPlacementRoot.position.set(0, 0, 0);
     this.arPlacementRoot.quaternion.identity();
@@ -626,6 +642,8 @@ export class ScreenSceneRenderer {
     this.hitTestReferenceSpace = null;
     this.lastHitTestPose = null;
     this.phoneHitTestActive = false;
+    this.phonePlacementRepositioning = false;
+    this.phoneAtomPlaced = false;
     this.arReticle.visible = false;
     let session: XRSession | null = null;
     try {
@@ -850,9 +868,8 @@ export class ScreenSceneRenderer {
       ? this.renderer.xr.getCamera()
       : this.camera;
     viewerCamera.updateMatrixWorld();
-    const viewerQuaternion = this.arActive
-      ? new THREE.Quaternion()
-      : viewerCamera.getWorldQuaternion(new THREE.Quaternion());
+    const viewerQuaternion = viewerCamera.getWorldQuaternion(new THREE.Quaternion());
+    const panelOrientation = gravityAlignedQuaternion(viewerQuaternion);
     const anchor = { x: 0, y: 0, z: 0 };
     const viewport = arPointerTarget ?? this.canvas;
     const placements = calculateSpatialPanelPlacements(
@@ -863,7 +880,11 @@ export class ScreenSceneRenderer {
     );
     const group = new THREE.Group();
     group.name = "spatial-glass-panels";
-    (this.arActive ? this.arPlacementRoot : this.scene).add(group);
+    const panelParent = this.arActive ? this.arPlacementRoot : this.scene;
+    panelParent.add(group);
+    const parentWorldQuaternion = panelParent.getWorldQuaternion(new THREE.Quaternion());
+    const parentWorldPosition = panelParent.getWorldPosition(new THREE.Vector3());
+    group.quaternion.copy(parentWorldQuaternion.invert().multiply(panelOrientation));
     const definitions = [
       { id: "spatial-mission", key: "mission", layout: spatialLayout.mission, collapsible: false },
       { id: "spatial-particles", key: "particles", layout: spatialLayout.particles, collapsible: true },
@@ -896,12 +917,12 @@ export class ScreenSceneRenderer {
     }[] = [];
     const initialItems = items;
     const worldPositions: Record<SpatialPanelEdgeHint["key"], THREE.Vector3> = {
-      mission: placements.mission.position,
-      particles: placements.particles.position,
-      elementInfo: placements.elementInfo.position,
-      narration: placements.narration.position,
-      settings: placements.settings.position,
-      xrDiagnostics: placements.xrDiagnostics.position,
+      mission: placements.mission.position.clone().add(parentWorldPosition),
+      particles: placements.particles.position.clone().add(parentWorldPosition),
+      elementInfo: placements.elementInfo.position.clone().add(parentWorldPosition),
+      narration: placements.narration.position.clone().add(parentWorldPosition),
+      settings: placements.settings.position.clone().add(parentWorldPosition),
+      xrDiagnostics: placements.xrDiagnostics.position.clone().add(parentWorldPosition),
     };
     let host: ReturnType<typeof createSpatialPanelHost> | null = null;
     try {
@@ -911,6 +932,7 @@ export class ScreenSceneRenderer {
           id: definition.id,
           widthM: definition.layout.expandedSize.width,
           heightM: definition.layout.expandedSize.height,
+          collapsedHeightM: definition.layout.collapsedSize.height,
           surface: "uniform",
           ...(definition.key === "mission" ? { title: "Mission" } : {}),
           items: definition.key === "arControls"
@@ -922,8 +944,8 @@ export class ScreenSceneRenderer {
         });
         mounts.push({
           panel,
-          position: placement.position,
-          quaternion: placement.quaternion,
+          position: placement.position.clone().applyQuaternion(panelOrientation.clone().invert()),
+          quaternion: new THREE.Quaternion(),
           scale: placement.scale,
           collapsible: definition.collapsible,
         });
@@ -1094,11 +1116,18 @@ export class ScreenSceneRenderer {
   };
 
   private readonly onPhoneSurfaceSelect = (event: Event): void => {
-    if (!this.phoneHitTestActive || !this.lastHitTestPose) return;
+    if (!this.phoneHitTestActive) return;
     const source = (event as XRInputSourceEvent).inputSource;
     if (source?.hand || (source?.targetRayMode !== "screen" && source?.targetRayMode !== "transient-pointer")) {
       return;
     }
+    if (this.phoneAtomPlaced && !this.phonePlacementRepositioning) {
+      this.phonePlacementRepositioning = true;
+      this.arReticle.visible = shouldShowArReticle(true, true, this.lastHitTestPose !== null);
+      this.render();
+      return;
+    }
+    if (!this.phonePlacementRepositioning || !this.lastHitTestPose) return;
     const hit = this.lastHitTestPose.transform.position;
     const target = new THREE.Vector3(hit.x, hit.y, hit.z);
     const fromViewer = target.clone().sub(this.arViewerOrigin);
@@ -1107,6 +1136,9 @@ export class ScreenSceneRenderer {
     if (hitDistance > 0) target.copy(this.arViewerOrigin).addScaledVector(fromViewer, boundedDistance / hitDistance);
     this.arPlacementRoot.position.copy(target);
     this.arPlacementRoot.quaternion.copy(this.arViewerOrientation);
+    this.phonePlacementRepositioning = false;
+    this.phoneAtomPlaced = true;
+    this.arReticle.visible = false;
     this.arPlacementDistance = boundedDistance;
     this.arPlacementSide = 0;
     this.render();
@@ -1153,6 +1185,8 @@ export class ScreenSceneRenderer {
         this.hitTestSource = null;
         return;
       }
+      this.phonePlacementRepositioning = true;
+      this.phoneAtomPlaced = false;
       session.addEventListener("select", this.onPhoneSurfaceSelect);
     } catch {
       this.phoneHitTestActive = false;
@@ -1197,7 +1231,11 @@ export class ScreenSceneRenderer {
     const results = Array.from(frame.getHitTestResults(this.hitTestSource));
     const pose = results[0]?.getPose(this.hitTestReferenceSpace) ?? null;
     this.lastHitTestPose = pose;
-    this.arReticle.visible = pose !== null;
+    this.arReticle.visible = shouldShowArReticle(
+      this.phoneHitTestActive,
+      this.phonePlacementRepositioning,
+      pose !== null,
+    );
     if (pose) {
       const transform = pose.transform;
       this.arReticle.position.set(

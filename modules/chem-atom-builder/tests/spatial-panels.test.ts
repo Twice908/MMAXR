@@ -79,7 +79,7 @@ const source: SpatialPanelsSource = {
     caption: "caption source",
   },
   resetViewLabel: "reset view source",
-  panelToggleLabel: "Show panel",
+  panelToggleLabel: "Expand panels",
   panelsExpanded: false,
   xrDiagnostics: [],
 };
@@ -114,16 +114,15 @@ describe("spatial panel data and routing", () => {
       "1x source",
       "1.25x source",
       "replay source",
-      "reset view source",
-      "Show panel",
     ]));
+    expect(panels.settings.map((item) => item.text))
+      .not.toEqual(expect.arrayContaining(["reset view source", "Expand panels"]));
     expect(panels.settingsToggles).toMatchObject({
       mute: false,
       captions: true,
       "narration-speed:0.75": false,
       "narration-speed:1": true,
       "narration-speed:1.25": false,
-      "panel-toggle": false,
     });
   });
 
@@ -132,7 +131,7 @@ describe("spatial panel data and routing", () => {
     expect(withoutOverlay.arControls?.map((item) => "inputId" in item ? item.inputId : null))
       .toEqual([null, "exit-ar", "reset-view", "panel-toggle"]);
     expect(withoutOverlay.arControls?.map((item) => item.text))
-      .toContain("Show panels");
+      .toContain("Expand panels");
     expect(buildSpatialPanelItems(source, true).arControls).toBeUndefined();
   });
 

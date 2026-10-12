@@ -7,6 +7,7 @@ import {
   moveArPlacement,
   resetArPlacement,
   isHandheldArSession,
+  shouldShowArReticle,
   shouldUsePhoneHitTest,
 } from "../src/screen-renderer.js";
 import { spatialLayout } from "../src/spatial-layout.js";
@@ -54,6 +55,13 @@ describe("AR placement", () => {
     expect(isHandheldArSession({ interactionMode: "world-space" }, false, true)).toBe(false);
     expect(isHandheldArSession({ environmentBlendMode: "opaque" }, false, true)).toBe(false);
     expect(isHandheldArSession({}, false, true)).toBe(true);
+  });
+
+  it("shows the hit-test reticle only while phone placement or repositioning is active", () => {
+    expect(shouldShowArReticle(false, true, true)).toBe(false);
+    expect(shouldShowArReticle(true, false, true)).toBe(false);
+    expect(shouldShowArReticle(true, true, false)).toBe(false);
+    expect(shouldShowArReticle(true, true, true)).toBe(true);
   });
 
   it("limits reposition distance and restores the saved initial placement", () => {

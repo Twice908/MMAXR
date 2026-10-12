@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { hitTest, layoutPanel, sameToggleValues } from "../src/visuals/panel-layout.js";
+import { panelTextureDimensions } from "../src/visuals/glass-panel.js";
 
 describe("glass panel layout", () => {
   it("keeps text at the minimum size and interactive regions at least 44px high", () => {
@@ -42,5 +43,17 @@ describe("glass panel layout", () => {
   it("treats unchanged toggle values as a no-op drawing state", () => {
     expect(sameToggleValues({ mute: true, captions: false }, { mute: true, captions: false })).toBe(true);
     expect(sameToggleValues({ mute: true }, { mute: false })).toBe(false);
+  });
+
+  it("sizes collapsed panel textures to their displayed plane aspect", () => {
+    const widthM = 0.28;
+    const expandedHeightM = 0.38;
+    const collapsedHeightM = 0.11;
+    const texture = panelTextureDimensions(widthM, expandedHeightM, collapsedHeightM, true);
+    const textureAspect = texture.width / texture.height;
+    const displayedPlaneAspect = widthM / collapsedHeightM;
+
+    expect(textureAspect).toBeCloseTo(displayedPlaneAspect, 2);
+    expect(textureAspect).not.toBeCloseTo(widthM / expandedHeightM, 2);
   });
 });

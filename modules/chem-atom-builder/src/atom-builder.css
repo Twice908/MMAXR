@@ -122,8 +122,18 @@
 .ar-start { min-height: 36px; padding: 0 12px; border: 1px solid var(--teal); border-radius: 6px; color: #fff; background: var(--teal); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
 .ar-start:hover { background: #20696d; }
 .ar-support-message { margin: 0 0 8px; color: var(--muted); font-size: 12px; line-height: 1.45; }
-.ar-confirmation { width: min(420px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; padding: var(--glass-pad-panel); border: var(--glass-border-width) solid var(--glass-border-color); border-radius: var(--glass-radius-panel); color: var(--glass-text); background: var(--glass-bg-strong); box-shadow: var(--glass-highlight), var(--glass-shadow); font: inherit; }
-.ar-confirmation::backdrop { background: transparent; }
+.ar-confirmation { width: min(420px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; padding: var(--glass-pad-panel); border: var(--glass-border-width) solid var(--glass-border-color); border-radius: var(--glass-radius-panel); color: var(--glass-text); background: rgba(255, 255, 255, 0.97); box-shadow: var(--glass-highlight), var(--glass-shadow); font: inherit; }
+.ar-confirmation::backdrop { background: rgba(0, 0, 0, 0.58); }
+.dom-settings-scrim { position: fixed; z-index: 31; inset: 0; border: 0; background: rgba(0, 0, 0, 0.48); }
+.dom-settings-sheet { position: fixed; z-index: 32; right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); left: max(12px, env(safe-area-inset-left)); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; max-height: 40dvh; overflow: auto; box-sizing: border-box; padding: var(--glass-pad-panel); border: var(--glass-border-width) solid var(--glass-border-color); border-radius: var(--glass-radius-panel); color: var(--glass-text); background: rgba(255, 255, 255, 0.97); box-shadow: var(--glass-highlight), var(--glass-shadow); }
+.dom-settings-sheet[hidden], .dom-settings-scrim[hidden] { display: none !important; }
+.dom-settings-sheet h2 { grid-column: 1 / -1; margin: 0; font-size: 18px; }
+.dom-settings-group { display: grid; align-content: start; gap: 6px; min-width: 0; padding: 8px; border: 1px solid var(--glass-border-color); border-radius: var(--glass-radius-pill); }
+.dom-settings-group h3 { margin: 0; font-size: 16px; }
+.dom-settings-sheet button { min-width: 0; min-height: var(--glass-tap-min); padding: 6px 8px; border: 1px solid var(--glass-border-color); border-radius: var(--glass-radius-pill); color: var(--glass-text); background: var(--glass-bg-strong); font: inherit; font-size: 16px; }
+.dom-settings-speed { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.dom-settings-sheet [aria-pressed="true"] { border-color: var(--glass-primary-bg); background: var(--glass-primary-bg); color: var(--glass-primary-text); }
+.dom-settings-close { justify-self: end; grid-column: 2; }
 .ar-confirmation h2 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 21px; font-weight: 500; }
 .ar-confirmation p { margin: 12px 0 18px; font-size: 14px; line-height: 1.5; }
 .ar-confirmation-actions { display: flex; justify-content: flex-end; gap: 8px; }
@@ -131,7 +141,7 @@
 .ar-confirmation-actions [data-ar-action="start"] { border-color: var(--glass-primary-bg); border-radius: var(--glass-radius-button); color: var(--glass-primary-text); background: var(--glass-primary-bg); }
 .ar-status { position: fixed; z-index: 29; top: calc(max(12px, env(safe-area-inset-top)) + 84px); right: 12px; bottom: auto; left: 272px; width: fit-content; max-width: min(540px, calc(100vw - 284px)); padding: var(--glass-pad-pill); border: var(--glass-border-width) solid var(--glass-border-color); border-radius: var(--glass-radius-pill); color: var(--glass-text); background: var(--glass-bg-strong); box-shadow: var(--glass-highlight), var(--glass-shadow); font-size: 13px; line-height: 1.4; }
 .ar-exit { position: fixed; z-index: 30; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); min-height: var(--glass-tap-min); padding: var(--glass-pad-pill); border: var(--glass-border-width) solid var(--glass-border-color); border-radius: var(--glass-radius-button); color: var(--glass-danger-text); background: var(--glass-danger-bg); box-shadow: var(--glass-highlight), var(--glass-shadow); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
-.spatial-settings-fallback { position: fixed; z-index: 30; top: max(12px, env(safe-area-inset-top)); right: calc(max(12px, env(safe-area-inset-right)) + 92px); min-height: var(--glass-tap-min); padding: var(--glass-pad-pill); border: var(--glass-border-width) solid var(--glass-border-color); border-radius: var(--glass-radius-button); color: var(--glass-text); background: var(--glass-bg-strong); box-shadow: var(--glass-highlight), var(--glass-shadow); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.spatial-settings-fallback { position: fixed; z-index: 33; top: max(12px, env(safe-area-inset-top)); right: calc(max(12px, env(safe-area-inset-right)) + 92px); min-height: var(--glass-tap-min); padding: var(--glass-pad-pill); border: var(--glass-border-width) solid var(--glass-border-color); border-radius: var(--glass-radius-button); color: var(--glass-text); background: var(--glass-bg-strong); box-shadow: var(--glass-highlight), var(--glass-shadow); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
 .spatial-settings-fallback[hidden] { display: none !important; }
 .ar-exit:disabled { opacity: .8; cursor: wait; }
 .ar-overlay-panel { position: fixed; z-index: 20; right: auto; bottom: max(12px, env(safe-area-inset-bottom)); left: max(12px, env(safe-area-inset-left)); width: min(540px, calc(100vw - max(12px, env(safe-area-inset-left)) - max(12px, env(safe-area-inset-right)))); max-height: min(42dvh, 420px); box-sizing: border-box; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; padding: var(--glass-pad-panel); border: var(--glass-border-width) solid var(--glass-border-color); border-radius: var(--glass-radius-panel); color: var(--glass-text); background: var(--glass-bg-strong); box-shadow: var(--glass-highlight), var(--glass-shadow); }
@@ -255,8 +265,15 @@
 .ar-overlay-panel select:focus-visible { outline: var(--glass-border-width) solid var(--glass-primary-bg); outline-offset: 2px; }
 
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .ar-confirmation::backdrop {
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+  }
+  .dom-settings-scrim {
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
   .ar-overlay-panel,
-  .ar-confirmation,
   .ar-status,
   .ar-break-reminder,
   .ar-diagnostics,
@@ -290,8 +307,12 @@
   .ar-overlay-panel #free-play-status { background-color: var(--glass-bg) !important; }
   .ar-exit { background-color: var(--glass-danger-bg); }
   @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+    .ar-confirmation::backdrop,
+    .dom-settings-scrim {
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
     .ar-overlay-panel,
-    .ar-confirmation,
     .ar-status,
     .ar-break-reminder,
     .ar-diagnostics,

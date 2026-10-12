@@ -63,22 +63,8 @@
 }
 
 .camera-active .camera-spatial-settings-fallback {
+  z-index: 33;
   right: calc(max(12px, env(safe-area-inset-right)) + 150px);
-}
-
-.spatial-dom-settings-open .camera-view-panel :is(
-  .lesson-panel,
-  .assessment-card,
-  .lesson-summary,
-  .free-play-status,
-  .particle-rail,
-  .atom-inspector
-) {
-  display: none !important;
-}
-
-.spatial-dom-settings-open .camera-view-panel .narration-hud {
-  display: grid !important;
 }
 
 .camera-view-status {

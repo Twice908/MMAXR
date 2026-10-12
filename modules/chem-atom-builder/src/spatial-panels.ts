@@ -123,7 +123,7 @@ export function buildSpatialPanelItems(
           },
           {
             kind: "button" as const,
-            text: source.panelsExpanded ? "Hide panels" : "Show panels",
+            text: source.panelsExpanded ? "Collapse panels" : "Expand panels",
             inputId: "panel-toggle",
             regionId: "panel-toggle",
           },
@@ -334,18 +334,6 @@ function buildSettings(
       inputId: source.narration.replayAction,
       regionId: source.narration.replayAction,
     },
-    {
-      kind: "button",
-      text: source.resetViewLabel,
-      inputId: "reset-view",
-      regionId: "reset-view",
-    },
-    {
-      kind: "toggle",
-      text: source.panelToggleLabel,
-      inputId: "panel-toggle",
-      regionId: "panel-toggle",
-    },
   );
   return {
     settings,
@@ -356,7 +344,6 @@ function buildSettings(
         `narration-speed:${option.value}`,
         option.selected,
       ])),
-      "panel-toggle": source.panelsExpanded,
     },
   };
 }

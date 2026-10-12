@@ -165,9 +165,24 @@ describe("glass contrast tokens", () => {
       expect(declaration.index).toBeGreaterThan(supportsStart);
     }
     expect(componentCss).toMatch(/\.ar-overlay-panel\s*\{[^}]*background: var\(--glass-bg-strong\)/);
-    expect(componentCss).toMatch(/\.ar-confirmation\s*\{[^}]*background: var\(--glass-bg-strong\)/);
     expect(componentCss).toMatch(
       /@media \(prefers-reduced-transparency: reduce\), \(prefers-contrast: more\)[\s\S]*backdrop-filter: none;/,
+    );
+  });
+
+  it("keeps confirmation dialogs opaque enough for readable text and dims the page", () => {
+    const modalSurface = /\.ar-confirmation\s*\{[^}]*background:\s*rgba\(255,\s*255,\s*255,\s*([\d.]+)\)/.exec(componentCss);
+    expect(Number(modalSurface?.[1])).toBeGreaterThanOrEqual(0.96);
+    const surface = composite(
+      { color: [255, 255, 255], alpha: Number(modalSurface?.[1]) },
+      [0, 0, 0],
+    );
+    expect(contrastRatio(getColorToken("glass-text").color, surface)).toBeGreaterThanOrEqual(4.5);
+    expect(componentCss).toMatch(
+      /\.ar-confirmation::backdrop\s*\{[^}]*background:\s*rgba\(0,\s*0,\s*0,\s*0\.58\)/,
+    );
+    expect(componentCss).toMatch(
+      /\.ar-confirmation::backdrop\s*\{[^}]*backdrop-filter:\s*blur\(/,
     );
   });
 

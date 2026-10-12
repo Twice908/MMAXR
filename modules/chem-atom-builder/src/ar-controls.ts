@@ -146,10 +146,44 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
     <header class="ar-panel-heading">
       <p class="ar-panel-mission-title" id="ar-panel-mission-title"></p>
       <button type="button" data-ar-action="reset-view">Reset view</button>
-      <button type="button" data-ar-action="panel-toggle" aria-expanded="false">Show panel</button>
+      <button type="button" data-ar-action="panel-toggle" aria-expanded="false">Expand panels</button>
     </header>
   `;
   builder.append(arPanel);
+
+  const settingsScrim = document.createElement("button");
+  settingsScrim.type = "button";
+  settingsScrim.className = "dom-settings-scrim";
+  settingsScrim.setAttribute("aria-label", "Close settings");
+  settingsScrim.dataset.settingsAction = "close";
+  settingsScrim.hidden = true;
+  const settingsSheet = document.createElement("section");
+  settingsSheet.className = "dom-settings-sheet";
+  settingsSheet.setAttribute("aria-label", "Settings");
+  settingsSheet.hidden = true;
+  settingsSheet.innerHTML = `
+    <h2>Settings</h2>
+    <button type="button" class="dom-settings-close" data-settings-action="close">Close</button>
+    <section class="dom-settings-group">
+      <h3>Sound</h3>
+      <button type="button" data-settings-action="enable">Enable sound</button>
+      <button type="button" data-settings-action="mute" aria-pressed="false">Mute</button>
+      <button type="button" data-settings-action="replay">Replay last cue</button>
+    </section>
+    <section class="dom-settings-group">
+      <h3>Captions</h3>
+      <button type="button" data-settings-action="captions" aria-pressed="true">Captions on</button>
+    </section>
+    <section class="dom-settings-group">
+      <h3>Speed</h3>
+      <div class="dom-settings-speed" role="group" aria-label="Narration speed">
+        <button type="button" data-settings-speed="0.75">0.75x</button>
+        <button type="button" data-settings-speed="1" aria-pressed="true">1x</button>
+        <button type="button" data-settings-speed="1.25">1.25x</button>
+      </div>
+    </section>
+  `;
+  builder.append(settingsScrim, settingsSheet);
 
   const panelContents = [
     root.querySelector<HTMLElement>("#lesson-panel"),
@@ -177,7 +211,7 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
   let panelMounted = false;
   const setPanelCollapsed = (collapsed: boolean): void => {
     arPanel.classList.toggle("is-collapsed", collapsed);
-    panelToggle.textContent = collapsed ? "Show panel" : "Hide panel";
+    panelToggle.textContent = collapsed ? "Expand panels" : "Collapse panels";
     panelToggle.setAttribute("aria-expanded", String(!collapsed));
     options.onSpatialExpandedChange?.(!collapsed);
   };
@@ -304,6 +338,13 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
       }, autoDismissMs);
     }
   };
+  const setSettingsOpen = (open: boolean): void => {
+    root.classList.toggle("spatial-dom-settings-open", open);
+    settingsScrim.hidden = !open;
+    settingsSheet.hidden = !open;
+  };
+  const onSettingsToggle = (): void => setSettingsOpen(settingsSheet.hasAttribute("hidden"));
+  const onSettingsClose = (): void => setSettingsOpen(false);
   const recordEvent = (type: "ar_session_started" | "ar_session_ended" | "ar_error", payload: Record<string, unknown>): void => {
     if (disposed) {
       return;
@@ -356,6 +397,7 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
         if (state.status === "idle") {
           activeMode = "immersive-ar";
         }
+        setSettingsOpen(false);
         unmountPanel();
         breakReminder.hidden = true;
         cancelComfortBreak?.();
@@ -461,6 +503,26 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
   root.append(breakReminder);
 
   const onAction = (event: MouseEvent): void => {
+    const settingsTarget = (event.target as Element | null)?.closest<HTMLElement>(
+      "[data-settings-action], [data-settings-speed]",
+    );
+    if (settingsTarget?.dataset.settingsAction === "close") {
+      setSettingsOpen(false);
+      return;
+    }
+    if (settingsTarget?.dataset.settingsAction) {
+      const action = settingsTarget.dataset.settingsAction;
+      root.querySelector<HTMLButtonElement>(`[data-narration-action="${action}"]`)?.click();
+      return;
+    }
+    if (settingsTarget?.dataset.settingsSpeed) {
+      const speed = root.querySelector<HTMLSelectElement>("#narration-speed");
+      if (speed) {
+        speed.value = settingsTarget.dataset.settingsSpeed;
+        speed.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      return;
+    }
     const action = (event.target as Element | null)
       ?.closest<HTMLElement>("[data-ar-action]")?.dataset.arAction;
     if (action === "explain") {
@@ -518,20 +580,15 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
     } else if (action === "reset-view") {
       renderer.resetArView();
     } else if (action === "settings-fallback") {
-      const toggle = arPanel.querySelector<HTMLButtonElement>("[data-ar-action='panel-toggle']");
-      const opening = !root.classList.contains("spatial-dom-settings-open");
-      root.classList.toggle("spatial-dom-settings-open", opening);
-      if (opening
-        ? arPanel.classList.contains("is-collapsed")
-        : !arPanel.classList.contains("is-collapsed")) {
-        toggle?.click();
-      }
+      onSettingsToggle();
     }
   };
   const onBeforeXrSelect = (event: Event): void => {
     event.preventDefault();
   };
   root.addEventListener("click", onAction);
+  root.addEventListener("mma:settings-toggle", onSettingsToggle);
+  root.addEventListener("mma:settings-close", onSettingsClose);
   settingsFallbackButton.dataset.arAction = "settings-fallback";
   root.addEventListener("beforexrselect", onBeforeXrSelect);
 
@@ -567,6 +624,10 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
     if (statusDismissTimeout !== null) globalThis.clearTimeout(statusDismissTimeout);
     statusDismissTimeout = null;
     root.removeEventListener("click", onAction);
+    root.removeEventListener("mma:settings-toggle", onSettingsToggle);
+    root.removeEventListener("mma:settings-close", onSettingsClose);
+    settingsScrim.remove();
+    settingsSheet.remove();
     root.removeEventListener("beforexrselect", onBeforeXrSelect);
     cancelComfortBreak?.();
     cancelComfortBreak = null;
