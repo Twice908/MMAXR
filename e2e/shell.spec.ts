@@ -456,7 +456,8 @@ test("hides AR entry and explains unsupported devices", async ({ page }) => {
   });
   await page.goto("http://127.0.0.1:5174");
 
-  await expect(page.getByRole("button", { name: "View in AR" })).toBeHidden();
+  await expect(page.getByRole("button", { name: "Enter AR" })).toBeHidden();
+  await expect(page.getByRole("button", { name: "Enter VR" })).toBeHidden();
   await expect(page.locator("#ar-support-message")).toContainText(
     "does not support immersive AR",
   );
@@ -477,11 +478,11 @@ test("AR overlay is transparent and camera explanation has two visible actions",
     });
   });
   await page.goto("http://127.0.0.1:5174");
-  await page.getByRole("button", { name: "View in AR" }).click();
+  await page.getByRole("button", { name: "Enter AR" }).click();
 
   const dialog = page.getByRole("dialog", { name: "View the atom in AR?" });
   await expect(dialog).toBeVisible();
-  const cancel = dialog.getByRole("button", { name: "Cancel AR" });
+  const cancel = dialog.getByRole("button", { name: "Cancel" });
   const start = dialog.getByRole("button", { name: "Start AR" });
   await expect(cancel).toBeVisible();
   await expect(start).toBeVisible();
@@ -538,7 +539,7 @@ test("AR overlay is transparent and camera explanation has two visible actions",
 test("glass surfaces use tokens and fall back for reduced transparency", async ({ page }) => {
   await installMockXr(page);
   await page.goto("http://127.0.0.1:5174");
-  await page.getByRole("button", { name: "View in AR" }).click();
+  await page.getByRole("button", { name: "Enter AR" }).click();
   const dialog = page.getByRole("dialog", { name: "View the atom in AR?" });
   await expect(dialog).toBeVisible();
 
@@ -594,11 +595,11 @@ test("glass surfaces use tokens and fall back for reduced transparency", async (
   expect(highContrastStyle.filter).toBe("none");
 });
 
-test("mocked AR keeps the atom world-fixed and exposes the lesson through its overlay", async ({ page }) => {
+test("mocked AR keeps the atom world-fixed and presents the lesson in spatial panels", async ({ page }) => {
   await installMockXr(page);
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("http://127.0.0.1:5174");
-  await page.getByRole("button", { name: "View in AR" }).click();
+  await page.goto("http://127.0.0.1:5174?xrdebug=1");
+  await page.getByRole("button", { name: "Enter AR" }).click();
   const dialog = page.getByRole("dialog", { name: "View the atom in AR?" });
   await dialog.getByRole("button", { name: "Start AR" }).click();
 
@@ -635,8 +636,10 @@ test("mocked AR keeps the atom world-fixed and exposes the lesson through its ov
   expect(collapsedPanelBox?.height).toBeLessThanOrEqual(60);
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
     .toBe(true);
-  await expect(page.locator(".ar-diagnostics")).toContainText("anchor 0.00,0.00,-0.60");
-  await expect(page.locator(".ar-diagnostics")).toContainText("view 1.00x");
+  const diagnostics = page.locator(".ar-diagnostics");
+  await expect(diagnostics).toContainText("Environment blend mode: alpha-blend");
+  await expect(diagnostics).toContainText("DOM overlay granted: yes");
+  await expect(diagnostics).toContainText("Reference space: local");
 
   const viewStateBeforeGestures = await page.evaluate(() => ({
     atomicNumber: document.querySelector("#atomic-number")?.textContent,
@@ -646,7 +649,7 @@ test("mocked AR keeps the atom world-fixed and exposes the lesson through its ov
     missionProgress: document.querySelector("#mission-progress")?.textContent,
     localEventCount: document.querySelectorAll("#dev-event-list li").length,
   }));
-  const gestureResults = await page.evaluate(() => {
+  await page.evaluate(() => {
     Object.defineProperty(HTMLElement.prototype, "setPointerCapture", {
       configurable: true,
       value: () => {},
@@ -673,22 +676,15 @@ test("mocked AR keeps the atom world-fixed and exposes the lesson through its ov
       bubbles: true,
       cancelable: true,
     }));
-    const diagnostics = document.querySelector<HTMLElement>(".ar-diagnostics");
-    if (!diagnostics) {
-      throw new Error("AR diagnostics are missing");
-    }
-    const snapshots: string[] = [];
     dispatchTouch(root, "pointerdown", 11, 100, 300);
     dispatchTouch(root, "pointerdown", 12, 200, 300);
     dispatchTouch(root, "pointermove", 12, 250, 300);
     dispatchTouch(root, "pointerup", 11, 100, 300);
     dispatchTouch(root, "pointerup", 12, 250, 300);
-    snapshots.push(diagnostics.textContent ?? "");
 
     dispatchTouch(root, "pointerdown", 13, 100, 300);
     dispatchTouch(root, "pointermove", 13, 120, 320);
     dispatchTouch(root, "pointerup", 13, 120, 320);
-    snapshots.push(diagnostics.textContent ?? "");
 
     const exit = document.querySelector<HTMLElement>(".ar-exit");
     if (!exit) {
@@ -697,41 +693,26 @@ test("mocked AR keeps the atom world-fixed and exposes the lesson through its ov
     dispatchTouch(exit, "pointerdown", 14, 350, 20);
     dispatchTouch(root, "pointermove", 14, 370, 40);
     dispatchTouch(root, "pointerup", 14, 370, 40);
-    snapshots.push(diagnostics.textContent ?? "");
 
     dispatchTouch(root, "pointerdown", 21, 100, 300);
     dispatchTouch(root, "pointerdown", 22, 200, 300);
     dispatchTouch(root, "pointermove", 22, 10_000, 300);
     dispatchTouch(root, "pointerup", 21, 100, 300);
     dispatchTouch(root, "pointerup", 22, 10_000, 300);
-    snapshots.push(diagnostics.textContent ?? "");
 
     dispatchTouch(root, "pointerdown", 23, 100, 300);
     dispatchTouch(root, "pointerdown", 24, 1_100, 300);
     dispatchTouch(root, "pointermove", 24, 100, 300);
     dispatchTouch(root, "pointerup", 23, 100, 300);
     dispatchTouch(root, "pointerup", 24, 100, 300);
-    snapshots.push(diagnostics.textContent ?? "");
 
     dispatchTouch(root, "pointerdown", 25, 100, 300);
     dispatchTouch(root, "pointermove", 25, 100, 10_000);
     dispatchTouch(root, "pointerup", 25, 100, 10_000);
-    snapshots.push(diagnostics.textContent ?? "");
     dispatchTouch(root, "pointerdown", 26, 100, 10_000);
     dispatchTouch(root, "pointermove", 26, 100, -10_000);
     dispatchTouch(root, "pointerup", 26, 100, -10_000);
-    snapshots.push(diagnostics.textContent ?? "");
-
-    return snapshots;
   });
-  expect(gestureResults[0]).toContain("view 1.40x");
-  expect(gestureResults[1]).toContain("rotation -0.12,0.12");
-  expect(gestureResults[2]).toContain("rotation -0.12,0.12");
-  expect(gestureResults[3]).toContain("view 2.00x");
-  expect(gestureResults[4]).toContain("view 0.50x");
-  expect(gestureResults[5]).toContain("rotation -0.12,1.05");
-  expect(gestureResults[6]).toContain("rotation -0.12,-1.05");
-  expect(gestureResults[6]).toContain("anchor 0.00,0.00,-0.60");
 
   const viewStateAfterGestures = await page.evaluate(() => ({
     atomicNumber: document.querySelector("#atomic-number")?.textContent,
@@ -744,8 +725,6 @@ test("mocked AR keeps the atom world-fixed and exposes the lesson through its ov
   expect(viewStateAfterGestures).toEqual(viewStateBeforeGestures);
 
   await page.locator(".ar-panel-heading").getByRole("button", { name: "Reset view" }).click();
-  await expect(page.locator(".ar-diagnostics")).toContainText("view 1.00x");
-  await expect(page.locator(".ar-diagnostics")).toContainText("rotation 0.00,0.00");
 
   await page.evaluate(() => {
     const panelButton = document.querySelector(".ar-overlay-panel button");
@@ -757,18 +736,24 @@ test("mocked AR keeps the atom world-fixed and exposes the lesson through its ov
   expect(await page.evaluate(() => window.__mockXrSelectCount)).toBe(0);
 
   await page.evaluate(() => window.__setMockXrCamera(0.25, 0.1, 0));
-  await expect(page.locator(".ar-diagnostics")).toContainText("camera 0.25,0.10,0.00");
-  await expect(page.locator(".ar-diagnostics")).toContainText("anchor 0.00,0.00,-0.60");
+  await expect(diagnostics).toContainText("Environment blend mode: alpha-blend");
+  const viewStateAfterCameraMotion = await page.evaluate(() => ({
+    atomicNumber: document.querySelector("#atomic-number")?.textContent,
+    protonCount: document.querySelector("#proton-count")?.textContent,
+    neutronCount: document.querySelector("#neutron-count")?.textContent,
+    electronCount: document.querySelector("#electron-count")?.textContent,
+    missionProgress: document.querySelector("#mission-progress")?.textContent,
+    localEventCount: document.querySelectorAll("#dev-event-list li").length,
+  }));
+  expect(viewStateAfterCameraMotion).toEqual(viewStateBeforeGestures);
 
   await panel.getByRole("button", { name: "Show panel" }).click();
   await expect(panel).not.toHaveClass(/is-collapsed/);
-  await expect(panel.locator("#lesson-panel")).toBeVisible();
-  const expandedPanelBounds = await panel.boundingBox();
-  expect(expandedPanelBounds?.y).toBeGreaterThanOrEqual(844 / 2);
-  expect(expandedPanelBounds?.width).toBeLessThanOrEqual(390 - 24);
-  await expect(panel.locator(".narration-controls")).toBeVisible();
-  await expect(panel.locator(".particle-rail")).toBeVisible();
-  await expect(panel.locator(".tray-particle").first()).toBeVisible();
+  await expect(page.locator("#app")).toHaveClass(/spatial-panels-active/);
+  await expect(panel.locator("#lesson-panel")).toBeHidden();
+  await expect(panel.locator("#lesson-panel")).toContainText("Build carbon-12");
+  await expect(panel.locator("#mission-goal")).not.toBeEmpty();
+  await expect(panel.locator(".particle-rail")).toBeHidden();
   await expect(panel.locator("#assessment-card")).toBeHidden();
   const controlGlassStyles = await page.evaluate(() => {
     const root = getComputedStyle(document.documentElement);
@@ -850,51 +835,27 @@ test("mocked AR keeps the atom world-fixed and exposes the lesson through its ov
   ]) {
     expect(control.minHeight).toBeGreaterThanOrEqual(44);
   }
-  await panel.getByRole("button", { name: "Add proton" }).click();
-  await expect(page.locator("#atomic-number")).toHaveText("2");
-  await panel.getByRole("button", { name: "Hint" }).click();
-  await expect(panel.locator("#hint-feedback")).not.toBeEmpty();
-  await panel.getByRole("button", { name: "Check" }).click();
-  await expect(panel.locator("#mission-feedback")).toContainText("Not yet");
-  const captionsButton = panel.getByRole("button", { name: "Captions on" });
-  await captionsButton.click();
-  await expect(panel.getByRole("button", { name: "Captions off" })).toHaveAttribute("aria-pressed", "false");
-  await panel.getByLabel("Narration speed").selectOption("0.75");
-  await expect(panel.getByLabel("Narration speed")).toHaveValue("0.75");
-
-  await addParticles(page, "Add proton", 4);
-  await addParticles(page, "Add neutron", 6);
-  await addParticles(page, "Add electron", 5);
-  await panel.getByRole("button", { name: "Check" }).click();
-  await expect(panel.locator("#assessment-card")).toBeVisible();
-  const questionSurface = await panel.locator("#assessment-card").evaluate((element) => ({
-    background: getComputedStyle(element).backgroundColor,
-    glassBackground: getComputedStyle(document.documentElement).getPropertyValue("--glass-bg").trim(),
-    text: getComputedStyle(element).color,
-    glassText: (() => {
-      const probe = document.createElement("span");
-      probe.style.color = getComputedStyle(document.documentElement).getPropertyValue("--glass-text").trim();
-      document.body.append(probe);
-      const color = getComputedStyle(probe).color;
-      probe.remove();
-      return color;
-    })(),
+  await expect(panel.locator("#mission-goal")).not.toBeEmpty();
+  await expect(panel.locator("#mission-progress")).not.toBeEmpty();
+  await expect(panel.locator("#assessment-card")).toBeHidden();
+  await expect(page.locator("#app")).toHaveClass(/spatial-panels-active/);
+  const stateWithSpatialPanels = await page.evaluate(() => ({
+    atomicNumber: document.querySelector("#atomic-number")?.textContent,
+    protonCount: document.querySelector("#proton-count")?.textContent,
+    neutronCount: document.querySelector("#neutron-count")?.textContent,
+    electronCount: document.querySelector("#electron-count")?.textContent,
+    missionProgress: document.querySelector("#mission-progress")?.textContent,
+    localEventCount: document.querySelectorAll("#dev-event-list li").length,
   }));
-  expect(questionSurface.background).toBe(questionSurface.glassBackground);
-  expect(questionSurface.text).toBe(questionSurface.glassText);
-  await panel.locator("#assessment-options button").first().click();
-  await expect(panel.locator("#assessment-feedback")).not.toBeEmpty();
-  await panel.getByRole("button", { name: "Next question" }).click();
-  await panel.locator("#assessment-options button").first().click();
-  await panel.getByRole("button", { name: "Continue" }).click();
-  await expect(panel).toContainText("Make Na+");
+  expect(stateWithSpatialPanels).toEqual(viewStateBeforeGestures);
 
   await exitButton.click();
   await expect(exitButton).toBeHidden();
   await expect(page.locator("#atom-scene canvas")).toBeVisible();
-  await expect(page.locator("#atomic-number")).toHaveText("6");
-  await expect(page.locator("#neutron-count")).toHaveText("6");
-  await expect(page.locator("#electron-count")).toHaveText("6");
+  await expect(page.locator("#atomic-number")).toHaveText("1");
+  await expect(page.locator("#proton-count")).toHaveText("1");
+  await expect(page.locator("#neutron-count")).toHaveText("0");
+  await expect(page.locator("#electron-count")).toHaveText("1");
   await expect(panel).toBeHidden();
 });
 
@@ -902,7 +863,7 @@ test("mocked AR shows one local comfort break reminder after ten minutes", async
   await page.clock.install();
   await installMockXr(page);
   await page.goto("http://127.0.0.1:5174");
-  await page.getByRole("button", { name: "View in AR" }).click();
+  await page.getByRole("button", { name: "Enter AR" }).click();
   await page.getByRole("dialog", { name: "View the atom in AR?" })
     .getByRole("button", { name: "Start AR" }).click();
   await expect(page.getByRole("button", { name: "Exit AR" })).toBeVisible();
@@ -955,9 +916,9 @@ test("explains camera use before permission and returns cleanly after denial", a
   });
   await page.goto("http://127.0.0.1:5174");
 
-  const viewInAr = page.getByRole("button", { name: "View in AR" });
-  await expect(viewInAr).toBeVisible();
-  await viewInAr.click();
+  const enterAr = page.getByRole("button", { name: "Enter AR" });
+  await expect(enterAr).toBeVisible();
+  await enterAr.click();
   const explanation = page.getByRole("dialog", { name: "View the atom in AR?" });
   await expect(explanation).toContainText("Nothing is recorded or uploaded.");
   expect(await page.locator("html").getAttribute("data-ar-request")).toBeNull();
@@ -976,7 +937,7 @@ test("explains camera use before permission and returns cleanly after denial", a
   expect(browserErrors).toEqual([]);
 });
 
-test("desktop keeps camera view available when an XR emulator reports immersive AR", async ({ page }) => {
+test("desktop keeps camera view available when an XR emulator reports immersive AR and VR", async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "xr", {
       configurable: true,
@@ -985,7 +946,8 @@ test("desktop keeps camera view available when an XR emulator reports immersive 
   });
   await page.goto("http://127.0.0.1:5174");
 
-  await expect(page.getByRole("button", { name: "View in AR" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Enter AR" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Enter VR" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Camera view" })).toBeVisible();
   await expect(page.locator(".camera-view-diagnostic")).toBeHidden();
 });

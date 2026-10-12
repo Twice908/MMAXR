@@ -15,6 +15,22 @@ describe("AR scene scaling", () => {
   describe("AR touch view gestures", () => {
     const defaultView = { scaleFactor: 1, yaw: 0, pitch: 0 } as const;
 
+    it("changes only the view transform while preserving the world anchor", () => {
+      const scaled = applyArViewGesture(defaultView, { type: "scale", delta: -0.4 });
+      const rotated = applyArViewGesture(scaled, {
+        type: "rotate",
+        deltaX: 20,
+        deltaY: 20,
+      });
+
+      expect(rotated).toEqual({
+        scaleFactor: 1.4,
+        yaw: -0.12,
+        pitch: 0.12,
+      });
+      expect(arWorldAnchorPosition).toEqual({ x: 0, y: -0.15, z: -0.8 });
+    });
+
     it("bounds pinch scale to half through twice the default size", () => {
       expect(applyArViewGesture(defaultView, { type: "scale", delta: -10 }).scaleFactor)
         .toBe(arTouchGestureConfig.maxScaleFactor);
