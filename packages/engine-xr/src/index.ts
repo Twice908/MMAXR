@@ -4,6 +4,7 @@ export {
   type ArCapabilityFailure,
   type ArCapabilityResult,
   type ArXrCapabilitySystem,
+  type ImmersiveMode,
 } from "./capability.js";
 export {
   arErrorReasonCodes,
@@ -21,6 +22,7 @@ export {
   type ArSessionEnvironment,
   type ArSessionHandle,
   type ArSessionPresentation,
+  type ArSessionRuntimeInfo,
   type ArSessionSystem,
   type ArVisibilityTarget,
 } from "./session-runtime.js";

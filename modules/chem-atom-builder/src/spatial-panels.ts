@@ -77,6 +77,7 @@ export interface SpatialPanelsSource {
   readonly resetViewLabel: string;
   readonly panelToggleLabel: string;
   readonly panelsExpanded: boolean;
+  readonly xrDiagnostics: readonly string[];
 }
 
 export interface SpatialPanelItems {
@@ -84,6 +85,8 @@ export interface SpatialPanelItems {
   readonly particles: readonly GlassPanelItem[];
   readonly elementInfo: readonly GlassPanelItem[];
   readonly narration: readonly GlassPanelItem[];
+  readonly arControls?: readonly GlassPanelItem[];
+  readonly xrDiagnostics?: readonly GlassPanelItem[];
   readonly settings: readonly GlassPanelItem[];
   readonly settingsToggles: Readonly<Record<string, boolean>>;
 }
@@ -94,12 +97,48 @@ export interface SpatialActionHandlers {
   readonly onNarrationSpeedChange: (speed?: string) => void;
   readonly onResetView?: () => void;
   readonly onPanelToggle?: () => void;
+  readonly onExitAr?: () => void;
+  readonly onCopyXrReport?: () => void;
 }
 
 const narrationActions = new Set(["enable", "mute", "replay", "captions"]);
 
-/** Build item arrays from values and control IDs read from the live DOM. */
-export function buildSpatialPanelItems(source: SpatialPanelsSource): SpatialPanelItems {
+/** Build spatial panel items from live DOM values and overlay availability. */
+export function buildSpatialPanelItems(
+  source: SpatialPanelsSource,
+  overlayGranted = true,
+  exitLabel = "Exit AR",
+): SpatialPanelItems {
+  const arControls = overlayGranted
+    ? {}
+    : {
+        arControls: [
+          { kind: "heading" as const, text: "AR controls" },
+          { kind: "button" as const, text: exitLabel, inputId: "exit-ar", regionId: "exit-ar" },
+          {
+            kind: "button" as const,
+            text: source.resetViewLabel,
+            inputId: "reset-view",
+            regionId: "reset-view",
+          },
+          {
+            kind: "button" as const,
+            text: source.panelsExpanded ? "Hide panels" : "Show panels",
+            inputId: "panel-toggle",
+            regionId: "panel-toggle",
+          },
+        ],
+      };
+  const xrDiagnostics = !overlayGranted && source.xrDiagnostics.length > 0
+    ? {
+        xrDiagnostics: [
+          { kind: "heading" as const, text: "XR diagnostics" },
+          ...source.xrDiagnostics.flatMap((line) =>
+            wrapDiagnosticLine(line).map((text) => ({ kind: "text" as const, text }))),
+          { kind: "button" as const, text: "Copy report", inputId: "copy-xr-report", regionId: "copy-xr-report" },
+        ],
+      }
+    : {};
   if (source.mission.view === "summary") {
     return {
       mission: [
@@ -115,6 +154,8 @@ export function buildSpatialPanelItems(source: SpatialPanelsSource): SpatialPane
       particles: buildParticles(source),
       elementInfo: buildElementInfo(source),
       narration: buildNarration(source),
+      ...arControls,
+      ...xrDiagnostics,
       ...buildSettings(source),
     };
   }
@@ -132,6 +173,8 @@ export function buildSpatialPanelItems(source: SpatialPanelsSource): SpatialPane
       particles: buildParticles(source),
       elementInfo: buildElementInfo(source),
       narration: buildNarration(source),
+      ...arControls,
+      ...xrDiagnostics,
       ...buildSettings(source),
     };
   }
@@ -200,6 +243,8 @@ export function buildSpatialPanelItems(source: SpatialPanelsSource): SpatialPane
     particles: buildParticles(source),
     elementInfo: buildElementInfo(source),
     narration: buildNarration(source),
+    ...arControls,
+    ...xrDiagnostics,
     ...buildSettings(source),
   };
 }
@@ -324,6 +369,9 @@ export function readSpatialPanelSources(root: ParentNode): SpatialPanelsSource {
     return element;
   };
   const text = (selector: string): string => required<HTMLElement>(selector).textContent ?? "";
+  const xrDiagnostics = root.querySelector<HTMLElement>("#xr-debug-report")?.textContent
+    ?.split("\n")
+    .filter((line) => line.length > 0) ?? [];
   const command = (selector: string): string => {
     const value = required<HTMLElement>(selector).dataset.command;
     if (!value) throw new Error(`Spatial panel command missing: ${selector}`);
@@ -426,11 +474,16 @@ export function readSpatialPanelSources(root: ParentNode): SpatialPanelsSource {
     resetViewLabel: text('[data-command="reset-view"]'),
     panelToggleLabel: panelToggle.textContent ?? "",
     panelsExpanded: panelToggle.getAttribute("aria-expanded") === "true",
+    xrDiagnostics,
   };
 }
 
 /** Route a spatial hit through the existing command and narration handlers. */
 export function routeSpatialAction(inputId: string, handlers: SpatialActionHandlers): boolean {
+  if (inputId === "copy-xr-report" && handlers.onCopyXrReport) {
+    handlers.onCopyXrReport();
+    return true;
+  }
   if (narrationActions.has(inputId)) {
     handlers.onNarrationAction(inputId);
     return true;
@@ -452,6 +505,10 @@ export function routeSpatialAction(inputId: string, handlers: SpatialActionHandl
     handlers.onPanelToggle();
     return true;
   }
+  if (inputId === "exit-ar" && handlers.onExitAr) {
+    handlers.onExitAr();
+    return true;
+  }
   if (isExistingCommand(inputId)) {
     handlers.runCommand(inputId);
     return true;
@@ -468,4 +525,21 @@ function isExistingCommand(inputId: string): boolean {
     /^lesson:assessment:answer:[0-3]$/.test(inputId) ||
     inputId === "reset-view" ||
     /^particle:(?:add|remove):(?:proton|neutron|electron)$/.test(inputId);
+}
+
+function wrapDiagnosticLine(line: string): string[] {
+  const words = line.split(/\s+/);
+  const rows: string[] = [];
+  let current = "";
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (current && next.length > 31) {
+      rows.push(current);
+      current = word;
+    } else {
+      current = next;
+    }
+  }
+  if (current) rows.push(current);
+  return rows;
 }

@@ -19,6 +19,9 @@ describe("spatial panel placement", () => {
     expect(placements.particles.position.x).toBeCloseTo(-0.36);
     expect(placements.elementInfo.position.x).toBeCloseTo(0.36);
     expect(placements.narration.position.y).toBeCloseTo(-0.37);
+    expect(placements.arControls.position.y).toBeCloseTo(-0.62);
+    expect(placements.arControls.position.z).toBeCloseTo(-1);
+    expect(placements.arControls.size).toEqual({ width: 0.58, height: 0.2 });
     expect(placements.mission.position.z).toBeCloseTo(-0.75);
     expect(placements.mission.scale).toBe(0.82);
   });

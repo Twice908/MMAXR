@@ -20,6 +20,7 @@ import {
 import {
   ScreenInputAdapter,
   ScreenSceneRenderer,
+  XrSessionInputAdapter,
   arTouchGestureConfig,
   installZoomControls,
   screenZoomConfig,
@@ -222,6 +223,9 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   let spatialHintRoot: HTMLElement | null = null;
   let spatialStyle: HTMLStyleElement | null = null;
   let spatialExpanded = false;
+  let spatialArControlsVisible = false;
+  let spatialExitLabel = "Exit AR";
+  let xrInputAdapter: InstanceType<typeof XrSessionInputAdapter> | null = null;
   let spatialFailureLogged = false;
   let refreshSpatialPanels: () => void = () => undefined;
   let routeSpatialPanelAction: (inputId: string) => void = () => undefined;
@@ -232,6 +236,8 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     spatialHintRoot = null;
     spatialStyle?.remove();
     spatialStyle = null;
+    spatialArControlsVisible = false;
+    spatialExitLabel = "Exit AR";
     setSpatialPanelsDomHidden(root, false);
     root.classList.remove("spatial-dom-settings-open");
   };
@@ -245,7 +251,9 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     active: boolean,
     mode: "ar" | "camera",
     expanded?: boolean,
+    overlayGranted?: boolean,
   ): void => {
+    spatialArControlsVisible = mode === "ar" && overlayGranted === false;
     spatialExpanded = expanded ?? (spatialSession ? spatialExpanded : false);
     if (!isSpatialPresentationMode(mode)) {
       clearSpatialPresentation();
@@ -265,7 +273,11 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
       return;
     }
     try {
-      const items = buildSpatialPanelItems(readSpatialPanelSources(root));
+      const items = buildSpatialPanelItems(
+        readSpatialPanelSources(root),
+        !spatialArControlsVisible,
+        spatialExitLabel,
+      );
       const session = tryCreateSpatialPanels(
         () => renderer.createSpatialPanelSession(
           items,
@@ -464,7 +476,17 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
       );
     },
     recordLocalEvent: recordLocalArEvent,
-    onSpatialActiveChange: (active) => setSpatialPresentation(active, "ar"),
+    onSpatialActiveChange: (active, sessionInfo, session) => {
+      spatialExitLabel = sessionInfo.mode === "immersive-vr" ? "Exit VR" : "Exit AR";
+      setSpatialPresentation(active, "ar", undefined, sessionInfo.overlayGranted ?? undefined);
+      if (active && session) {
+        void xrInputAdapter?.setSession(session as unknown as XRSession).catch((error: unknown) => {
+          console.error("WebXR input sources could not be initialized.", error);
+        });
+      } else {
+        void xrInputAdapter?.setSession(null);
+      }
+    },
     onSpatialExpandedChange: (expanded) => {
       spatialExpanded = expanded;
       try {
@@ -546,7 +568,11 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   refreshSpatialPanels = () => {
     try {
       if (spatialSession) {
-        spatialSession.update(buildSpatialPanelItems(readSpatialPanelSources(root)));
+        spatialSession.update(buildSpatialPanelItems(
+          readSpatialPanelSources(root),
+          !spatialArControlsVisible,
+          spatialExitLabel,
+        ));
       }
     } catch (error) {
       failSpatialPresentation(error);
@@ -567,9 +593,12 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
         onNarrationSpeedChange();
       },
       onResetView: () => {
-        const resetView = root.querySelector<HTMLButtonElement>(
-          "[data-ar-action='reset-view'], [data-command='reset-view']",
-        );
+        const resetView = spatialArControlsVisible
+          ? root.querySelector<HTMLButtonElement>("[data-ar-action='reset-view']")
+            ?? root.querySelector<HTMLButtonElement>("[data-command='reset-view']")
+          : root.querySelector<HTMLButtonElement>(
+              "[data-ar-action='reset-view'], [data-command='reset-view']",
+            );
         resetView?.click();
       },
       onPanelToggle: () => {
@@ -578,6 +607,8 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
         );
         panelToggle?.click();
       },
+      onExitAr: () => root.querySelector<HTMLButtonElement>("[data-ar-action='exit']")?.click(),
+      onCopyXrReport: () => root.querySelector<HTMLButtonElement>("[data-ar-action='copy-xr-report']")?.click(),
     });
   };
   narrationControls.addEventListener("click", onNarrationAction);
@@ -674,6 +705,15 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
         break;
       }
       case "move": {
+        if (
+          root.classList.contains("ar-active")
+          && payload.source === "xr-controller"
+          && typeof payload.deltaX === "number"
+          && typeof payload.deltaY === "number"
+        ) {
+          renderer.moveArView(payload.deltaX, payload.deltaY);
+          break;
+        }
         if (ghost.classList.contains("is-visible") && typeof payload.x === "number" && typeof payload.y === "number") {
           const bounds = root.getBoundingClientRect();
           ghost.style.left = `${payload.x - bounds.left}px`;
@@ -689,7 +729,10 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
         break;
       case "rotate":
         if (typeof payload.deltaX === "number" && typeof payload.deltaY === "number") {
-          if (root.classList.contains("ar-active") && payload.source === "touch") {
+          if (
+            root.classList.contains("ar-active")
+            && (payload.source === "touch" || payload.source === "xr-controller")
+          ) {
             renderer.rotateArView(payload.deltaX, payload.deltaY);
           } else {
             renderer.rotate(payload.deltaX, payload.deltaY);
@@ -698,7 +741,10 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
         break;
       case "scale":
         if (typeof payload.delta === "number") {
-          if (root.classList.contains("ar-active") && payload.source === "touch") {
+          if (
+            root.classList.contains("ar-active")
+            && (payload.source === "touch" || payload.source === "xr-controller")
+          ) {
             renderer.scaleArView(payload.delta);
           } else {
             renderer.scale(payload.delta);
@@ -744,8 +790,15 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
       renderer.endDrag();
     },
   });
+  xrInputAdapter = new XrSessionInputAdapter({
+    dispatch: onInput,
+    pick: (ray) => renderer.pickRay(ray.origin, ray.direction),
+    handlePanelRay: (ray, phase, sourceId) =>
+      spatialSession?.handleRay(ray, phase, sourceId) ?? false,
+  });
   root.addEventListener("click", onCommandClick);
   root.addEventListener("mma:spatial-presentation", onSpatialPresentation);
+  root.addEventListener("mma:xr-diagnostics-update", refreshSpatialPanels);
   renderState(store.getState());
   store.events.emit("module_started", {
     type: "module_started",
@@ -756,6 +809,8 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   return () => {
     disposeZoomControls();
     input.dispose();
+    xrInputAdapter?.dispose();
+    xrInputAdapter = null;
     unsubscribe();
     narrationControls.removeEventListener("click", onNarrationAction);
     narrationSpeed.removeEventListener("change", onNarrationSpeedChange);
@@ -763,6 +818,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     root.removeEventListener("mma:local-telemetry", onLocalTelemetry);
     root.removeEventListener("click", onCommandClick);
     root.removeEventListener("mma:spatial-presentation", onSpatialPresentation);
+    root.removeEventListener("mma:xr-diagnostics-update", refreshSpatialPanels);
     clearSpatialPresentation();
     narrationPlayer.dispose();
     void disposeArControls().finally(() => renderer.dispose());

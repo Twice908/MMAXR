@@ -13,10 +13,20 @@ export interface SpatialPanelLayout {
 
 /** Spatial layout centered around the atom's AR anchor at the origin. */
 export interface SpatialLayout {
+  readonly arPlacement: Readonly<{
+    readonly viewerForwardMeters: number;
+    readonly viewerDownMeters: number;
+    readonly minimumDistanceMeters: number;
+    readonly maximumDistanceMeters: number;
+    readonly moveMetersPerSecond: number;
+    readonly reticleRadiusMeters: number;
+  }>;
   readonly mission: SpatialPanelLayout;
   readonly particles: SpatialPanelLayout;
   readonly elementInfo: SpatialPanelLayout;
   readonly narrationSettings: SpatialPanelLayout;
+  readonly arControls: SpatialPanelLayout;
+  readonly xrDiagnostics: SpatialPanelLayout;
   readonly settings: SpatialPanelLayout;
   /** Uniform panel scale selected for the viewport orientation. */
   readonly viewportScale: Readonly<{ portrait: number; landscape: number }>;
@@ -28,6 +38,14 @@ export interface SpatialLayout {
 
 /** Suggested positions keep the panels outside the atom's ~27 cm diameter. */
 export const spatialLayout: SpatialLayout = Object.freeze({
+  arPlacement: {
+    viewerForwardMeters: 0.8,
+    viewerDownMeters: 0.15,
+    minimumDistanceMeters: 0.35,
+    maximumDistanceMeters: 1.5,
+    moveMetersPerSecond: 0.45,
+    reticleRadiusMeters: 0.035,
+  },
   mission: {
     position: { x: 0, y: 0.37, z: -0.15 },
     expandedSize: { width: 0.55, height: 0.16 },
@@ -54,6 +72,20 @@ export const spatialLayout: SpatialLayout = Object.freeze({
     expandedSize: { width: 0.5, height: 0.16 },
     collapsedSize: { width: 0.5, height: 0.11 },
     tiltRadians: { x: 0.08, y: 0, z: 0 },
+    facingRule: "viewer" as const,
+  },
+  arControls: {
+    position: { x: 0, y: -0.62, z: -0.4 },
+    expandedSize: { width: 0.58, height: 0.2 },
+    collapsedSize: { width: 0.58, height: 0.2 },
+    tiltRadians: { x: 0.08, y: 0, z: 0 },
+    facingRule: "viewer" as const,
+  },
+  xrDiagnostics: {
+    position: { x: -0.6, y: -0.42, z: -0.28 },
+    expandedSize: { width: 0.72, height: 0.82 },
+    collapsedSize: { width: 0.72, height: 0.82 },
+    tiltRadians: { x: 0.06, y: -0.06, z: 0 },
     facingRule: "viewer" as const,
   },
   settings: {

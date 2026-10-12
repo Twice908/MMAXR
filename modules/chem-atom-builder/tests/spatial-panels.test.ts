@@ -81,6 +81,7 @@ const source: SpatialPanelsSource = {
   resetViewLabel: "reset view source",
   panelToggleLabel: "Show panel",
   panelsExpanded: false,
+  xrDiagnostics: [],
 };
 
 describe("spatial panel data and routing", () => {
@@ -126,6 +127,31 @@ describe("spatial panel data and routing", () => {
     });
   });
 
+  it("adds reachable AR controls only when the DOM overlay is unavailable", () => {
+    const withoutOverlay = buildSpatialPanelItems(source, false);
+    expect(withoutOverlay.arControls?.map((item) => "inputId" in item ? item.inputId : null))
+      .toEqual([null, "exit-ar", "reset-view", "panel-toggle"]);
+    expect(withoutOverlay.arControls?.map((item) => item.text))
+      .toContain("Show panels");
+    expect(buildSpatialPanelItems(source, true).arControls).toBeUndefined();
+  });
+
+  it("adds the XR report and copy action to a dedicated panel only without overlay", () => {
+    const debugSource = {
+      ...source,
+      xrDiagnostics: ["Supported session modes: immersive-ar", "DOM overlay granted: no"],
+    };
+    const withoutOverlay = buildSpatialPanelItems(debugSource, false);
+    expect(withoutOverlay.xrDiagnostics?.map((item) => item.text)).toEqual([
+      "XR diagnostics",
+      "Supported session modes:",
+      "immersive-ar",
+      "DOM overlay granted: no",
+      "Copy report",
+    ]);
+    expect(buildSpatialPanelItems(debugSource, true).xrDiagnostics).toBeUndefined();
+  });
+
   it("calls the existing command, narration-action, and speed handlers", () => {
     const handlers = {
       runCommand: vi.fn(),
@@ -133,6 +159,8 @@ describe("spatial panel data and routing", () => {
       onNarrationSpeedChange: vi.fn(),
       onResetView: vi.fn(),
       onPanelToggle: vi.fn(),
+      onExitAr: vi.fn(),
+      onCopyXrReport: vi.fn(),
     };
     for (const command of [
       "lesson:hint",
@@ -153,8 +181,11 @@ describe("spatial panel data and routing", () => {
     expect(routeSpatialAction("narration-speed:0.75", handlers)).toBe(true);
     expect(routeSpatialAction("narration-speed:1", handlers)).toBe(true);
     expect(routeSpatialAction("narration-speed:1.25", handlers)).toBe(true);
+    expect(routeSpatialAction("copy-xr-report", handlers)).toBe(true);
+    expect(handlers.onCopyXrReport).toHaveBeenCalledOnce();
     expect(routeSpatialAction("reset-view", handlers)).toBe(true);
     expect(routeSpatialAction("panel-toggle", handlers)).toBe(true);
+    expect(routeSpatialAction("exit-ar", handlers)).toBe(true);
     expect(routeSpatialAction("unknown", handlers)).toBe(false);
     expect(handlers.runCommand).toHaveBeenCalledTimes(8);
     expect(handlers.onNarrationAction).toHaveBeenCalledTimes(4);
@@ -164,5 +195,6 @@ describe("spatial panel data and routing", () => {
     expect(handlers.onNarrationSpeedChange).toHaveBeenNthCalledWith(4, "1.25");
     expect(handlers.onResetView).toHaveBeenCalledOnce();
     expect(handlers.onPanelToggle).toHaveBeenCalledOnce();
+    expect(handlers.onExitAr).toHaveBeenCalledOnce();
   });
 });

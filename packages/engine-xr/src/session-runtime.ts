@@ -13,19 +13,27 @@ import {
 
 export interface ArSessionHandle extends EventTarget {
   readonly enabledFeatures?: readonly string[];
+  readonly inputSources?: readonly Readonly<{
+    readonly targetRayMode: string;
+    readonly hand?: unknown;
+    readonly gamepad?: unknown;
+  }>[];
   readonly visibilityState?: "visible" | "visible-blurred" | "hidden";
   readonly domOverlayState?: object | null;
+  readonly interactionMode?: "screen-space" | "world-space";
+  readonly environmentBlendMode?: "opaque" | "additive" | "alpha-blend";
+  readonly frameRate?: number;
   end(): Promise<void>;
 }
 
 export interface ArSessionRequestOptions {
   readonly optionalFeatures: readonly ArFeature[];
-  readonly domOverlay: Readonly<{ root: HTMLElement }>;
+  readonly domOverlay?: Readonly<{ root: HTMLElement }>;
 }
 
 export interface ArSessionSystem extends ArXrCapabilitySystem {
   requestSession(
-    mode: "immersive-ar",
+    mode: "immersive-ar" | "immersive-vr",
     options: ArSessionRequestOptions,
   ): Promise<ArSessionHandle>;
 }
@@ -41,8 +49,22 @@ export interface ArSessionEnvironment extends ArCapabilityEnvironment {
   readonly visibilityTarget: ArVisibilityTarget | null;
 }
 
+/** Runtime grant information associated with the current AR session. */
+export interface ArSessionRuntimeInfo {
+  readonly overlayGranted: boolean | null;
+  readonly mode: "immersive-ar" | "immersive-vr" | null;
+  readonly supportedModes: readonly ("immersive-ar" | "immersive-vr")[];
+  readonly requestedFeatures: readonly ArFeature[];
+  readonly grantedFeatures: readonly ArFeature[];
+  readonly interactionMode: "screen-space" | "world-space" | null;
+  readonly environmentBlendMode: "opaque" | "additive" | "alpha-blend" | null;
+  readonly inputSourceTypes: readonly string[];
+  readonly referenceSpaceType: "local-floor" | "local" | null;
+  readonly frameRate: number | null;
+}
+
 export interface ArSessionPresentation {
-  enter(session: ArSessionHandle): Promise<void>;
+  enter(session: ArSessionHandle, mode: "immersive-ar" | "immersive-vr"): Promise<void>;
   exit(): Promise<void> | void;
 }
 
@@ -51,8 +73,11 @@ export interface ArSessionControllerOptions {
   readonly presentation: ArSessionPresentation;
   readonly environment?: ArSessionEnvironment;
   readonly now?: () => number;
-  readonly onStateChange?: (state: ArSessionState) => void;
-  readonly onStarted?: (grantedFeatures: readonly ArFeature[]) => void;
+  readonly onStateChange?: (state: ArSessionState, sessionInfo: ArSessionRuntimeInfo) => void;
+  readonly onStarted?: (
+    grantedFeatures: readonly ArFeature[],
+    sessionInfo: ArSessionRuntimeInfo,
+  ) => void;
   readonly onEnded?: (durationSec: number) => void;
   readonly onError?: (reasonCode: ArErrorReasonCode) => void;
 }
@@ -101,6 +126,11 @@ export class ArSessionController {
   private readonly now: () => number;
   private currentState: ArSessionState = initialArSessionState;
   private session: ArSessionHandle | null = null;
+  private overlayGranted: boolean | null = null;
+  private mode: "immersive-ar" | "immersive-vr" | null = null;
+  private supportedModes: readonly ("immersive-ar" | "immersive-vr")[] = [];
+  private requestedFeatures: readonly ArFeature[] = [];
+  private grantedFeatures: readonly ArFeature[] = [];
   private startedAt: number | null = null;
   private presentationEntered = false;
   private hiddenDuringRequest = false;
@@ -137,27 +167,58 @@ export class ArSessionController {
     return this.currentState;
   }
 
-  /** Request AR with a DOM overlay and start the provided presentation adapter. */
-  async start(): Promise<ArSessionState> {
+  /** Read whether the active session was granted its DOM overlay. */
+  get sessionInfo(): ArSessionRuntimeInfo {
+    const inputSources = this.session?.inputSources ?? [];
+    return {
+      overlayGranted: this.overlayGranted,
+      mode: this.mode,
+      supportedModes: [...this.supportedModes],
+      requestedFeatures: [...this.requestedFeatures],
+      grantedFeatures: [...this.grantedFeatures],
+      interactionMode: this.session?.interactionMode ?? null,
+      environmentBlendMode: this.session?.environmentBlendMode ?? null,
+      inputSourceTypes: inputSources.map((source) =>
+        source.hand ? "hand" : source.gamepad ? "controller" : source.targetRayMode),
+      referenceSpaceType: this.mode === "immersive-vr"
+        ? this.grantedFeatures.includes("local-floor") ? "local-floor" : "local"
+        : this.mode === "immersive-ar" ? "local" : null,
+      frameRate: this.session?.frameRate ?? null,
+    };
+  }
+
+  /** Start the selected immersive mode with only its supported optional features. */
+  async start(mode: "immersive-ar" | "immersive-vr" = "immersive-ar"): Promise<ArSessionState> {
     if (this.currentState.status !== "idle") {
       throw new Error(`Cannot start AR while session is ${this.currentState.status}.`);
     }
 
-    const requestedFeatures: readonly ArFeature[] = ["dom-overlay", "hand-tracking"];
+    const requestedFeatures: readonly ArFeature[] = mode === "immersive-ar"
+      ? ["dom-overlay", "hand-tracking", "hit-test"]
+      : ["local-floor", "local", "hand-tracking"];
+    this.mode = mode;
+    this.requestedFeatures = requestedFeatures;
+    this.grantedFeatures = [];
     this.transition({ type: "request", requestedFeatures });
     this.startListeningForTabVisibility();
 
     const capability = await detectArSupport(this.environment);
-    if (!capability.supported) {
+    this.supportedModes = capability.supported ? capability.modes : [];
+    if (!capability.supported || !capability.modes.includes(mode)) {
       await this.finish("unsupported", false);
-      throw new ArSessionStartError("unsupported", capability.reason);
+      throw new ArSessionStartError(
+        "unsupported",
+        !capability.supported
+          ? capability.reason
+          : "This device or browser does not support the requested immersive mode.",
+      );
     }
 
     let session: ArSessionHandle;
     try {
-      session = await this.environment.xr!.requestSession("immersive-ar", {
+      session = await this.environment.xr!.requestSession(mode, {
         optionalFeatures: requestedFeatures,
-        domOverlay: { root: this.options.overlayRoot },
+        ...(mode === "immersive-ar" ? { domOverlay: { root: this.options.overlayRoot } } : {}),
       });
     } catch (error) {
       const reasonCode = errorReason(error);
@@ -172,15 +233,12 @@ export class ArSessionController {
     const grantedFeatures = requestedFeatures.filter(
       (feature) => session.enabledFeatures?.includes(feature) === true,
     );
-    const overlayGranted = grantedFeatures.includes("dom-overlay")
-      || session.domOverlayState !== undefined && session.domOverlayState !== null;
-    if (!overlayGranted) {
-      await this.finish("dom_overlay_unavailable", true);
-      throw new ArSessionStartError(
-        "dom_overlay_unavailable",
-        "AR controls are unavailable on this device. Returning to screen mode.",
-      );
-    }
+    this.grantedFeatures = grantedFeatures;
+    const overlayGranted = mode === "immersive-ar" && (
+      grantedFeatures.includes("dom-overlay")
+      || session.domOverlayState !== undefined && session.domOverlayState !== null
+    );
+    this.overlayGranted = overlayGranted;
 
     if (this.hiddenDuringRequest || this.environment.visibilityTarget?.hidden) {
       await this.finish("tracking_lost", true);
@@ -189,7 +247,7 @@ export class ArSessionController {
 
     try {
       this.presentationEntered = true;
-      await this.options.presentation.enter(session);
+      await this.options.presentation.enter(session, mode);
     } catch {
       await this.finish("unknown", true);
       throw new ArSessionStartError("unknown", "AR could not be displayed. You can keep learning in screen mode.");
@@ -197,7 +255,7 @@ export class ArSessionController {
 
     this.startedAt = this.now();
     this.transition({ type: "started", grantedFeatures });
-    this.options.onStarted?.(grantedFeatures);
+    this.options.onStarted?.(grantedFeatures, this.sessionInfo);
     return this.currentState;
   }
 
@@ -210,7 +268,7 @@ export class ArSessionController {
 
   private transition(event: Parameters<typeof transitionArSession>[1]): void {
     this.currentState = transitionArSession(this.currentState, event);
-    this.options.onStateChange?.(this.currentState);
+    this.options.onStateChange?.(this.currentState, this.sessionInfo);
   }
 
   private startListeningForTabVisibility(): void {
@@ -277,6 +335,11 @@ export class ArSessionController {
 
       this.presentationEntered = false;
       this.session = null;
+      this.overlayGranted = null;
+      this.mode = null;
+      this.supportedModes = [];
+      this.requestedFeatures = [];
+      this.grantedFeatures = [];
       this.startedAt = null;
       this.hiddenDuringRequest = false;
 

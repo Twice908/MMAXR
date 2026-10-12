@@ -9,7 +9,7 @@ import {
 
 describe("AR scene scaling", () => {
   it("uses a fixed session-local atom anchor", () => {
-    expect(arWorldAnchorPosition).toEqual({ x: 0, y: 0, z: -0.6 });
+    expect(arWorldAnchorPosition).toEqual({ x: 0, y: -0.15, z: -0.8 });
   });
 
   describe("AR touch view gestures", () => {

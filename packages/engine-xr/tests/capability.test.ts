@@ -6,13 +6,19 @@ afterEach(() => {
 });
 
 describe("detectArSupport", () => {
-  it("reports immersive AR support when the secure browser supports it", async () => {
-    const isSessionSupported = vi.fn().mockResolvedValue(true);
+  it.each([
+    [true, false, ["immersive-ar"]],
+    [false, true, ["immersive-vr"]],
+    [true, true, ["immersive-ar", "immersive-vr"]],
+  ] as const)("lists supported immersive modes (%s, %s)", async (ar, vr, modes) => {
+    const isSessionSupported = vi.fn()
+      .mockImplementation((mode: string) => Promise.resolve(mode === "immersive-ar" ? ar : vr));
     vi.stubGlobal("isSecureContext", true);
     vi.stubGlobal("navigator", { xr: { isSessionSupported } });
 
-    await expect(detectArSupport()).resolves.toEqual({ supported: true });
+    await expect(detectArSupport()).resolves.toEqual({ supported: true, modes });
     expect(isSessionSupported).toHaveBeenCalledWith("immersive-ar");
+    expect(isSessionSupported).toHaveBeenCalledWith("immersive-vr");
   });
 
   it("explains when the page is not a secure context", async () => {
@@ -24,6 +30,7 @@ describe("detectArSupport", () => {
       supported: false,
       code: "insecure_context",
       reason: "AR requires a secure page (HTTPS or localhost).",
+      modes: [],
     });
     expect(isSessionSupported).not.toHaveBeenCalled();
   });
@@ -36,6 +43,7 @@ describe("detectArSupport", () => {
       supported: false,
       code: "webxr_unavailable",
       reason: "This browser does not provide WebXR.",
+      modes: [],
     });
   });
 
@@ -47,6 +55,7 @@ describe("detectArSupport", () => {
       supported: false,
       code: "immersive_ar_unsupported",
       reason: "This device or browser does not support immersive AR.",
+      modes: [],
     });
   });
 
@@ -59,6 +68,7 @@ describe("detectArSupport", () => {
     await expect(detectArSupport()).resolves.toMatchObject({
       supported: false,
       code: "immersive_ar_unsupported",
+      modes: [],
     });
   });
 });

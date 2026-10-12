@@ -25,7 +25,7 @@ interface ControllerState {
 export class XrControllerInputAdapter implements InputAdapter {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly dispatch: ActionDispatcher;
-  private readonly events!: InputEventBus;
+  private readonly events: InputEventBus;
   private readonly pick: PickFunction | undefined;
   private readonly raycaster = new THREE.Raycaster();
   private readonly rayLength: number;
@@ -46,18 +46,13 @@ export class XrControllerInputAdapter implements InputAdapter {
     for (let index = 0; index < count; index++) this.addController(index);
   }
 
-  on<K extends keyof InputEventMap>(
-    type: K,
-    listener: (event: InputEventMap[K]) => void,
-  ): () => void {
+  on<K extends keyof InputEventMap>(type: K, listener: (event: InputEventMap[K]) => void): () => void {
     return this.events.on(type, listener);
   }
 
   update(): void {
     if (this.disposed) return;
-    for (const state of this.controllers) {
-      this.updateControllerTarget(state);
-    }
+    for (const state of this.controllers) this.updateControllerTarget(state);
   }
 
   getController(index: number): THREE.Group {
@@ -97,19 +92,13 @@ export class XrControllerInputAdapter implements InputAdapter {
       state.handedness = source?.handedness === "left" || source?.handedness === "right"
         ? source.handedness
         : "none";
-      this.events.emit("sourceAdded", {
-        source: "xr-controller",
-        id: `controller-${index}`,
-      });
+      this.events.emit("sourceAdded", { source: "xr-controller", id: `controller-${index}` });
     };
     const onDisconnected = () => {
       if (state.grabbing) this.release(state, true);
       state.target = null;
       state.handedness = "none";
-      this.events.emit("sourceRemoved", {
-        source: "xr-controller",
-        id: `controller-${index}`,
-      });
+      this.events.emit("sourceRemoved", { source: "xr-controller", id: `controller-${index}` });
     };
 
     controller.addEventListener("selectstart", onSelectStart);
@@ -118,7 +107,6 @@ export class XrControllerInputAdapter implements InputAdapter {
     controller.addEventListener("squeezeend", onSqueezeEnd);
     controller.addEventListener("connected", onConnected);
     controller.addEventListener("disconnected", onDisconnected);
-
     this.unsubscribers.push(() => {
       controller.removeEventListener("selectstart", onSelectStart);
       controller.removeEventListener("selectend", onSelectEnd);
@@ -131,26 +119,21 @@ export class XrControllerInputAdapter implements InputAdapter {
 
   private updateControllerTarget(state: ControllerState): void {
     if (!this.pick) return;
-
     this.raycaster.setFromXRController(
       state.controller as Parameters<typeof this.raycaster.setFromXRController>[0],
     );
     this.raycaster.far = this.rayLength;
-
     const origin = new THREE.Vector3();
     const direction = new THREE.Vector3();
     state.controller.getWorldPosition(origin);
     state.controller.getWorldDirection(direction);
-
     const result = this.pick({
       origin,
       direction,
       source: "xr-controller",
       handedness: state.handedness,
     });
-
     state.target = result?.target ?? null;
-
     if (state.target) {
       this.dispatch.emit({
         type: "hover",
@@ -168,7 +151,6 @@ export class XrControllerInputAdapter implements InputAdapter {
     if (this.selectButton !== "select") return;
     const target = state.target;
     if (!target) return;
-
     state.grabbing = true;
     this.dispatch.emit({
       type: "grab",
@@ -182,8 +164,7 @@ export class XrControllerInputAdapter implements InputAdapter {
   }
 
   private endSelect(state: ControllerState): void {
-    if (this.selectButton !== "select") return;
-    this.release(state, false);
+    if (this.selectButton === "select") this.release(state, false);
   }
 
   private beginSqueeze(state: ControllerState): void {
@@ -203,8 +184,7 @@ export class XrControllerInputAdapter implements InputAdapter {
   }
 
   private endSqueeze(state: ControllerState): void {
-    if (this.selectButton !== "squeeze") return;
-    this.release(state, false);
+    if (this.selectButton === "squeeze") this.release(state, false);
   }
 
   private release(state: ControllerState, cancelled: boolean): void {

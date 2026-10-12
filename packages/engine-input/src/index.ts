@@ -31,6 +31,10 @@ export {
   XrControllerInputAdapter,
   type XrControllerInputOptions,
 } from "./xr-controller.js";
+export {
+  XrSessionInputAdapter,
+  type XrSessionInputOptions,
+} from "./xr-session-input.js";
 
 export {
   XrHandInputAdapter,

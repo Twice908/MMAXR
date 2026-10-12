@@ -6,6 +6,10 @@ import { calculateSpatialPanelPlacements } from "./visuals/spatial-placement.js"
 import { createSpatialPanelHost } from "./visuals/spatial-panel-host.js";
 import { selectSnapTarget } from "./snap-target.js";
 import { screenZoomConfig } from "./zoom-controls.js";
+import {
+  createVrEnvironmentForSession,
+  type VrEnvironment,
+} from "./visuals/vr-environment.js";
 export { screenZoomConfig } from "./zoom-controls.js";
 import {
   screenDropTolerancePx,
@@ -63,6 +67,8 @@ export interface SpatialPanelItems {
   readonly particles: readonly GlassPanelItem[];
   readonly elementInfo: readonly GlassPanelItem[];
   readonly narration: readonly GlassPanelItem[];
+  readonly arControls?: readonly GlassPanelItem[];
+  readonly xrDiagnostics?: readonly GlassPanelItem[];
   readonly settings: readonly GlassPanelItem[];
   readonly settingsToggles: Readonly<Record<string, boolean>>;
 }
@@ -70,13 +76,14 @@ export interface SpatialPanelItems {
 export interface SpatialPanelSession {
   update(items: SpatialPanelItems): void;
   setExpanded(expanded: boolean): void;
+  handleRay(ray: THREE.Ray, phase: "move" | "down" | "up" | "cancel", sourceId?: string): boolean;
   setHintListener(listener: ((hints: readonly SpatialPanelEdgeHint[]) => void) | null): void;
   focusPanel(key: SpatialPanelEdgeHint["key"]): void;
   dispose(): void;
 }
 
 export interface SpatialPanelEdgeHint {
-  readonly key: "mission" | "particles" | "elementInfo" | "narration" | "settings";
+  readonly key: "mission" | "particles" | "elementInfo" | "narration" | "settings" | "xrDiagnostics";
   readonly visible: boolean;
   readonly x: number;
   readonly y: number;
@@ -126,6 +133,108 @@ export interface ArRenderDiagnostics {
 
 const AR_ATOM_DIAMETER_METERS = 0.27;
 const RING_TUBE_RADIUS = 0.035;
+
+export interface ArViewerPose {
+  readonly position: Readonly<{ x: number; y: number; z: number }>;
+  readonly orientation: Readonly<{ x: number; y: number; z: number; w: number }>;
+}
+
+export interface ArPlacementTransform {
+  readonly position: Position3;
+  readonly orientation: ArViewerPose["orientation"];
+  readonly distanceMeters: number;
+}
+
+/** Calculate a fixed, viewer-facing start position for the AR presentation. */
+export function calculateArViewerPlacement(pose: ArViewerPose): ArPlacementTransform {
+  const orientation = new THREE.Quaternion(
+    pose.orientation.x,
+    pose.orientation.y,
+    pose.orientation.z,
+    pose.orientation.w,
+  ).normalize();
+  const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(orientation);
+  const down = new THREE.Vector3(0, -1, 0).applyQuaternion(orientation);
+  const position = new THREE.Vector3(pose.position.x, pose.position.y, pose.position.z)
+    .addScaledVector(forward, spatialLayout.arPlacement.viewerForwardMeters)
+    .addScaledVector(down, spatialLayout.arPlacement.viewerDownMeters);
+  return {
+    position: { x: position.x, y: position.y, z: position.z },
+    orientation: { x: orientation.x, y: orientation.y, z: orientation.z, w: orientation.w },
+    distanceMeters: spatialLayout.arPlacement.viewerForwardMeters,
+  };
+}
+
+/** Bound repositioning to a comfortable viewer distance. */
+export function clampArPlacementDistance(distance: number): number {
+  return THREE.MathUtils.clamp(
+    distance,
+    spatialLayout.arPlacement.minimumDistanceMeters,
+    spatialLayout.arPlacement.maximumDistanceMeters,
+  );
+}
+
+/** Decide whether this session has the requested hit-test capability. */
+export function hasArHitTest(enabledFeatures: readonly string[] | undefined): boolean {
+  return enabledFeatures?.includes("hit-test") === true;
+}
+
+/** Use surface placement only for touch-first sessions without tracked controllers. */
+export function shouldUsePhoneHitTest(
+  hitTestGranted: boolean,
+  hasTrackedController: boolean,
+  coarsePointer: boolean,
+): boolean {
+  return hitTestGranted && !hasTrackedController && coarsePointer;
+}
+
+/** Prefer WebXR session facts, retaining device hints only for older implementations. */
+export function isHandheldArSession(
+  session: Readonly<{
+    interactionMode?: "screen-space" | "world-space";
+    environmentBlendMode?: "opaque" | "additive" | "alpha-blend";
+  }>,
+  hasTrackedController: boolean,
+  coarsePointer: boolean,
+): boolean {
+  if (session.interactionMode) {
+    return session.interactionMode === "screen-space";
+  }
+  if (session.environmentBlendMode === "opaque") {
+    return false;
+  }
+  return !hasTrackedController && coarsePointer;
+}
+
+/** Move the atom placement along the original viewer-facing plane. */
+export function moveArPlacement(
+  distance: number,
+  side: number,
+  deltaX: number,
+  deltaY: number,
+): Readonly<{ distance: number; side: number }> {
+  return {
+    distance: clampArPlacementDistance(
+      distance - deltaY * spatialLayout.arPlacement.moveMetersPerSecond,
+    ),
+    side: THREE.MathUtils.clamp(
+      side + deltaX * spatialLayout.arPlacement.moveMetersPerSecond,
+      -spatialLayout.arPlacement.maximumDistanceMeters,
+      spatialLayout.arPlacement.maximumDistanceMeters,
+    ),
+  };
+}
+
+/** Restore a saved viewer placement without retaining mutable vector objects. */
+export function resetArPlacement(
+  placement: ArPlacementTransform,
+): ArPlacementTransform {
+  return {
+    ...placement,
+    position: { ...placement.position },
+    orientation: { ...placement.orientation },
+  };
+}
 
 /** Shared handheld AR gesture tuning and view limits. */
 export const arTouchGestureConfig = Object.freeze({
@@ -182,8 +291,12 @@ export function applyArViewGesture(
   };
 }
 
-/** Position of the atom in the AR session's fixed local reference space. */
-export const arWorldAnchorPosition: Position3 = Object.freeze({ x: 0, y: 0, z: -0.6 });
+/** Default viewer-relative AR offset in the local reference space. */
+export const arWorldAnchorPosition: Position3 = Object.freeze({
+  x: 0,
+  y: -spatialLayout.arPlacement.viewerDownMeters,
+  z: -spatialLayout.arPlacement.viewerForwardMeters,
+});
 
 /** Calculate the scale that fits a scene frame into a 27 cm AR diameter. */
 export function arContentScale(frame: ScreenSceneFrame): number {
@@ -229,6 +342,7 @@ export class ScreenSceneRenderer {
 
   private readonly host: HTMLElement;
   private readonly scene = new THREE.Scene();
+  private readonly arPlacementRoot = new THREE.Group();
   private readonly atomRoot = new THREE.Group();
   private readonly camera = new THREE.PerspectiveCamera(42, 1, 0.1, 80);
   private readonly renderer: THREE.WebGLRenderer;
@@ -265,6 +379,18 @@ export class ScreenSceneRenderer {
   private cameraViewActive = false;
   private currentFrame: ScreenSceneFrame | null = null;
   private activeXRSession: XRSession | null = null;
+  private hitTestSource: XRHitTestSource | null = null;
+  private hitTestReferenceSpace: XRReferenceSpace | null = null;
+  private lastHitTestPose: XRPose | null = null;
+  private readonly arReticle: THREE.Mesh;
+  private initialArPlacement: ArPlacementTransform | null = null;
+  private arPlacementDistance = spatialLayout.arPlacement.viewerForwardMeters;
+  private arPlacementSide = 0;
+  private arViewerOrientation = new THREE.Quaternion();
+  private arViewerOrigin = new THREE.Vector3();
+  private phoneHitTestActive = false;
+  private vrEnvironment: VrEnvironment | null = null;
+  private vrFloorUsesViewerFallback = false;
   private xrRenderLoopRunning = false;
   private arDiagnosticsListener: ((diagnostics: ArRenderDiagnostics) => void) | null = null;
   private spatialHintUpdater: (() => void) | null = null;
@@ -299,7 +425,18 @@ export class ScreenSceneRenderer {
     const keyLight = new THREE.DirectionalLight(0xffffff, 2.4);
     keyLight.position.set(4, 5, 9);
     this.scene.add(keyLight);
-    this.scene.add(this.atomRoot);
+    this.scene.add(this.arPlacementRoot);
+    this.arPlacementRoot.add(this.atomRoot);
+    this.arReticle = new THREE.Mesh(
+      new THREE.RingGeometry(
+        spatialLayout.arPlacement.reticleRadiusMeters * 0.78,
+        spatialLayout.arPlacement.reticleRadiusMeters,
+        32,
+      ),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide }),
+    );
+    this.arReticle.visible = false;
+    this.scene.add(this.arReticle);
     this.camera.position.set(0, 0, this.distance);
 
     const pickMaterial = new THREE.MeshBasicMaterial({
@@ -403,7 +540,10 @@ export class ScreenSceneRenderer {
   }
 
   /** Present the atom at tabletop scale through the active WebXR session. */
-  async enterARSession(session: EventTarget): Promise<void> {
+  async enterARSession(
+    session: EventTarget,
+    mode: "immersive-ar" | "immersive-vr" = "immersive-ar",
+  ): Promise<void> {
     if (this.disposed) {
       throw new Error("Cannot start AR with a disposed renderer.");
     }
@@ -414,14 +554,20 @@ export class ScreenSceneRenderer {
     this.arActive = true;
     cancelAnimationFrame(this.animationFrame);
     this.renderer.xr.enabled = true;
-    this.renderer.xr.setReferenceSpaceType("local");
-    this.scene.background = null;
-    this.atomRoot.position.set(
-      arWorldAnchorPosition.x,
-      arWorldAnchorPosition.y,
-      arWorldAnchorPosition.z,
+    this.renderer.xr.setReferenceSpaceType(
+      mode === "immersive-vr" && (session as XRSession).enabledFeatures?.includes("local-floor")
+        ? "local-floor"
+        : "local",
     );
+    this.scene.background = mode === "immersive-vr" ? this.screenBackground : null;
+    this.arPlacementDistance = spatialLayout.arPlacement.viewerForwardMeters;
+    this.arPlacementSide = 0;
+    this.initialArPlacement = null;
+    this.phoneHitTestActive = false;
     this.arViewTransform = DEFAULT_AR_VIEW_TRANSFORM;
+    this.arPlacementRoot.position.set(0, 0, 0);
+    this.arPlacementRoot.quaternion.identity();
+    this.atomRoot.position.set(0, 0, 0);
     this.atomRoot.rotation.set(0, 0, 0);
     this.atomRoot.scale.setScalar(
       (this.currentFrame ? arContentScale(this.currentFrame) : 0.675) *
@@ -432,7 +578,21 @@ export class ScreenSceneRenderer {
       this.activeXRSession = session as XRSession;
       await this.renderer.xr.setSession(this.activeXRSession);
       this.xrRenderLoopRunning = true;
-      this.renderer.setAnimationLoop((time) => {
+      this.vrEnvironment = createVrEnvironmentForSession(
+        mode,
+        this.activeXRSession.environmentBlendMode,
+      );
+      if (this.vrEnvironment) {
+        this.scene.add(this.vrEnvironment.root);
+        this.arPlacementRoot.add(this.vrEnvironment.atomRing);
+        this.vrFloorUsesViewerFallback =
+          !this.activeXRSession.enabledFeatures?.includes("local-floor");
+      }
+      if (mode === "immersive-ar") {
+        await this.enablePhoneHitTest(this.activeXRSession);
+      }
+      this.renderer.setAnimationLoop((time, frame) => {
+        if (frame) this.updateArPlacementFromFrame(frame);
         const frameTime = this.lastFrameTime === 0 ? 0 : time - this.lastFrameTime;
         this.lastFrameTime = time;
         this.render(frameTime);
@@ -451,6 +611,14 @@ export class ScreenSceneRenderer {
 
     this.renderer.setAnimationLoop(null);
     this.xrRenderLoopRunning = false;
+    this.activeXRSession?.removeEventListener("select", this.onPhoneSurfaceSelect);
+    this.disposeVrEnvironment();
+    this.hitTestSource?.cancel();
+    this.hitTestSource = null;
+    this.hitTestReferenceSpace = null;
+    this.lastHitTestPose = null;
+    this.phoneHitTestActive = false;
+    this.arReticle.visible = false;
     const session = this.renderer.xr.getSession();
     if (session) {
       try {
@@ -461,6 +629,9 @@ export class ScreenSceneRenderer {
     }
     this.renderer.xr.enabled = false;
     this.activeXRSession = null;
+    this.vrFloorUsesViewerFallback = false;
+    this.arPlacementRoot.position.set(0, 0, 0);
+    this.arPlacementRoot.quaternion.identity();
     this.atomRoot.position.set(0, 0, 0);
     this.atomRoot.rotation.set(0, 0, 0);
     this.atomRoot.scale.setScalar(1);
@@ -521,6 +692,21 @@ export class ScreenSceneRenderer {
         ? [{ target, distance: hit.distance, priority: target === "nucleus" ? 1 : 0 }]
         : [];
     }));
+  }
+
+  /** Pick an interactive atom surface from a world-space XR ray. */
+  pickRay(
+    origin: Readonly<{ x: number; y: number; z: number }>,
+    direction: Readonly<{ x: number; y: number; z: number }>,
+  ): { readonly target: string } | null {
+    this.raycaster.ray.set(
+      new THREE.Vector3(origin.x, origin.y, origin.z),
+      new THREE.Vector3(direction.x, direction.y, direction.z),
+    );
+    const hit = this.raycaster.intersectObjects(this.interactiveMeshes, false)
+      .find((intersection) => typeof intersection.object.userData.interactionTarget === "string");
+    const target = hit?.object.userData.interactionTarget;
+    return typeof target === "string" ? { target } : null;
   }
 
   /** Show electron slot markers while a particle is being dragged. */
@@ -597,10 +783,40 @@ export class ScreenSceneRenderer {
     this.render();
   }
 
-  /** Restore the AR atom's default scale and rotation while preserving its anchor. */
+  /** Reposition the atom in the viewer-facing plane, bounded by layout limits. */
+  moveArView(deltaX: number, deltaY: number): void {
+    const moved = moveArPlacement(
+      this.arPlacementDistance,
+      this.arPlacementSide,
+      deltaX,
+      deltaY,
+    );
+    this.arPlacementDistance = moved.distance;
+    this.arPlacementSide = moved.side;
+    this.updateArPlacementPosition();
+    this.render();
+  }
+
+  /** Restore the initial AR placement, scale, and rotation. */
   resetArView(): void {
     this.arViewTransform = DEFAULT_AR_VIEW_TRANSFORM;
     this.atomRoot.rotation.set(0, 0, 0);
+    if (this.initialArPlacement) {
+      const initialPlacement = resetArPlacement(this.initialArPlacement);
+      this.arPlacementRoot.position.set(
+        initialPlacement.position.x,
+        initialPlacement.position.y,
+        initialPlacement.position.z,
+      );
+      this.arPlacementRoot.quaternion.set(
+        initialPlacement.orientation.x,
+        initialPlacement.orientation.y,
+        initialPlacement.orientation.z,
+        initialPlacement.orientation.w,
+      );
+      this.arPlacementDistance = initialPlacement.distanceMeters;
+      this.arPlacementSide = 0;
+    }
     this.updateArAtomScale();
     this.render();
   }
@@ -618,8 +834,10 @@ export class ScreenSceneRenderer {
       ? this.renderer.xr.getCamera()
       : this.camera;
     viewerCamera.updateMatrixWorld();
-    const viewerQuaternion = viewerCamera.getWorldQuaternion(new THREE.Quaternion());
-    const anchor = this.arActive ? arWorldAnchorPosition : { x: 0, y: 0, z: 0 };
+    const viewerQuaternion = this.arActive
+      ? new THREE.Quaternion()
+      : viewerCamera.getWorldQuaternion(new THREE.Quaternion());
+    const anchor = { x: 0, y: 0, z: 0 };
     const viewport = arPointerTarget ?? this.canvas;
     const placements = calculateSpatialPanelPlacements(
       anchor,
@@ -629,12 +847,28 @@ export class ScreenSceneRenderer {
     );
     const group = new THREE.Group();
     group.name = "spatial-glass-panels";
-    this.scene.add(group);
+    (this.arActive ? this.arPlacementRoot : this.scene).add(group);
     const definitions = [
       { id: "spatial-mission", key: "mission", layout: spatialLayout.mission, collapsible: false },
       { id: "spatial-particles", key: "particles", layout: spatialLayout.particles, collapsible: true },
       { id: "spatial-element-info", key: "elementInfo", layout: spatialLayout.elementInfo, collapsible: true },
       { id: "spatial-narration", key: "narration", layout: spatialLayout.narrationSettings, collapsible: true },
+      ...(items.arControls
+        ? [{
+            id: "spatial-ar-controls",
+            key: "arControls" as const,
+            layout: spatialLayout.arControls,
+            collapsible: false,
+          }]
+        : []),
+      ...(items.xrDiagnostics
+        ? [{
+            id: "spatial-xr-diagnostics",
+            key: "xrDiagnostics" as const,
+            layout: spatialLayout.xrDiagnostics,
+            collapsible: false,
+          }]
+        : []),
       { id: "spatial-settings", key: "settings", layout: spatialLayout.settings, collapsible: true },
     ] as const;
     const mounts: {
@@ -651,6 +885,7 @@ export class ScreenSceneRenderer {
       elementInfo: placements.elementInfo.position,
       narration: placements.narration.position,
       settings: placements.settings.position,
+      xrDiagnostics: placements.xrDiagnostics.position,
     };
     let host: ReturnType<typeof createSpatialPanelHost> | null = null;
     try {
@@ -662,7 +897,11 @@ export class ScreenSceneRenderer {
           heightM: definition.layout.expandedSize.height,
           surface: "uniform",
           ...(definition.key === "mission" ? { title: "Mission" } : {}),
-          items: initialItems[definition.key],
+          items: definition.key === "arControls"
+            ? initialItems.arControls ?? []
+            : definition.key === "xrDiagnostics"
+              ? initialItems.xrDiagnostics ?? []
+            : initialItems[definition.key],
           collapsed: definition.collapsible,
         });
         mounts.push({
@@ -727,7 +966,11 @@ export class ScreenSceneRenderer {
               definition.id,
               definition.key === "settings"
                 ? { items: next.settings, toggles: next.settingsToggles }
-                : next[definition.key],
+                : definition.key === "arControls"
+                  ? next.arControls ?? []
+                  : definition.key === "xrDiagnostics"
+                    ? next.xrDiagnostics ?? []
+                  : next[definition.key],
             );
           });
           this.render();
@@ -737,6 +980,7 @@ export class ScreenSceneRenderer {
           panelHost.setExpanded(expanded);
           this.render();
         },
+        handleRay: (ray, phase, sourceId) => panelHost.handleRay(ray, phase, sourceId),
         setHintListener: (listener) => {
           hintListener = listener;
           publishHints();
@@ -757,7 +1001,7 @@ export class ScreenSceneRenderer {
           disposed = true;
           if (this.spatialHintUpdater === publishHints) this.spatialHintUpdater = null;
           panelHost.dispose();
-          this.scene.remove(group);
+          group.removeFromParent();
           this.render();
         },
       };
@@ -767,7 +1011,7 @@ export class ScreenSceneRenderer {
       } else {
         for (const mount of mounts) mount.panel.dispose();
       }
-      this.scene.remove(group);
+      group.removeFromParent();
       throw error;
     }
   }
@@ -782,6 +1026,7 @@ export class ScreenSceneRenderer {
     cancelAnimationFrame(this.animationFrame);
     cancelAnimationFrame(this.resizeFrame);
     this.renderer.setAnimationLoop(null);
+    this.disposeVrEnvironment();
     this.resizeObserver.disconnect();
     this.reducedMotion.removeEventListener("change", this.onReducedMotionChange);
     this.clearSphereMeshes();
@@ -797,6 +1042,12 @@ export class ScreenSceneRenderer {
     this.canvas.remove();
     this.slotLayer.remove();
     this.diagnosticsElement?.remove();
+    this.arReticle.geometry.dispose();
+    if (Array.isArray(this.arReticle.material)) {
+      for (const material of this.arReticle.material) material.dispose();
+    } else {
+      this.arReticle.material.dispose();
+    }
   }
 
   private readonly resize = (): void => {
@@ -825,6 +1076,143 @@ export class ScreenSceneRenderer {
     this.renderer.setClearColor(0x000000, transparent ? 0 : 1);
     this.render();
   };
+
+  private readonly onPhoneSurfaceSelect = (event: Event): void => {
+    if (!this.phoneHitTestActive || !this.lastHitTestPose) return;
+    const source = (event as XRInputSourceEvent).inputSource;
+    if (source?.hand || (source?.targetRayMode !== "screen" && source?.targetRayMode !== "transient-pointer")) {
+      return;
+    }
+    const hit = this.lastHitTestPose.transform.position;
+    const target = new THREE.Vector3(hit.x, hit.y, hit.z);
+    const fromViewer = target.clone().sub(this.arViewerOrigin);
+    const hitDistance = fromViewer.length();
+    const boundedDistance = clampArPlacementDistance(hitDistance);
+    if (hitDistance > 0) target.copy(this.arViewerOrigin).addScaledVector(fromViewer, boundedDistance / hitDistance);
+    this.arPlacementRoot.position.copy(target);
+    this.arPlacementRoot.quaternion.copy(this.arViewerOrientation);
+    this.arPlacementDistance = boundedDistance;
+    this.arPlacementSide = 0;
+    this.render();
+  };
+
+  private async enablePhoneHitTest(session: XRSession): Promise<void> {
+    const granted = hasArHitTest(session.enabledFeatures);
+    const hasTrackedController = Array.from(session.inputSources).some(
+      (source) => source.targetRayMode === "tracked-pointer",
+    );
+    const coarsePointer = globalThis.matchMedia?.("(pointer: coarse)").matches === true;
+    this.phoneHitTestActive = granted && isHandheldArSession(session as XRSession & {
+      interactionMode?: "screen-space" | "world-space";
+      environmentBlendMode?: "opaque" | "additive" | "alpha-blend";
+    },
+      hasTrackedController,
+      coarsePointer,
+    );
+    if (!this.phoneHitTestActive) return;
+
+    const hitTestSession = session as XRSession & {
+      requestHitTestSource?: (options: { space: XRSpace }) => Promise<XRHitTestSource>;
+    };
+    if (!hitTestSession.requestHitTestSource) {
+      this.phoneHitTestActive = false;
+      return;
+    }
+    try {
+      const viewerSpace = await session.requestReferenceSpace("viewer");
+      const localSpace = this.renderer.xr.getReferenceSpace();
+      if (!localSpace) {
+        this.phoneHitTestActive = false;
+        return;
+      }
+      this.hitTestReferenceSpace = localSpace;
+      const hitTestSource = await hitTestSession.requestHitTestSource({ space: viewerSpace });
+      if (!hitTestSource) {
+        this.phoneHitTestActive = false;
+        return;
+      }
+      this.hitTestSource = hitTestSource;
+      if (!this.phoneHitTestActive) {
+        hitTestSource.cancel();
+        this.hitTestSource = null;
+        return;
+      }
+      session.addEventListener("select", this.onPhoneSurfaceSelect);
+    } catch {
+      this.phoneHitTestActive = false;
+      this.hitTestSource?.cancel();
+      this.hitTestSource = null;
+      this.hitTestReferenceSpace = null;
+    }
+  }
+
+  private updateArPlacementFromFrame(frame: XRFrame): void {
+    const xrCamera = this.renderer.xr.getCamera();
+    xrCamera.updateMatrixWorld();
+    if (this.vrEnvironment) {
+      const viewerPosition = xrCamera.getWorldPosition(new THREE.Vector3());
+      this.vrEnvironment.setViewerPosition(viewerPosition);
+      if (this.vrFloorUsesViewerFallback) {
+        this.vrEnvironment.setFallbackFloorFromViewer(viewerPosition.y);
+        this.vrFloorUsesViewerFallback = false;
+      }
+    }
+    if (!this.initialArPlacement) {
+      const cameraPosition = xrCamera.getWorldPosition(new THREE.Vector3());
+      const cameraOrientation = xrCamera.getWorldQuaternion(new THREE.Quaternion());
+      const placement = calculateArViewerPlacement({
+        position: cameraPosition,
+        orientation: cameraOrientation,
+      });
+      this.initialArPlacement = placement;
+      this.arViewerOrigin.copy(cameraPosition);
+      this.arViewerOrientation.set(
+        placement.orientation.x,
+        placement.orientation.y,
+        placement.orientation.z,
+        placement.orientation.w,
+      );
+      this.arPlacementDistance = placement.distanceMeters;
+      this.arPlacementRoot.quaternion.copy(this.arViewerOrientation);
+      this.updateArPlacementPosition();
+    }
+
+    if (!this.hitTestSource || !this.hitTestReferenceSpace) return;
+    const results = frame.getHitTestResults(this.hitTestSource);
+    const pose = results[0]?.getPose(this.hitTestReferenceSpace) ?? null;
+    this.lastHitTestPose = pose;
+    this.arReticle.visible = pose !== null;
+    if (pose) {
+      const transform = pose.transform;
+      this.arReticle.position.set(
+        transform.position.x,
+        transform.position.y,
+        transform.position.z,
+      );
+      this.arReticle.quaternion.set(
+        transform.orientation.x,
+        transform.orientation.y,
+        transform.orientation.z,
+        transform.orientation.w,
+      );
+    }
+  }
+
+  private disposeVrEnvironment(): void {
+    if (!this.vrEnvironment) return;
+    this.vrEnvironment.dispose();
+    this.vrEnvironment = null;
+    this.vrFloorUsesViewerFallback = false;
+  }
+
+  private updateArPlacementPosition(): void {
+    const localPosition = new THREE.Vector3(
+      this.arPlacementSide,
+      -spatialLayout.arPlacement.viewerDownMeters,
+      -this.arPlacementDistance,
+    ).applyQuaternion(this.arViewerOrientation);
+    this.arPlacementRoot.position.copy(this.arViewerOrigin).add(localPosition);
+  }
 
   private startDiagnosticsLoop(): void {
     cancelAnimationFrame(this.animationFrame);

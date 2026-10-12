@@ -1,7 +1,14 @@
 import * as THREE from "three";
 import { spatialLayout, type SpatialPanelLayout } from "../spatial-layout.js";
 
-export type SpatialPanelKey = "mission" | "particles" | "elementInfo" | "narration" | "settings";
+export type SpatialPanelKey =
+  | "mission"
+  | "particles"
+  | "elementInfo"
+  | "narration"
+  | "arControls"
+  | "settings"
+  | "xrDiagnostics";
 
 export interface SpatialPanelPlacement {
   readonly position: THREE.Vector3;
@@ -44,6 +51,8 @@ export function calculateSpatialPanelPlacements(
     particles: placement(spatialLayout.particles, false),
     elementInfo: placement(spatialLayout.elementInfo, false),
     narration: placement(spatialLayout.narrationSettings, false),
+    arControls: placement(spatialLayout.arControls, true),
     settings: placement(spatialLayout.settings, false),
+    xrDiagnostics: placement(spatialLayout.xrDiagnostics, true),
   };
 }

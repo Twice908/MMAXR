@@ -66,12 +66,27 @@ describe("telemetryEventSchema", () => {
 
   it.each([
     { type: "ar_session_started", payload: { grantedFeatures: ["hit-test"] } },
+    { type: "ar_session_started", payload: { grantedFeatures: ["dom-overlay", "hand-tracking"] } },
     { type: "ar_session_ended", payload: { durationSec: 125 } },
     { type: "ar_placement", payload: {} },
     { type: "ar_error", payload: { reasonCode: "tracking_lost" } },
   ])("validates AR telemetry type $type", (event) => {
     expect(telemetryEventSchema.safeParse({ ...validEvent, ...event }).success).toBe(true);
     expect(arTelemetryEventSchema.safeParse({ ...validEvent, ...event }).success).toBe(true);
+  });
+
+  it("accepts VR session telemetry and local-space optional features", () => {
+    const event = {
+      ...validEvent,
+      device: { mode: "vr", tier: "mid" },
+      type: "ar_session_started",
+      payload: {
+        mode: "immersive-vr",
+        grantedFeatures: ["local-floor", "hand-tracking"],
+      },
+    };
+    expect(arTelemetryEventSchema.safeParse(event).success).toBe(true);
+    expect(telemetryEventSchema.safeParse(event).success).toBe(true);
   });
 
   it("requires a nonnegative duration and a known AR error reason", () => {

@@ -38,6 +38,7 @@ function setup(options: {
   readonly session?: MockSession;
   readonly secureContext?: boolean;
   readonly supported?: boolean;
+  readonly supportedModes?: readonly ("immersive-ar" | "immersive-vr")[];
   readonly requestError?: unknown;
   readonly enterError?: Error;
 } = {}) {
@@ -50,7 +51,10 @@ function setup(options: {
     return session;
   });
   const xr: ArSessionSystem = {
-    isSessionSupported: vi.fn().mockResolvedValue(options.supported ?? true),
+    isSessionSupported: vi.fn().mockImplementation((mode: "immersive-ar" | "immersive-vr") =>
+      Promise.resolve(options.supportedModes
+        ? options.supportedModes.includes(mode)
+        : options.supported ?? true)),
     requestSession,
   };
   const environment: ArSessionEnvironment = {
@@ -161,15 +165,18 @@ describe("ArSessionController", () => {
     });
     await expect(controller.start()).resolves.toMatchObject({
       status: "active",
-      requestedFeatures: ["dom-overlay", "hand-tracking"],
+      requestedFeatures: ["dom-overlay", "hand-tracking", "hit-test"],
       grantedFeatures: ["dom-overlay"],
     });
     expect(setupResult.requestSession).toHaveBeenCalledWith("immersive-ar", {
-      optionalFeatures: ["dom-overlay", "hand-tracking"],
+      optionalFeatures: ["dom-overlay", "hand-tracking", "hit-test"],
       domOverlay: { root: overlayRoot },
     });
-    expect(setupResult.presentation.enter).toHaveBeenCalledWith(setupResult.session);
-    expect(setupResult.started).toHaveBeenCalledWith(["dom-overlay"]);
+    expect(setupResult.presentation.enter).toHaveBeenCalledWith(setupResult.session, "immersive-ar");
+    expect(setupResult.started).toHaveBeenCalledWith(
+      ["dom-overlay"],
+      expect.objectContaining({ overlayGranted: true, mode: "immersive-ar" }),
+    );
   });
 
   it("records optional hand-tracking when the browser grants it", async () => {
@@ -178,10 +185,13 @@ describe("ArSessionController", () => {
 
     await expect(result.controller.start()).resolves.toMatchObject({
       status: "active",
-      requestedFeatures: ["dom-overlay", "hand-tracking"],
+      requestedFeatures: ["dom-overlay", "hand-tracking", "hit-test"],
       grantedFeatures: ["dom-overlay", "hand-tracking"],
     });
-    expect(result.started).toHaveBeenCalledWith(["dom-overlay", "hand-tracking"]);
+    expect(result.started).toHaveBeenCalledWith(
+      ["dom-overlay", "hand-tracking"],
+      expect.objectContaining({ overlayGranted: true, mode: "immersive-ar" }),
+    );
   });
 
   it("returns a named unsupported error before requesting a session", async () => {
@@ -204,16 +214,64 @@ describe("ArSessionController", () => {
     expect(result.controller.state).toEqual({ status: "idle" });
   });
 
-  it("ends a session and returns to screen mode when DOM overlay is not granted", async () => {
+  it("returns to screen mode when VR session startup is denied", async () => {
+    const result = setup({
+      supportedModes: ["immersive-vr"],
+      requestError: Object.assign(new Error("denied"), { name: "NotAllowedError" }),
+    });
+
+    await expect(result.controller.start("immersive-vr")).rejects.toMatchObject({
+      reasonCode: "permission_denied",
+    });
+    expect(result.presentation.exit).not.toHaveBeenCalled();
+    expect(result.controller.state).toEqual({ status: "idle" });
+  });
+
+  it("keeps the AR session active and records when DOM overlay is not granted", async () => {
     const session = new MockSession([]);
     const result = setup({ session });
 
-    await expect(result.controller.start()).rejects.toMatchObject({
-      reasonCode: "dom_overlay_unavailable",
+    await expect(result.controller.start()).resolves.toMatchObject({
+      status: "active",
+      grantedFeatures: [],
     });
+    expect(session.endCalls).toBe(0);
+    expect(result.presentation.enter).toHaveBeenCalledWith(session, "immersive-ar");
+    expect(result.controller.sessionInfo).toMatchObject({ overlayGranted: false, mode: "immersive-ar" });
+    expect(result.started).toHaveBeenCalledWith(
+      [],
+      expect.objectContaining({ overlayGranted: false, mode: "immersive-ar" }),
+    );
+
+    await result.controller.stop();
     expect(session.endCalls).toBe(1);
-    expect(result.presentation.enter).not.toHaveBeenCalled();
-    expect(result.controller.state).toEqual({ status: "idle" });
+    expect(result.presentation.exit).toHaveBeenCalledOnce();
+    expect(result.controller.sessionInfo).toMatchObject({ overlayGranted: null, mode: null });
+  });
+
+  it("starts VR without requesting a DOM overlay and keeps in-scene controls available", async () => {
+    const session = new MockSession(["local-floor", "hand-tracking"]);
+    const result = setup({ session, supportedModes: ["immersive-vr"] });
+
+    await expect(result.controller.start("immersive-vr")).resolves.toMatchObject({
+      status: "active",
+      requestedFeatures: ["local-floor", "local", "hand-tracking"],
+      grantedFeatures: ["local-floor", "hand-tracking"],
+    });
+    expect(result.requestSession).toHaveBeenCalledWith("immersive-vr", {
+      optionalFeatures: ["local-floor", "local", "hand-tracking"],
+    });
+    expect(result.presentation.enter).toHaveBeenCalledWith(session, "immersive-vr");
+    expect(result.controller.sessionInfo).toMatchObject({ overlayGranted: false, mode: "immersive-vr" });
+    await result.controller.stop();
+  });
+
+  it("rejects a requested mode that is not supported even if the other mode is", async () => {
+    const result = setup({ supportedModes: ["immersive-ar"] });
+    await expect(result.controller.start("immersive-vr")).rejects.toMatchObject({
+      reasonCode: "unsupported",
+    });
+    expect(result.requestSession).not.toHaveBeenCalled();
   });
 
   it("returns to screen mode when the system ends the session and reports duration", async () => {

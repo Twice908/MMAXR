@@ -13,7 +13,13 @@ export const arErrorReasonCodeSchema = z.enum([
   "unknown",
 ]);
 
-const arFeatureSchema = z.enum(["hit-test", "dom-overlay"]);
+const arFeatureSchema = z.enum([
+  "hit-test",
+  "dom-overlay",
+  "hand-tracking",
+  "local-floor",
+  "local",
+]);
 
 const coreEventTypeSchema = z.enum([
   "session_started",
@@ -66,7 +72,10 @@ export const telemetryEventSchema = telemetryEnvelopeSchema.extend({
 export const arTelemetryEventSchema = z.discriminatedUnion("type", [
   telemetryEnvelopeSchema.extend({
     type: z.literal("ar_session_started"),
-    payload: z.object({ grantedFeatures: z.array(arFeatureSchema) }).strict(),
+    payload: z.object({
+      mode: z.enum(["immersive-ar", "immersive-vr"]).optional(),
+      grantedFeatures: z.array(arFeatureSchema),
+    }).strict(),
   }).strict(),
   telemetryEnvelopeSchema.extend({
     type: z.literal("ar_session_ended"),
