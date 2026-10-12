@@ -34,9 +34,16 @@ describe("AR placement", () => {
   });
 
   it("uses hit testing only when granted for a touch-first session", () => {
+    const arrayLikeFeatures = Object.assign({ 0: "hit-test" }, {
+      length: 1,
+      *[Symbol.iterator]() {
+        yield "hit-test";
+      },
+    });
     expect(hasArHitTest(["dom-overlay"])).toBe(false);
     expect(shouldUsePhoneHitTest(false, false, true)).toBe(false);
     expect(hasArHitTest(["hit-test"])).toBe(true);
+    expect(hasArHitTest(arrayLikeFeatures)).toBe(true);
     expect(shouldUsePhoneHitTest(true, false, true)).toBe(true);
     expect(shouldUsePhoneHitTest(true, true, true)).toBe(false);
     expect(shouldUsePhoneHitTest(true, false, false)).toBe(false);

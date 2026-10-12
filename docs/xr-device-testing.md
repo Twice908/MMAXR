@@ -60,6 +60,14 @@ then reload the deployed HTTPS page. Do not assume passthrough is available.
   are no nausea cues or smooth locomotion.
 - Confirm the session remains usable if a DOM overlay is not granted.
 
+## Capturing XR startup errors
+
+Append `?xrdebug=1` to the page URL to show the XR diagnostics report on the
+device. If session startup fails, the report includes the last error message
+and stack, with common personal identifiers redacted. Copy the report before
+reloading; startup failures also return to screen mode and the short status
+message dismisses automatically.
+
 ## Manual run log
 
 Use one row per device, date, and tested mode. Link the full project-level

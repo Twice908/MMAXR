@@ -117,7 +117,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     <section class="atom-builder" aria-label="Atom Builder" tabindex="0">
       <header class="builder-header">
         <div class="builder-brand"><span class="brand-mark" aria-hidden="true">M</span><span>Math Maam Academy</span></div>
-        <div class="builder-title"><span class="eyebrow">CHEMISTRY / CLASS 9-10</span><h1>Atom Builder</h1></div>
+        <div class="builder-title"><span class="eyebrow" data-grade="Class 9-10" aria-label="Chemistry, Class 9-10">CHEMISTRY</span><h1>Atom Builder</h1></div>
         <button class="reset-atom" type="button" data-command="atom/reset">Reset atom</button>
       </header>
       <section class="lesson-panel" id="lesson-panel" aria-label="Mission">
@@ -481,7 +481,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
       setSpatialPresentation(active, "ar", undefined, sessionInfo.overlayGranted ?? undefined);
       if (active && session) {
         void xrInputAdapter?.setSession(session as unknown as XRSession).catch((error: unknown) => {
-          console.error("WebXR input sources could not be initialized.", error);
+          root.dispatchEvent(new CustomEvent("mma:xr-runtime-error", { detail: error }));
         });
       } else {
         void xrInputAdapter?.setSession(null);

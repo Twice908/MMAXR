@@ -5,6 +5,7 @@ import { FakeDomElement, event, pointerEvent } from "./helpers/fake-dom.js";
 import {
   asWebGLRenderer,
   asXrFrame,
+  makeFakeInputSources,
   makeFakeRenderer,
   makeFrameFromJointPositions,
 } from "./helpers/fake-xr.js";
@@ -76,7 +77,7 @@ describe("InputManager", () => {
   it("forwards XR frames to hand input", () => {
     const root = new FakeDomElement();
     const renderer = asWebGLRenderer(makeFakeRenderer({
-      inputSources: [],
+      inputSources: makeFakeInputSources([]),
     }));
     const dispatch = vi.fn();
 

@@ -54,7 +54,7 @@ export async function detectCameraViewCapability(
   if (immersiveArSupported && !environment.hasFinePointer) {
     return {
       available: false,
-      reason: "Camera view is hidden because immersive AR is available on a touch-first device.",
+      reason: "Use AR for camera-based viewing on this device.",
     };
   }
   return { available: true, reason: "" };
@@ -236,10 +236,19 @@ export function mountCameraView(options: CameraViewOptions): () => void {
   let stream: MediaStream | null = null;
   let video: HTMLVideoElement | null = null;
   let activeSince: number | null = null;
+  let statusDismissTimeout: ReturnType<typeof globalThis.setTimeout> | null = null;
 
   const setStatus = (message: string): void => {
+    if (statusDismissTimeout !== null) globalThis.clearTimeout(statusDismissTimeout);
+    statusDismissTimeout = null;
     status.textContent = message;
     status.hidden = message.length === 0;
+    if (message) {
+      statusDismissTimeout = globalThis.setTimeout(() => {
+        statusDismissTimeout = null;
+        setStatus("");
+      }, 5000);
+    }
   };
   const emitTelemetry = (
     type: "camera_view_started" | "camera_view_ended",
@@ -466,6 +475,7 @@ export function mountCameraView(options: CameraViewOptions): () => void {
 
   return () => {
     disposed = true;
+    if (statusDismissTimeout !== null) globalThis.clearTimeout(statusDismissTimeout);
     button.removeEventListener("click", onButtonClick);
     dialog.removeEventListener("click", onDialogClick);
     exit.removeEventListener("click", onExitClick);

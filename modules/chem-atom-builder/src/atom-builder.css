@@ -129,7 +129,7 @@
 .ar-confirmation-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .ar-confirmation-actions button { min-width: 88px; min-height: max(48px, var(--glass-tap-min)); padding: var(--glass-pad-pill); border: var(--glass-border-width) solid var(--glass-border-color); border-radius: var(--glass-radius-pill); color: var(--glass-text); background: var(--glass-bg-strong); box-shadow: var(--glass-highlight), var(--glass-shadow); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
 .ar-confirmation-actions [data-ar-action="start"] { border-color: var(--glass-primary-bg); border-radius: var(--glass-radius-button); color: var(--glass-primary-text); background: var(--glass-primary-bg); }
-.ar-status { position: fixed; z-index: 29; right: 12px; bottom: max(62px, env(safe-area-inset-bottom)); left: 12px; width: fit-content; max-width: min(540px, calc(100vw - 24px)); padding: var(--glass-pad-pill); border: var(--glass-border-width) solid var(--glass-border-color); border-radius: var(--glass-radius-pill); color: var(--glass-text); background: var(--glass-bg-strong); box-shadow: var(--glass-highlight), var(--glass-shadow); font-size: 13px; line-height: 1.4; }
+.ar-status { position: fixed; z-index: 29; top: calc(max(12px, env(safe-area-inset-top)) + 84px); right: 12px; bottom: auto; left: 272px; width: fit-content; max-width: min(540px, calc(100vw - 284px)); padding: var(--glass-pad-pill); border: var(--glass-border-width) solid var(--glass-border-color); border-radius: var(--glass-radius-pill); color: var(--glass-text); background: var(--glass-bg-strong); box-shadow: var(--glass-highlight), var(--glass-shadow); font-size: 13px; line-height: 1.4; }
 .ar-exit { position: fixed; z-index: 30; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); min-height: var(--glass-tap-min); padding: var(--glass-pad-pill); border: var(--glass-border-width) solid var(--glass-border-color); border-radius: var(--glass-radius-button); color: var(--glass-danger-text); background: var(--glass-danger-bg); box-shadow: var(--glass-highlight), var(--glass-shadow); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
 .spatial-settings-fallback { position: fixed; z-index: 30; top: max(12px, env(safe-area-inset-top)); right: calc(max(12px, env(safe-area-inset-right)) + 92px); min-height: var(--glass-tap-min); padding: var(--glass-pad-pill); border: var(--glass-border-width) solid var(--glass-border-color); border-radius: var(--glass-radius-button); color: var(--glass-text); background: var(--glass-bg-strong); box-shadow: var(--glass-highlight), var(--glass-shadow); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
 .spatial-settings-fallback[hidden] { display: none !important; }
@@ -392,6 +392,60 @@
   .property-list { grid-template-columns: 1fr 1fr; column-gap: 14px; }
   .property-list div { padding: 11px 0; }
   .property-list dt { font-size: 11px; }
+
+  .scene-heading {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+    align-items: stretch;
+    justify-content: initial;
+  }
+  .scene-heading > span { grid-column: 1 / -1; }
+  .scene-actions { display: contents; }
+  .scene-heading :is(.reset-view, .camera-view-entry, .ar-start) {
+    width: 100%;
+    min-width: 0;
+    min-height: var(--glass-tap-min);
+    padding: var(--glass-pad-pill);
+    border: var(--glass-border-width) solid var(--glass-border-color);
+    border-radius: var(--glass-radius-pill);
+    color: var(--glass-text);
+    background: var(--glass-bg-strong);
+    box-shadow: var(--glass-highlight), var(--glass-shadow);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .scene-heading > .reset-view { grid-row: 2; grid-column: 1; }
+  .scene-heading > .camera-view-entry { grid-row: 2; grid-column: 2; }
+  .scene-heading .ar-start[data-session-mode="immersive-ar"] { grid-row: 3; grid-column: 1; }
+  .scene-heading .ar-start[data-session-mode="immersive-vr"] { grid-row: 3; grid-column: 2; }
+  .ar-support-message,
+  .scene-heading > .camera-view-reason {
+    max-width: none;
+    padding: 0;
+    margin: 1px 0 0;
+    border: 0;
+    border-radius: 0;
+    color: var(--glass-text-muted);
+    background: transparent;
+    box-shadow: none;
+    font-size: 10px;
+    line-height: 1.35;
+  }
+  .scene-heading > .camera-view-reason { grid-row: 4; grid-column: 1 / -1; }
+  .ar-status {
+    top: calc(max(12px, env(safe-area-inset-top)) + 126px);
+    right: 12px;
+    bottom: auto;
+    left: 12px;
+    width: fit-content;
+    max-width: calc(100vw - 24px);
+  }
+}
+
+@media (min-width: 621px) and (max-width: 920px) {
+  .ar-status { left: 228px; max-width: calc(100vw - 240px); }
 }
 
 @media (prefers-reduced-motion: reduce) {

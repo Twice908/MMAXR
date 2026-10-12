@@ -23,9 +23,19 @@ function makeFrame(): XRFrame {
   } as unknown as XRFrame;
 }
 
+function makeInputSources<T>(sources: readonly T[]): ArrayLike<T> & Iterable<T> {
+  const indexed = Object.fromEntries(sources.map((source, index) => [index, source]));
+  return Object.assign(indexed, {
+    length: sources.length,
+    [Symbol.iterator]: function* () {
+      yield* sources;
+    },
+  });
+}
+
 function makeSession(sources: XRInputSource[] = []): XRSession {
   return Object.assign(new EventTarget(), {
-    inputSources: sources,
+    inputSources: makeInputSources(sources),
     requestReferenceSpace: vi.fn(async () => ({} as XRReferenceSpace)),
     requestAnimationFrame: vi.fn(() => 1),
     cancelAnimationFrame: vi.fn(),
@@ -33,7 +43,10 @@ function makeSession(sources: XRInputSource[] = []): XRSession {
 }
 
 function sourcesChange(added: readonly XRInputSource[], removed: readonly XRInputSource[]): Event {
-  return Object.assign(new Event("inputsourceschange"), { added, removed });
+  return Object.assign(new Event("inputsourceschange"), {
+    added: makeInputSources(added),
+    removed: makeInputSources(removed),
+  });
 }
 
 describe("XR session input adapter", () => {
@@ -51,11 +64,17 @@ describe("XR session input adapter", () => {
 
     await adapter.setSession(session);
     const source = makeSource();
-    (session.inputSources as XRInputSource[]).push(source);
+    Object.defineProperty(session, "inputSources", {
+      configurable: true,
+      value: makeInputSources([source]),
+    });
     session.dispatchEvent(sourcesChange([source], []));
     expect(added).toHaveBeenCalledOnce();
 
-    (session.inputSources as XRInputSource[]).splice(0, 1);
+    Object.defineProperty(session, "inputSources", {
+      configurable: true,
+      value: makeInputSources([]),
+    });
     session.dispatchEvent(sourcesChange([], [source]));
     expect(removed).toHaveBeenCalledOnce();
 

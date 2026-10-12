@@ -85,10 +85,33 @@
   position: fixed;
   z-index: 24;
   right: max(12px, env(safe-area-inset-right));
-  bottom: calc(max(12px, env(safe-area-inset-bottom)) + 78px);
+  top: calc(max(12px, env(safe-area-inset-top)) + 84px);
+  bottom: auto;
+  left: 272px;
   max-width: min(540px, calc(100vw - 24px));
   margin: 0;
   pointer-events: none;
+}
+
+@media (max-width: 620px) {
+  .camera-view-status {
+    top: calc(max(12px, env(safe-area-inset-top)) + 126px);
+    right: max(12px, env(safe-area-inset-right));
+    left: max(12px, env(safe-area-inset-left));
+  }
+
+  .camera-active .camera-view-status {
+    top: auto;
+    bottom: calc(max(12px, env(safe-area-inset-bottom)) + min(45dvh, 460px) + 16px);
+  }
+}
+
+@media (min-width: 621px) and (max-width: 920px) {
+  .camera-view-status { left: 228px; }
+}
+
+.camera-active .camera-view-status {
+  left: max(12px, env(safe-area-inset-left));
 }
 
 html.camera-active,

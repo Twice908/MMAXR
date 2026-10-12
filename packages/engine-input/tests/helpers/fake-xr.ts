@@ -20,7 +20,7 @@ export interface FakeXrInputSource {
 }
 
 export interface FakeXrSession {
-  inputSources: FakeXrInputSource[];
+  inputSources: ArrayLike<FakeXrInputSource> & Iterable<FakeXrInputSource>;
 }
 
 export interface FakeVector3Like {
@@ -85,6 +85,23 @@ export function makeFakeRenderer(
       getCamera: () => camera,
     },
   };
+}
+
+export function makeFakeInputSources(
+  sources: readonly FakeXrInputSource[],
+): ArrayLike<FakeXrInputSource> & Iterable<FakeXrInputSource> {
+  const indexed: Record<number, FakeXrInputSource> = {};
+  sources.forEach((source, index) => { indexed[index] = source; });
+  return Object.assign(indexed, {
+    length: sources.length,
+    [Symbol.iterator]: function* () {
+      yield* sources;
+    },
+  });
+}
+
+export function makeFakeSession(sources: readonly FakeXrInputSource[] = []): FakeXrSession {
+  return { inputSources: makeFakeInputSources(sources) };
 }
 
 export function asWebGLRenderer(renderer: FakeRenderer): THREE.WebGLRenderer {

@@ -12,12 +12,12 @@ import {
 } from "./session.js";
 
 export interface ArSessionHandle extends EventTarget {
-  readonly enabledFeatures?: readonly string[];
-  readonly inputSources?: readonly Readonly<{
+  readonly enabledFeatures?: Iterable<string>;
+  readonly inputSources?: Iterable<Readonly<{
     readonly targetRayMode: string;
     readonly hand?: unknown;
     readonly gamepad?: unknown;
-  }>[];
+  }>>;
   readonly visibilityState?: "visible" | "visible-blurred" | "hidden";
   readonly domOverlayState?: object | null;
   readonly interactionMode?: "screen-space" | "world-space";
@@ -91,6 +91,7 @@ export class ArSessionStartError extends Error {
   constructor(
     readonly reasonCode: ArErrorReasonCode,
     message: string,
+    readonly originalError?: unknown,
   ) {
     super(message);
     this.name = "ArSessionStartError";
@@ -169,7 +170,10 @@ export class ArSessionController {
 
   /** Read whether the active session was granted its DOM overlay. */
   get sessionInfo(): ArSessionRuntimeInfo {
-    const inputSources = this.session?.inputSources ?? [];
+    const inputSourceTypes = Array.from(
+      this.session?.inputSources ?? [],
+      (source) => source.hand ? "hand" : source.gamepad ? "controller" : source.targetRayMode,
+    );
     return {
       overlayGranted: this.overlayGranted,
       mode: this.mode,
@@ -178,8 +182,7 @@ export class ArSessionController {
       grantedFeatures: [...this.grantedFeatures],
       interactionMode: this.session?.interactionMode ?? null,
       environmentBlendMode: this.session?.environmentBlendMode ?? null,
-      inputSourceTypes: inputSources.map((source) =>
-        source.hand ? "hand" : source.gamepad ? "controller" : source.targetRayMode),
+      inputSourceTypes,
       referenceSpaceType: this.mode === "immersive-vr"
         ? this.grantedFeatures.includes("local-floor") ? "local-floor" : "local"
         : this.mode === "immersive-ar" ? "local" : null,
@@ -196,67 +199,83 @@ export class ArSessionController {
     const requestedFeatures: readonly ArFeature[] = mode === "immersive-ar"
       ? ["dom-overlay", "hand-tracking", "hit-test"]
       : ["local-floor", "local", "hand-tracking"];
-    this.mode = mode;
-    this.requestedFeatures = requestedFeatures;
-    this.grantedFeatures = [];
-    this.transition({ type: "request", requestedFeatures });
-    this.startListeningForTabVisibility();
-
-    const capability = await detectArSupport(this.environment);
-    this.supportedModes = capability.supported ? capability.modes : [];
-    if (!capability.supported || !capability.modes.includes(mode)) {
-      await this.finish("unsupported", false);
-      throw new ArSessionStartError(
-        "unsupported",
-        !capability.supported
-          ? capability.reason
-          : "This device or browser does not support the requested immersive mode.",
-      );
-    }
-
-    let session: ArSessionHandle;
     try {
-      session = await this.environment.xr!.requestSession(mode, {
+      this.mode = mode;
+      this.requestedFeatures = requestedFeatures;
+      this.grantedFeatures = [];
+      this.transition({ type: "request", requestedFeatures });
+      this.startListeningForTabVisibility();
+
+      const capability = await detectArSupport(this.environment);
+      this.supportedModes = capability.supported ? capability.modes : [];
+      if (!capability.supported || !capability.modes.includes(mode)) {
+        throw new ArSessionStartError(
+          "unsupported",
+          !capability.supported
+            ? capability.reason
+            : "This device or browser does not support the requested immersive mode.",
+        );
+      }
+
+      const session = await this.environment.xr!.requestSession(mode, {
         optionalFeatures: requestedFeatures,
         ...(mode === "immersive-ar" ? { domOverlay: { root: this.options.overlayRoot } } : {}),
       });
-    } catch (error) {
-      const reasonCode = errorReason(error);
-      await this.finish(reasonCode, false);
-      throw new ArSessionStartError(reasonCode, "AR could not be started. You can keep learning in screen mode.");
-    }
 
-    this.session = session;
-    session.addEventListener("end", this.onSessionEnd);
-    session.addEventListener("visibilitychange", this.onSessionVisibilityChange);
+      this.session = session;
+      session.addEventListener("end", this.onSessionEnd);
+      session.addEventListener("visibilitychange", this.onSessionVisibilityChange);
 
-    const grantedFeatures = requestedFeatures.filter(
-      (feature) => session.enabledFeatures?.includes(feature) === true,
-    );
-    this.grantedFeatures = grantedFeatures;
-    const overlayGranted = mode === "immersive-ar" && (
-      grantedFeatures.includes("dom-overlay")
-      || session.domOverlayState !== undefined && session.domOverlayState !== null
-    );
-    this.overlayGranted = overlayGranted;
+      const enabledFeatures = new Set(Array.from(session.enabledFeatures ?? []));
+      const grantedFeatures = requestedFeatures.filter(
+        (feature) => enabledFeatures.has(feature),
+      );
+      this.grantedFeatures = grantedFeatures;
+      const overlayGranted = mode === "immersive-ar" && (
+        grantedFeatures.includes("dom-overlay")
+        || session.domOverlayState !== undefined && session.domOverlayState !== null
+      );
+      this.overlayGranted = overlayGranted;
 
-    if (this.hiddenDuringRequest || this.environment.visibilityTarget?.hidden) {
-      await this.finish("tracking_lost", true);
-      throw new ArSessionStartError("tracking_lost", "AR paused when this page was hidden. Returning to screen mode.");
-    }
+      if (this.hiddenDuringRequest || this.environment.visibilityTarget?.hidden) {
+        throw new ArSessionStartError(
+          "tracking_lost",
+          "AR paused when this page was hidden. Returning to screen mode.",
+        );
+      }
 
-    try {
       this.presentationEntered = true;
       await this.options.presentation.enter(session, mode);
-    } catch {
-      await this.finish("unknown", true);
-      throw new ArSessionStartError("unknown", "AR could not be displayed. You can keep learning in screen mode.");
-    }
 
-    this.startedAt = this.now();
-    this.transition({ type: "started", grantedFeatures });
-    this.options.onStarted?.(grantedFeatures, this.sessionInfo);
-    return this.currentState;
+      this.startedAt = this.now();
+      this.transition({ type: "started", grantedFeatures });
+      this.options.onStarted?.(grantedFeatures, this.sessionInfo);
+      return this.currentState;
+    } catch (error) {
+      const reasonCode = error instanceof ArSessionStartError
+        ? error.reasonCode
+        : errorReason(error);
+      if (
+        this.currentState.status !== "idle"
+        || this.session !== null
+        || this.presentationEntered
+        || this.documentListening
+      ) {
+        try {
+          await this.finish(reasonCode, true);
+        } catch {
+          // Preserve the startup error after attempting every available cleanup.
+        }
+      }
+      if (error instanceof ArSessionStartError) {
+        throw error;
+      }
+      throw new ArSessionStartError(
+        reasonCode,
+        "AR could not be started. You can keep learning in screen mode.",
+        error,
+      );
+    }
   }
 
   /** End AR and restore the screen presentation without changing lesson state. */
@@ -296,7 +315,15 @@ export class ArSessionController {
     this.finishPromise = Promise.resolve().then(async () => {
       const session = this.session;
       const startedAt = this.startedAt;
-      this.removeListeners();
+      let cleanupError: unknown;
+      const attempt = async (action: () => void | Promise<void>): Promise<void> => {
+        try {
+          await action();
+        } catch (error) {
+          cleanupError ??= error;
+        }
+      };
+      await attempt(() => this.removeListeners());
 
       if (reasonCode) {
         if (
@@ -304,31 +331,29 @@ export class ArSessionController {
           || this.currentState.status === "active"
           || this.currentState.status === "ending"
         ) {
-          this.transition({ type: "error", reasonCode });
+          await attempt(() => this.transition({ type: "error", reasonCode }));
         }
-        this.options.onError?.(reasonCode);
+        await attempt(() => this.options.onError?.(reasonCode));
       } else if (this.currentState.status === "requesting" || this.currentState.status === "active") {
-        this.transition({ type: "end" });
+        await attempt(() => this.transition({ type: "end" }));
       }
 
       if (endNativeSession && session) {
-        try {
-          await session.end();
-        } catch {
+        await attempt(async () => session.end());
+        if (cleanupError && !reasonCode) {
           if (!reasonCode && this.currentState.status === "ending") {
-            this.transition({ type: "error", reasonCode: "unknown" });
-            this.options.onError?.("unknown");
+            await attempt(() => this.transition({ type: "error", reasonCode: "unknown" }));
+            await attempt(() => this.options.onError?.("unknown"));
           }
         }
       }
 
       if (this.presentationEntered) {
-        try {
-          await this.options.presentation.exit();
-        } catch {
+        await attempt(() => this.options.presentation.exit());
+        if (cleanupError && !reasonCode) {
           if (!reasonCode && this.currentState.status === "ending") {
-            this.transition({ type: "error", reasonCode: "unknown" });
-            this.options.onError?.("unknown");
+            await attempt(() => this.transition({ type: "error", reasonCode: "unknown" }));
+            await attempt(() => this.options.onError?.("unknown"));
           }
         }
       }
@@ -344,13 +369,16 @@ export class ArSessionController {
       this.hiddenDuringRequest = false;
 
       if (this.currentState.status === "error") {
-        this.transition({ type: "reset" });
+        await attempt(() => this.transition({ type: "reset" }));
       } else if (this.currentState.status === "ending") {
-        this.transition({ type: "ended" });
+        await attempt(() => this.transition({ type: "ended" }));
       }
 
       if (startedAt !== null) {
-        this.options.onEnded?.(Math.max(0, (this.now() - startedAt) / 1000));
+        await attempt(() => this.options.onEnded?.(Math.max(0, (this.now() - startedAt) / 1000)));
+      }
+      if (cleanupError && !reasonCode) {
+        throw cleanupError;
       }
     }).finally(() => {
       this.finishPromise = null;

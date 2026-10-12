@@ -27,7 +27,28 @@ describe("XR diagnostics report", () => {
       "Input sources: hand, tracked-pointer",
       "Reference space: local-floor",
       "Frame rate: 90 Hz",
+      "Last XR error: none",
+      "Last XR error stack:\nunavailable",
     ].join("\n"));
+  });
+
+  it("includes the last XR error message and stack for on-device diagnostics", () => {
+    const report = buildXrDiagnosticsText({
+      supportedModes: [],
+      requestedFeatures: [],
+      grantedFeatures: [],
+      overlayGranted: null,
+      interactionMode: null,
+      environmentBlendMode: null,
+      inputSourceTypes: [],
+      referenceSpaceType: null,
+      frameRate: null,
+      lastErrorMessage: "WebGL session setup failed",
+      lastErrorStack: "Error: WebGL session setup failed\n at enterSession (renderer.js:12:4)",
+    });
+
+    expect(report).toContain("Last XR error: WebGL session setup failed");
+    expect(report).toContain("Last XR error stack:\nError: WebGL session setup failed");
   });
 
   it("enables the panel only for xrdebug=1", () => {

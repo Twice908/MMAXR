@@ -16,6 +16,9 @@ declare global {
 test("lazy-loads Atom Builder and mounts the screen canvas", async ({ page }) => {
   await page.goto("http://127.0.0.1:5174");
   await expect(page.getByRole("heading", { name: "Atom Builder" })).toBeVisible();
+  const eyebrow = page.locator(".builder-header .eyebrow");
+  await expect(eyebrow).toHaveText("CHEMISTRY");
+  await expect(eyebrow).toHaveAttribute("data-grade", "Class 9-10");
   const canvas = page.locator("#atom-scene canvas");
   await expect(canvas).toBeVisible();
   await expect.poll(async () => canvas.evaluate((element) => element.clientWidth)).toBeGreaterThan(0);
@@ -72,7 +75,8 @@ test("hides camera view only for touch-first AR devices or missing camera access
   });
   await page.goto("http://127.0.0.1:5174");
   await expect(page.getByRole("button", { name: "Camera view" })).toBeHidden();
-  await expect(page.locator(".camera-view-reason")).toContainText("touch-first device");
+  await expect(page.locator(".camera-view-reason"))
+    .toHaveText("Use AR for camera-based viewing on this device.");
 
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "xr", {
@@ -464,6 +468,45 @@ test("hides AR entry and explains unsupported devices", async ({ page }) => {
   await expect(page.locator("#atom-scene canvas")).toBeVisible();
 });
 
+test("touch-first screen toolbar wraps controls and labels phone VR viewing", async ({ page }) => {
+  await installMockXr(page);
+  await page.addInitScript(() => {
+    const nativeMatchMedia = window.matchMedia.bind(window);
+    window.matchMedia = (query: string): MediaQueryList => {
+      const result = nativeMatchMedia(query);
+      if (query === "(any-pointer: fine)") {
+        Object.defineProperty(result, "matches", { configurable: true, value: false });
+      }
+      return result;
+    };
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("http://127.0.0.1:5174");
+
+  const toolbar = page.locator(".scene-heading");
+  const vrButton = page.getByRole("button", {
+    name: "VR with viewer. Needs a phone VR viewer",
+  });
+  await expect(vrButton).toBeVisible();
+  await expect(vrButton).toHaveAttribute("title", "Needs a phone VR viewer");
+  const caption = page.locator(".camera-view-reason");
+  await expect(caption).toHaveText("Use AR for camera-based viewing on this device.");
+  const buttonRects = await toolbar.locator(":is(.reset-view, .camera-view-entry, .ar-start)")
+    .evaluateAll((buttons) => buttons.filter((button) => !button.hasAttribute("hidden"))
+      .map((button) => {
+        const rect = button.getBoundingClientRect();
+        return { width: rect.width, top: rect.top };
+      }));
+  expect(buttonRects.length).toBeGreaterThanOrEqual(3);
+  expect(new Set(buttonRects.map(({ width }) => Math.round(width))).size).toBe(1);
+  expect(new Set(buttonRects.map(({ top }) => Math.round(top))).size).toBeGreaterThan(1);
+  const lastButton = await toolbar.locator(".ar-start:visible").last().boundingBox();
+  const captionRect = await caption.boundingBox();
+  expect(lastButton).not.toBeNull();
+  expect(captionRect).not.toBeNull();
+  expect(captionRect!.y).toBeGreaterThan(lastButton!.y + lastButton!.height);
+});
+
 test("AR overlay is transparent and camera explanation has two visible actions", async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "xr", {
@@ -593,6 +636,52 @@ test("glass surfaces use tokens and fall back for reduced transparency", async (
   }));
   expect(highContrastStyle.background).toBe(highContrastStyle.strongBackground);
   expect(highContrastStyle.filter).toBe("none");
+});
+
+test("a mid-start XR exception restores the screen renderer and lesson panels", async ({ page }) => {
+  await installMockXr(page);
+  await page.goto("http://127.0.0.1:5174?xrdebug=1&xrstartfail=1");
+  await page.getByRole("button", { name: "Enter AR" }).click();
+  const dialog = page.getByRole("dialog", { name: "View the atom in AR?" });
+  await dialog.getByRole("button", { name: "Start AR" }).click();
+
+  const status = page.locator("#ar-status");
+  await expect(status).toContainText("AR could not continue. You are back in screen mode.");
+  await expect(page.locator("html")).not.toHaveClass(/ar-active/);
+  await expect(page.locator(".ar-exit")).toBeHidden();
+  await expect(page.locator(".ar-overlay-panel")).toBeHidden();
+  await expect(page.locator("#lesson-panel")).toBeVisible();
+  await expect(page.locator("#atom-scene canvas")).toBeVisible();
+  const report = page.locator(".ar-diagnostics");
+  await expect(report).toContainText("Last XR error: Forced XR start failure");
+  await expect(report).toContainText("Last XR error stack:");
+
+  const requestsBefore = await page.evaluate(() =>
+    (window as Window & { __mmaRafRequests?: number }).__mmaRafRequests ?? 0,
+  );
+  await page.waitForTimeout(100);
+  const requestsAfter = await page.evaluate(() =>
+    (window as Window & { __mmaRafRequests?: number }).__mmaRafRequests ?? 0,
+  );
+  expect(requestsAfter).toBeGreaterThan(requestsBefore);
+  await expect(status).toBeHidden({ timeout: 7000 });
+});
+
+test("a post-start XR input error ends the session and restores screen mode", async ({ page }) => {
+  await installMockXr(page);
+  await page.goto("http://127.0.0.1:5174?xrdebug=1&xrinputfail=1");
+  await page.getByRole("button", { name: "Enter AR" }).click();
+  const dialog = page.getByRole("dialog", { name: "View the atom in AR?" });
+  await dialog.getByRole("button", { name: "Start AR" }).click();
+
+  await expect(page.locator("#ar-status"))
+    .toContainText("AR could not continue. You are back in screen mode.");
+  await expect(page.locator("html")).not.toHaveClass(/ar-active/);
+  await expect(page.locator(".ar-overlay-panel")).toBeHidden();
+  await expect(page.locator("#lesson-panel")).toBeVisible();
+  await expect(page.locator("#atom-scene canvas")).toBeVisible();
+  await expect(page.locator(".ar-diagnostics"))
+    .toContainText("Last XR error: Forced XR input initialization failure");
 });
 
 test("mocked AR keeps the atom world-fixed and presents the lesson in spatial panels", async ({ page }) => {
@@ -974,7 +1063,7 @@ test("reports the hidden camera-view reason for a touch-first AR device", async 
   await page.goto("http://127.0.0.1:5174");
 
   const hiddenReason =
-    "Camera view is hidden because immersive AR is available on a touch-first device.";
+    "Use AR for camera-based viewing on this device.";
   await expect(page.getByRole("button", { name: "Camera view" })).toBeHidden();
   await expect(page.locator(".camera-view-reason")).toContainText(hiddenReason);
   expect(diagnostics).toContain(`Camera view hidden: ${hiddenReason}`);
@@ -1104,6 +1193,14 @@ test(`camera view returns to screen mode after ${name}`, async ({ page }) => {
   await page.getByRole("dialog", { name: "Start camera view?" })
     .getByRole("button", { name: "Start" }).click();
   await expect(page.locator(".camera-view-status")).toContainText(message);
+  if (name === "NotAllowedError") {
+    const statusBox = await page.locator(".camera-view-status").boundingBox();
+    const particleBox = await page.locator(".particle-rail").boundingBox();
+    expect(statusBox).not.toBeNull();
+    expect(particleBox).not.toBeNull();
+    expect(statusBox!.y + statusBox!.height).toBeLessThanOrEqual(particleBox!.y);
+    await expect(page.locator(".camera-view-status")).toBeHidden({ timeout: 6000 });
+  }
   await expect(page.locator(".camera-view-video")).toHaveCount(0);
   await expect(page.locator("html")).not.toHaveClass(/camera-active/);
   await expect(page.locator("#atom-scene canvas")).toBeVisible();
@@ -1162,6 +1259,13 @@ test("camera view stops all tracks when the tab hides or the camera disconnects"
 
 async function installMockXr(page: import("@playwright/test").Page): Promise<void> {
   await page.addInitScript(() => {
+    const windowWithTestCounter = window as Window & { __mmaRafRequests?: number };
+    windowWithTestCounter.__mmaRafRequests = 0;
+    const requestFrame = window.requestAnimationFrame.bind(window);
+    window.requestAnimationFrame = (callback) => {
+      windowWithTestCounter.__mmaRafRequests = (windowWithTestCounter.__mmaRafRequests ?? 0) + 1;
+      return requestFrame(callback);
+    };
     for (const context of [window.WebGLRenderingContext, window.WebGL2RenderingContext]) {
       if (context) {
         Object.defineProperty(context.prototype, "makeXRCompatible", {
@@ -1194,7 +1298,8 @@ async function installMockXr(page: import("@playwright/test").Page): Promise<voi
       environmentBlendMode: string;
       domOverlayState: object;
       renderState: { baseLayer: unknown };
-      inputSources: unknown[];
+      readonly frameRate: number;
+      readonly inputSources: ArrayLike<unknown> & Iterable<unknown>;
       updateRenderState: (state: { baseLayer: unknown }) => void;
       requestReferenceSpace: (type: string) => Promise<object>;
       requestAnimationFrame: (callback: (time: number, frame: object) => void) => number;
@@ -1206,11 +1311,33 @@ async function installMockXr(page: import("@playwright/test").Page): Promise<voi
     session.environmentBlendMode = "alpha-blend";
     session.domOverlayState = {};
     session.renderState = { baseLayer: null };
-    session.inputSources = [];
+    let startupFrameRateFailurePending = location.search.includes("xrstartfail=1");
+    const emptyInputSources = { length: 0, *[Symbol.iterator]() {} };
+    Object.defineProperty(session, "inputSources", {
+      value: emptyInputSources,
+    });
+    Object.defineProperty(session, "frameRate", {
+      get: () => {
+        if (startupFrameRateFailurePending) {
+          startupFrameRateFailurePending = false;
+          throw new Error("Forced XR start failure");
+        }
+        return 72;
+      },
+    });
     session.updateRenderState = (state) => {
       session.renderState = { ...session.renderState, ...state };
     };
-    session.requestReferenceSpace = async () => ({});
+    let localSpaceRequests = 0;
+    session.requestReferenceSpace = async (type) => {
+      if (location.search.includes("xrinputfail=1") && type === "local") {
+        localSpaceRequests += 1;
+        if (localSpaceRequests > 1) {
+          throw new Error("Forced XR input initialization failure");
+        }
+      }
+      return {};
+    };
     const frame = {
       getViewerPose: () => ({
         views: [{

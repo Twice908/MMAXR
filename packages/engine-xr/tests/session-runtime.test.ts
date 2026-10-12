@@ -11,18 +11,46 @@ import {
 
 class MockSession extends EventTarget implements ArSessionHandle {
   visibilityState: "visible" | "visible-blurred" | "hidden" = "visible";
-  readonly enabledFeatures: readonly string[];
+  readonly enabledFeatures: Iterable<string>;
+  readonly inputSources: ArrayLike<{
+    readonly targetRayMode: string;
+    readonly hand?: unknown;
+    readonly gamepad?: unknown;
+  }> & Iterable<{
+    readonly targetRayMode: string;
+    readonly hand?: unknown;
+    readonly gamepad?: unknown;
+  }>;
   endCalls = 0;
 
-  constructor(enabledFeatures: readonly string[] = ["dom-overlay"]) {
+  constructor(
+    enabledFeatures: Iterable<string> = ["dom-overlay"],
+    inputSources: readonly {
+      readonly targetRayMode: string;
+      readonly hand?: unknown;
+      readonly gamepad?: unknown;
+    }[] = [],
+  ) {
     super();
     this.enabledFeatures = enabledFeatures;
+    this.inputSources = makeXrArrayLike(inputSources);
   }
 
   async end(): Promise<void> {
     this.endCalls += 1;
     this.dispatchEvent(new Event("end"));
   }
+}
+
+function makeXrArrayLike<T>(sources: readonly T[]): ArrayLike<T> & Iterable<T> {
+  const indexed: Record<number, T> = {};
+  sources.forEach((source, index) => { indexed[index] = source; });
+  return Object.assign(indexed, {
+    length: sources.length,
+    [Symbol.iterator]: function* () {
+      yield* sources;
+    },
+  });
 }
 
 class MockVisibilityTarget extends EventTarget {
@@ -41,6 +69,8 @@ function setup(options: {
   readonly supportedModes?: readonly ("immersive-ar" | "immersive-vr")[];
   readonly requestError?: unknown;
   readonly enterError?: Error;
+  readonly onEnter?: () => void;
+  readonly onExit?: () => void;
 } = {}) {
   const session = options.session ?? new MockSession();
   const visibilityTarget = new MockVisibilityTarget();
@@ -64,11 +94,14 @@ function setup(options: {
   };
   const presentation: ArSessionPresentation = {
     enter: vi.fn(async () => {
+      options.onEnter?.();
       if (options.enterError) {
         throw options.enterError;
       }
     }),
-    exit: vi.fn(),
+    exit: vi.fn(() => {
+      options.onExit?.();
+    }),
   };
   const started = vi.fn();
   const ended = vi.fn();
@@ -192,6 +225,35 @@ describe("ArSessionController", () => {
       ["dom-overlay", "hand-tracking"],
       expect.objectContaining({ overlayGranted: true, mode: "immersive-ar" }),
     );
+  });
+
+  it("reads input sources from a real-browser-like array-like collection", async () => {
+    const session = new MockSession(["dom-overlay"], [
+      { targetRayMode: "tracked-pointer", gamepad: {} },
+      { targetRayMode: "screen" },
+    ]);
+    const result = setup({ session });
+
+    await result.controller.start();
+
+    expect(result.controller.sessionInfo.inputSourceTypes).toEqual([
+      "controller",
+      "screen",
+    ]);
+    await result.controller.stop();
+  });
+
+  it("reads enabled features from an iterable collection", async () => {
+    const session = new MockSession(makeXrArrayLike(["dom-overlay", "hand-tracking"]));
+    const result = setup({ session });
+
+    await result.controller.start();
+
+    expect(result.controller.state).toMatchObject({
+      status: "active",
+      grantedFeatures: ["dom-overlay", "hand-tracking"],
+    });
+    await result.controller.stop();
   });
 
   it("returns a named unsupported error before requesting a session", async () => {
@@ -322,13 +384,27 @@ describe("ArSessionController", () => {
     expect(result.controller.state).toEqual({ status: "idle" });
   });
 
-  it("cleans up a partially entered presentation after renderer failure", async () => {
-    const result = setup({ enterError: new Error("renderer failed") });
+  it("restores screen rendering and panels after startup fails midway", async () => {
+    let renderLoopRunning = true;
+    let domPanelsVisible = true;
+    const result = setup({
+      enterError: new Error("renderer failed midway"),
+      onEnter: () => {
+        renderLoopRunning = false;
+        domPanelsVisible = false;
+      },
+      onExit: () => {
+        renderLoopRunning = true;
+        domPanelsVisible = true;
+      },
+    });
 
     await expect(result.controller.start()).rejects.toMatchObject({ reasonCode: "unknown" });
     expect(result.session.endCalls).toBe(1);
     expect(result.presentation.exit).toHaveBeenCalledOnce();
     expect(result.controller.state).toEqual({ status: "idle" });
+    expect(renderLoopRunning).toBe(true);
+    expect(domPanelsVisible).toBe(true);
   });
 
   it("keeps an independent lesson snapshot unchanged across start and exit", async () => {

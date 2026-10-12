@@ -41,6 +41,8 @@ export interface XrDiagnosticsData {
   readonly inputSourceTypes: readonly string[];
   readonly referenceSpaceType: string | null;
   readonly frameRate: number | null;
+  readonly lastErrorMessage?: string | null;
+  readonly lastErrorStack?: string | null;
 }
 
 /** Build a PII-free, copyable XR support and session report. */
@@ -55,7 +57,26 @@ export function buildXrDiagnosticsText(data: XrDiagnosticsData): string {
     `Input sources: ${data.inputSourceTypes.join(", ") || "none"}`,
     `Reference space: ${data.referenceSpaceType ?? "unavailable"}`,
     `Frame rate: ${data.frameRate === null ? "unavailable" : `${data.frameRate} Hz`}`,
+    `Last XR error: ${data.lastErrorMessage || "none"}`,
+    `Last XR error stack:\n${data.lastErrorStack || "unavailable"}`,
   ].join("\n");
+}
+
+function diagnosticErrorDetails(error: unknown): { message: string; stack: string } {
+  const cause = error instanceof ArSessionStartError ? error.originalError : undefined;
+  const source = cause ?? error;
+  const redact = (text: string): string => text
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[redacted]")
+    .replace(/\b\+?\d[\d .()-]{8,}\d\b/g, "[redacted]")
+    .replace(/([?&][\w.-]+=)[^&\s)]+/g, "$1[redacted]")
+    .replace(/\/Users\/[^/\s)]+/g, "/Users/[redacted]");
+  if (source instanceof Error) {
+    return {
+      message: redact(source.message || source.name),
+      stack: redact(source.stack ?? `${source.name}: ${source.message}`),
+    };
+  }
+  return { message: redact(String(source)), stack: "unavailable" };
 }
 
 /** Enable temporary XR diagnostics only for an explicit URL query flag. */
@@ -243,8 +264,11 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
   let grantedFeatures: readonly string[] = [];
   let supportedModes: readonly string[] = [];
   let latestSessionInfo: ArSessionRuntimeInfo | null = null;
+  let lastXrErrorMessage: string | null = null;
+  let lastXrErrorStack: string | null = null;
   let diagnosticsRefresh: ReturnType<typeof globalThis.setInterval> | null = null;
   let xrInputSession: ArSessionHandle | null = null;
+  let statusDismissTimeout: ReturnType<typeof globalThis.setTimeout> | null = null;
   const updateDiagnostics = (): string => {
     const report = buildXrDiagnosticsText({
       supportedModes,
@@ -256,6 +280,8 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
       inputSourceTypes: latestSessionInfo?.inputSourceTypes ?? [],
       referenceSpaceType: latestSessionInfo?.referenceSpaceType ?? null,
       frameRate: latestSessionInfo?.frameRate ?? null,
+      lastErrorMessage: lastXrErrorMessage,
+      lastErrorStack: lastXrErrorStack,
     });
     if (diagnosticsText) diagnosticsText.textContent = report;
     root.dispatchEvent(new Event("mma:xr-diagnostics-update"));
@@ -266,9 +292,17 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
     updateDiagnostics();
   };
   let cancelComfortBreak: (() => void) | null = null;
-  const setStatus = (message: string): void => {
+  const setStatus = (message: string, autoDismissMs?: number): void => {
+    if (statusDismissTimeout !== null) globalThis.clearTimeout(statusDismissTimeout);
+    statusDismissTimeout = null;
     status.textContent = message;
     status.hidden = message.length === 0;
+    if (message && autoDismissMs !== undefined) {
+      statusDismissTimeout = globalThis.setTimeout(() => {
+        statusDismissTimeout = null;
+        setStatus("");
+      }, autoDismissMs);
+    }
   };
   const recordEvent = (type: "ar_session_started" | "ar_session_ended" | "ar_error", payload: Record<string, unknown>): void => {
     if (disposed) {
@@ -315,18 +349,6 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
       sessionState = state.status;
       latestSessionInfo = sessionInfo;
       grantedFeatures = state.status === "active" ? state.grantedFeatures : [];
-      if (diagnostics) {
-        diagnostics.hidden = inAr && sessionInfo.overlayGranted === false;
-        if (inAr) updateDiagnostics();
-      }
-      if (spatialActive !== spatialShouldBeActive) {
-        spatialActive = spatialShouldBeActive;
-        options.onSpatialActiveChange?.(
-          spatialActive,
-          sessionInfo,
-          spatialActive ? activeXrSession : null,
-        );
-      }
       setArActiveState(inAr, activeTargets);
       if (inAr) {
         mountPanel(sessionInfo.overlayGranted === true);
@@ -346,6 +368,18 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
       exitButton.disabled = state.status !== "active";
       startButton.disabled = state.status === "requesting" || inAr;
       vrButton.disabled = state.status === "requesting" || inAr;
+      if (diagnostics) {
+        diagnostics.hidden = inAr && sessionInfo.overlayGranted === false;
+        if (inAr) updateDiagnostics();
+      }
+      if (spatialActive !== spatialShouldBeActive) {
+        spatialActive = spatialShouldBeActive;
+        options.onSpatialActiveChange?.(
+          spatialActive,
+          sessionInfo,
+          spatialActive ? activeXrSession : null,
+        );
+      }
       if (diagnostics) {
         diagnostics.hidden = inAr && sessionInfo.overlayGranted === false;
         if (!inAr) {
@@ -395,10 +429,23 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
     onError: (reasonCode) => {
       recordEvent("ar_error", { reasonCode });
       if (!disposed) {
-        setStatus(arFailureMessage(reasonCode, activeMode));
+        setStatus(arFailureMessage(reasonCode, activeMode), 6000);
       }
     },
   });
+  const onSpatialRuntimeError = (event: Event): void => {
+    if (disposed) return;
+    const details = diagnosticErrorDetails((event as CustomEvent<unknown>).detail);
+    lastXrErrorMessage = details.message;
+    lastXrErrorStack = details.stack;
+    updateDiagnostics();
+    void controller.stop().then(() => {
+      if (!disposed) setStatus(arFailureMessage("unknown", activeMode), 6000);
+    }).catch(() => {
+      if (!disposed) setStatus(arFailureMessage("unknown", activeMode), 6000);
+    });
+  };
+  root.addEventListener("mma:xr-runtime-error", onSpatialRuntimeError);
 
   if (diagnostics) {
     updateDiagnostics();
@@ -450,18 +497,20 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
       setStatus(selectedMode === "immersive-vr" ? "Starting VR..." : "Starting AR...");
       void controller.start(selectedMode).catch((error: unknown) => {
         if (!disposed) {
+          const details = diagnosticErrorDetails(error);
+          lastXrErrorMessage = details.message;
+          lastXrErrorStack = details.stack;
+          updateDiagnostics();
           setStatus(error instanceof ArSessionStartError
             ? arFailureMessage(error.reasonCode, selectedMode)
-            : error instanceof Error
-              ? error.message
-              : "AR could not be started. You can keep learning in screen mode.");
+            : arFailureMessage("unknown", selectedMode), 6000);
         }
       });
     } else if (action === "exit") {
       exitButton.disabled = true;
       void controller.stop().catch(() => {
         if (!disposed) {
-          setStatus("AR has ended. You are back in screen mode.");
+          setStatus("AR has ended. You are back in screen mode.", 6000);
         }
       });
     } else if (action === "panel-toggle") {
@@ -494,6 +543,15 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
     updateDiagnostics();
     startButton.hidden = !result.supported || !result.modes.includes("immersive-ar");
     vrButton.hidden = !result.supported || !result.modes.includes("immersive-vr");
+    const touchFirst = !globalThis.matchMedia("(any-pointer: fine)").matches;
+    vrButton.textContent = touchFirst ? "VR with viewer" : "Enter VR";
+    if (touchFirst) {
+      vrButton.title = "Needs a phone VR viewer";
+      vrButton.setAttribute("aria-label", "VR with viewer. Needs a phone VR viewer");
+    } else {
+      vrButton.removeAttribute("title");
+      vrButton.removeAttribute("aria-label");
+    }
     supportMessage.textContent = result.supported ? "" : result.reason;
     supportMessage.hidden = result.supported;
   }).catch(() => {
@@ -505,6 +563,9 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
 
   return async () => {
     disposed = true;
+    root.removeEventListener("mma:xr-runtime-error", onSpatialRuntimeError);
+    if (statusDismissTimeout !== null) globalThis.clearTimeout(statusDismissTimeout);
+    statusDismissTimeout = null;
     root.removeEventListener("click", onAction);
     root.removeEventListener("beforexrselect", onBeforeXrSelect);
     cancelComfortBreak?.();

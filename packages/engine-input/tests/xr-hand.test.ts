@@ -9,6 +9,7 @@ import {
   asWebGLRenderer,
   asXrFrame,
   makeFakeRenderer,
+  makeFakeInputSources,
   makeFrameFromJointPositions,
   makeNamedHandJointMap,
   makeXrSource,
@@ -41,9 +42,9 @@ describe("XrHandInputAdapter", () => {
     const sink = createActionSink();
     const events = new InputEventBus();
     const session: FakeXrSession = {
-      inputSources: [
+      inputSources: makeFakeInputSources([
         makeXrSource(handedness, makeNamedHandJointMap()),
-      ],
+      ]),
     };
     const renderer = asWebGLRenderer(makeFakeRenderer(session));
     const adapter = new XrHandInputAdapter({
@@ -106,9 +107,9 @@ describe("XrHandInputAdapter", () => {
     const pick = vi.fn<PickFunction>(() => ({ target: "atom:1" }));
     const sink = createActionSink();
     const session: FakeXrSession = {
-      inputSources: [
+      inputSources: makeFakeInputSources([
         makeXrSource("right", makeNamedHandJointMap()),
-      ],
+      ]),
     };
     const renderer = asWebGLRenderer(makeFakeRenderer(session));
 
@@ -132,7 +133,7 @@ describe("XrHandInputAdapter", () => {
   it("ignores a session without hand input", () => {
     const sink = createActionSink();
     const renderer = asWebGLRenderer(makeFakeRenderer({
-      inputSources: [makeXrSource("left", null)],
+      inputSources: makeFakeInputSources([makeXrSource("left", null)]),
     }));
     const adapter = new XrHandInputAdapter({
       renderer,
@@ -153,7 +154,7 @@ describe("XrHandInputAdapter", () => {
     events.on("sourceRemoved", removed);
 
     const session: FakeXrSession = {
-      inputSources: [makeXrSource("left", makeNamedHandJointMap())],
+      inputSources: makeFakeInputSources([makeXrSource("left", makeNamedHandJointMap())]),
     };
     const renderer = asWebGLRenderer(makeFakeRenderer(session));
     const adapter = new XrHandInputAdapter({
@@ -165,7 +166,7 @@ describe("XrHandInputAdapter", () => {
     const frame = makeFrameFromJointPositions(makePositions(0.02));
 
     adapter.update(asXrFrame(frame));
-    session.inputSources = [];
+    session.inputSources = makeFakeInputSources([]);
     adapter.update(asXrFrame(frame));
 
     expect(removed).toHaveBeenCalledWith({
@@ -179,7 +180,7 @@ describe("XrHandInputAdapter", () => {
   it("can create and clean up debug joint objects", () => {
     const sink = createActionSink();
     const renderer = asWebGLRenderer(makeFakeRenderer({
-      inputSources: [makeXrSource("left", makeNamedHandJointMap())],
+      inputSources: makeFakeInputSources([makeXrSource("left", makeNamedHandJointMap())]),
     }));
     const adapter = new XrHandInputAdapter({
       renderer,

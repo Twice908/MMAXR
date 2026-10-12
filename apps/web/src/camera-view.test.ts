@@ -43,7 +43,7 @@ describe("camera view capability", () => {
       getUserMedia: vi.fn(),
     })).resolves.toMatchObject({
       available: false,
-      reason: expect.stringContaining("touch-first device"),
+      reason: "Use AR for camera-based viewing on this device.",
     });
   });
 });

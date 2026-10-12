@@ -175,8 +175,8 @@ export function clampArPlacementDistance(distance: number): number {
 }
 
 /** Decide whether this session has the requested hit-test capability. */
-export function hasArHitTest(enabledFeatures: readonly string[] | undefined): boolean {
-  return enabledFeatures?.includes("hit-test") === true;
+export function hasArHitTest(enabledFeatures: Iterable<string> | undefined): boolean {
+  return Array.from(enabledFeatures ?? []).includes("hit-test");
 }
 
 /** Use surface placement only for touch-first sessions without tracked controllers. */
@@ -554,8 +554,9 @@ export class ScreenSceneRenderer {
     this.arActive = true;
     cancelAnimationFrame(this.animationFrame);
     this.renderer.xr.enabled = true;
+    const enabledFeatures = new Set(Array.from((session as XRSession).enabledFeatures ?? []));
     this.renderer.xr.setReferenceSpaceType(
-      mode === "immersive-vr" && (session as XRSession).enabledFeatures?.includes("local-floor")
+      mode === "immersive-vr" && enabledFeatures.has("local-floor")
         ? "local-floor"
         : "local",
     );
@@ -585,8 +586,7 @@ export class ScreenSceneRenderer {
       if (this.vrEnvironment) {
         this.scene.add(this.vrEnvironment.root);
         this.arPlacementRoot.add(this.vrEnvironment.atomRing);
-        this.vrFloorUsesViewerFallback =
-          !this.activeXRSession.enabledFeatures?.includes("local-floor");
+        this.vrFloorUsesViewerFallback = !enabledFeatures.has("local-floor");
       }
       if (mode === "immersive-ar") {
         await this.enablePhoneHitTest(this.activeXRSession);
@@ -609,37 +609,53 @@ export class ScreenSceneRenderer {
       return;
     }
 
-    this.renderer.setAnimationLoop(null);
+    let cleanupError: unknown;
+    const attempt = (action: () => void): void => {
+      try {
+        action();
+      } catch (error) {
+        cleanupError ??= error;
+      }
+    };
+    attempt(() => this.renderer.setAnimationLoop(null));
     this.xrRenderLoopRunning = false;
-    this.activeXRSession?.removeEventListener("select", this.onPhoneSurfaceSelect);
-    this.disposeVrEnvironment();
-    this.hitTestSource?.cancel();
+    attempt(() => this.activeXRSession?.removeEventListener("select", this.onPhoneSurfaceSelect));
+    attempt(() => this.disposeVrEnvironment());
+    attempt(() => this.hitTestSource?.cancel());
     this.hitTestSource = null;
     this.hitTestReferenceSpace = null;
     this.lastHitTestPose = null;
     this.phoneHitTestActive = false;
     this.arReticle.visible = false;
-    const session = this.renderer.xr.getSession();
+    let session: XRSession | null = null;
+    try {
+      session = this.renderer.xr.getSession();
+    } catch (error) {
+      cleanupError ??= error;
+    }
     if (session) {
       try {
         await this.renderer.xr.setSession(null);
-      } catch {
-        // The browser may already have ended the session.
+      } catch (error) {
+        cleanupError ??= error;
       }
     }
-    this.renderer.xr.enabled = false;
+    attempt(() => { this.renderer.xr.enabled = false; });
     this.activeXRSession = null;
     this.vrFloorUsesViewerFallback = false;
-    this.arPlacementRoot.position.set(0, 0, 0);
-    this.arPlacementRoot.quaternion.identity();
-    this.atomRoot.position.set(0, 0, 0);
-    this.atomRoot.rotation.set(0, 0, 0);
-    this.atomRoot.scale.setScalar(1);
-    this.arViewTransform = DEFAULT_AR_VIEW_TRANSFORM;
-    this.scene.background = this.screenBackground;
     this.arActive = false;
-    this.render();
-    this.startDiagnosticsLoop();
+    attempt(() => {
+      this.arPlacementRoot.position.set(0, 0, 0);
+      this.arPlacementRoot.quaternion.identity();
+      this.atomRoot.position.set(0, 0, 0);
+      this.atomRoot.rotation.set(0, 0, 0);
+      this.atomRoot.scale.setScalar(1);
+      this.arViewTransform = DEFAULT_AR_VIEW_TRANSFORM;
+      this.scene.background = this.screenBackground;
+    });
+    attempt(() => this.render());
+    attempt(() => this.startDiagnosticsLoop());
+    if (cleanupError) throw cleanupError;
   }
 
   /** Subscribe to live AR renderer facts for a development-only overlay. */
@@ -1178,7 +1194,7 @@ export class ScreenSceneRenderer {
     }
 
     if (!this.hitTestSource || !this.hitTestReferenceSpace) return;
-    const results = frame.getHitTestResults(this.hitTestSource);
+    const results = Array.from(frame.getHitTestResults(this.hitTestSource));
     const pose = results[0]?.getPose(this.hitTestReferenceSpace) ?? null;
     this.lastHitTestPose = pose;
     this.arReticle.visible = pose !== null;
@@ -1200,9 +1216,10 @@ export class ScreenSceneRenderer {
 
   private disposeVrEnvironment(): void {
     if (!this.vrEnvironment) return;
-    this.vrEnvironment.dispose();
+    const environment = this.vrEnvironment;
     this.vrEnvironment = null;
     this.vrFloorUsesViewerFallback = false;
+    environment.dispose();
   }
 
   private updateArPlacementPosition(): void {
@@ -1255,7 +1272,7 @@ export class ScreenSceneRenderer {
       clearColor: `#${this.renderer.getClearColor(new THREE.Color()).getHexString()}`,
       clearAlpha: this.renderer.getClearAlpha(),
       environmentBlendMode: session?.environmentBlendMode ?? "unavailable",
-      grantedFeatures: session?.enabledFeatures ?? [],
+      grantedFeatures: Array.from(session?.enabledFeatures ?? []),
       canvasDisplay: getComputedStyle(this.canvas).display,
       renderLoopRunning: this.xrRenderLoopRunning,
       atomVisible,
