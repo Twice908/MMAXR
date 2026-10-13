@@ -153,6 +153,29 @@
 .ar-break-reminder { position: fixed; z-index: 29; top: max(12px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); padding: var(--glass-pad-pill); border: var(--glass-border-width) solid var(--glass-border-color); border-radius: var(--glass-radius-pill); color: var(--glass-text); background: var(--glass-bg-strong); box-shadow: var(--glass-highlight), var(--glass-shadow); font-size: 13px; line-height: 1.4; pointer-events: none; }
 .ar-diagnostics { position: fixed; z-index: 28; right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); max-width: calc(100vw - 24px); padding: var(--glass-pad-pill); border: var(--glass-border-width) solid var(--glass-border-color); border-radius: var(--glass-radius-pill); color: var(--glass-text); background: var(--glass-bg-strong); box-shadow: var(--glass-highlight), var(--glass-shadow); font: 10px/1.4 ui-monospace, monospace; overflow-wrap: anywhere; pointer-events: none; }
 .ar-active, html.ar-active, body.ar-active, #app.ar-active { background-color: transparent !important; background-image: none !important; }
+.xr-session-active .scene-viewport,
+.xr-session-active .atom-canvas { touch-action: auto !important; }
+.xr-vr-active * { pointer-events: none !important; }
+.xr-vr-active .atom-canvas { pointer-events: auto !important; }
+.xr-vr-active .ar-overlay-panel,
+.xr-vr-active .ar-confirmation,
+.xr-vr-active .ar-exit,
+.xr-vr-active .ar-status,
+.xr-vr-active .ar-break-reminder,
+.xr-vr-active .ar-diagnostics,
+.xr-vr-active .spatial-settings-fallback,
+.xr-vr-active .dom-settings-scrim,
+.xr-vr-active .dom-settings-sheet,
+.xr-vr-active .camera-view-exit,
+.xr-vr-active .camera-view-panel,
+.xr-vr-active .camera-view-status,
+.xr-vr-active .camera-view-confirmation,
+.xr-vr-active .spatial-edge-hints,
+.xr-vr-active .dev-events-toggle,
+.xr-vr-active .dev-event-panel {
+  display: none !important;
+  pointer-events: none !important;
+}
 .ar-active .atom-builder,
 .ar-active .builder-header,
 .ar-active .lesson-panel,

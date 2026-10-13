@@ -198,7 +198,7 @@ export class ArSessionController {
 
     const requestedFeatures: readonly ArFeature[] = mode === "immersive-ar"
       ? ["dom-overlay", "hand-tracking", "hit-test"]
-      : ["local-floor", "local", "hand-tracking"];
+      : ["local-floor", "hand-tracking"];
     try {
       this.mode = mode;
       this.requestedFeatures = requestedFeatures;

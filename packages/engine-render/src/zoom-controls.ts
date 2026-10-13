@@ -32,15 +32,19 @@ export interface ZoomControlsConfig {
 
 /**
  * Install screen-mode wheel zoom controls and return a listener disposer.
- * Ctrl+wheel always suppresses browser zoom; model zoom is limited to the canvas bounds.
+ * When enabled, Ctrl+wheel suppresses browser zoom and model zoom is limited to the canvas bounds.
+ * The enable predicate lets immersive XR pass wheel gestures through untouched.
  */
 export function installZoomControls(
   canvas: HTMLCanvasElement,
   getDistance: () => number,
   setDistance: (distance: number) => void,
   config: ZoomControlsConfig = screenZoomConfig,
+  isEnabled: () => boolean = () => true,
+  eventTarget: Pick<Window, "addEventListener" | "removeEventListener"> = window,
 ): () => void {
   const onWheel = (event: WheelEvent): void => {
+    if (!isEnabled()) return;
     if (event.ctrlKey) {
       event.preventDefault();
     }
@@ -55,9 +59,9 @@ export function installZoomControls(
     if (event.ctrlKey ? !config.enablePinchZoom : !config.enableWheelZoom) return;
     if (!event.ctrlKey) event.preventDefault();
 
-    const deltaModeScale = event.deltaMode === WheelEvent.DOM_DELTA_LINE
+    const deltaModeScale = event.deltaMode === 1
       ? 16
-      : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+      : event.deltaMode === 2
         ? 100
         : 1;
     const sensitivity = event.ctrlKey ? config.pinchSensitivity : config.wheelSensitivity;
@@ -70,6 +74,6 @@ export function installZoomControls(
     ));
   };
 
-  window.addEventListener("wheel", onWheel, { capture: true, passive: false });
-  return () => window.removeEventListener("wheel", onWheel, true);
+  eventTarget.addEventListener("wheel", onWheel, { capture: true, passive: false });
+  return () => eventTarget.removeEventListener("wheel", onWheel, true);
 }

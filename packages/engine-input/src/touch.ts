@@ -13,6 +13,7 @@ export class TouchInputAdapter extends PointerAdapterBase {
   private readonly pinchDeadZonePx: number;
   private readonly dragThresholdPx: number;
   private readonly shouldIgnoreTarget: (target: EventTarget | null) => boolean;
+  private enabled = true;
   private readonly touches = new Map<number, { x: number; y: number }>();
   private readonly ignoredPointers = new Set<number>();
   private activeTarget: string | null = null;
@@ -51,7 +52,23 @@ export class TouchInputAdapter extends PointerAdapterBase {
     super.dispose();
   }
 
+  setEnabled(enabled: boolean): void {
+    this.enabled = enabled;
+    if (enabled) return;
+    for (const pointerId of this.touches.keys()) {
+      if (this.root.hasPointerCapture(pointerId)) this.root.releasePointerCapture(pointerId);
+    }
+    this.touches.clear();
+    this.ignoredPointers.clear();
+    this.activeTarget = null;
+    this.activePointerId = null;
+    this.traySource = null;
+    this.dragging = false;
+    this.pinchDistance = null;
+  }
+
   private readonly onDown = (event: PointerEvent): void => {
+    if (!this.enabled) return;
     if (event.pointerType !== "touch") return;
     if (this.shouldIgnoreTarget(event.target)) {
       this.ignoredPointers.add(event.pointerId);
@@ -98,6 +115,7 @@ export class TouchInputAdapter extends PointerAdapterBase {
   };
 
   private readonly onMove = (event: PointerEvent): void => {
+    if (!this.enabled) return;
     if (
       event.pointerType !== "touch" ||
       this.ignoredPointers.has(event.pointerId) ||
@@ -164,6 +182,7 @@ export class TouchInputAdapter extends PointerAdapterBase {
   };
 
   private readonly onUp = (event: PointerEvent): void => {
+    if (!this.enabled) return;
     if (event.pointerType !== "touch") return;
     if (this.ignoredPointers.delete(event.pointerId)) return;
     const wasActive = event.pointerId === this.activePointerId;
@@ -211,6 +230,7 @@ export class TouchInputAdapter extends PointerAdapterBase {
   };
 
   private readonly onCancel = (event: PointerEvent): void => {
+    if (!this.enabled) return;
     if (event.pointerType !== "touch") return;
     if (this.ignoredPointers.delete(event.pointerId)) return;
     const target = this.activeTarget;

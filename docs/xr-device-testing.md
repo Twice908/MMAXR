@@ -12,7 +12,12 @@ Record headset results in the [device matrix](./device-matrix.md).
    HTTPS, then open the extension controls.
 3. Select a Quest device profile. Try the controller and hand-tracking input
    modes, and enter each session mode offered by the page.
-4. Use the emulator to check layout, buttons, panel hit targets, and session
+4. In the emulator's navigation view, click-drag to look around; use **W/S**
+   to move forward/back and **A/D** to strafe. Give the emulator view focus
+   before using its keyboard controls. The page suspends its own mouse, touch,
+   and wheel handlers during immersive sessions so those gestures reach the
+   emulator. Use XR hands/controllers for the in-scene panels.
+5. Use the emulator to check layout, buttons, panel hit targets, and session
    lifecycle. It cannot verify DOM overlay behavior, passthrough, or real
    tracking quality.
 

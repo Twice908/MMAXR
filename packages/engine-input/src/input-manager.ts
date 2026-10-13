@@ -29,26 +29,32 @@ export class InputManager {
   private readonly adapters: Array<{ update?: (delta?: number | XRFrame) => void; dispose: () => void }> = [];
   private readonly xrController?: XrControllerInputAdapter;
   private readonly xrHand?: XrHandInputAdapter;
+  private readonly screenAdapters: Array<MouseInputAdapter | TouchInputAdapter> = [];
+  private screenInputEnabled = true;
 
   constructor(options: InputManagerOptions) {
     if (options.enableMouse ?? true) {
-      this.adapters.push(new MouseInputAdapter({
+      const adapter = new MouseInputAdapter({
         root: options.root,
         dispatch: options.dispatch,
         pickTarget: options.pickScreenTarget,
         events: this.events,
         ...(options.mouse ?? {}),
-      }));
+      });
+      this.screenAdapters.push(adapter);
+      this.adapters.push(adapter);
     }
 
     if (options.enableTouch ?? true) {
-      this.adapters.push(new TouchInputAdapter({
+      const adapter = new TouchInputAdapter({
         root: options.root,
         dispatch: options.dispatch,
         pickTarget: options.pickScreenTarget,
         events: this.events,
         ...(options.touch ?? {}),
-      }));
+      });
+      this.screenAdapters.push(adapter);
+      this.adapters.push(adapter);
     }
 
     if (options.enableXrControllers ?? true) {
@@ -95,9 +101,17 @@ export class InputManager {
     this.xrController?.update();
   }
 
+  /** Suspend mouse/touch input while immersive XR owns browser navigation. */
+  setScreenInputEnabled(enabled: boolean): void {
+    if (this.screenInputEnabled === enabled) return;
+    this.screenInputEnabled = enabled;
+    for (const adapter of this.screenAdapters) adapter.setEnabled(enabled);
+  }
+
   dispose(): void {
     for (const adapter of this.adapters) adapter.dispose();
     this.adapters.length = 0;
+    this.screenAdapters.length = 0;
     this.events.clear();
   }
 }

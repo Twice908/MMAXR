@@ -15,7 +15,7 @@ type EmulatorReferenceSpace = Readonly<{ type: "local" | "local-floor" }>;
 class FakeXrSession {
   readonly enabledFeatures: ReadonlySet<string>;
   readonly inputSources = [{ hand: {} }];
-  readonly requestedFeatures = ["local-floor", "local", "hand-tracking"];
+  readonly requestedFeatures = ["local-floor", "hand-tracking"];
   readonly hitTestSourceRequested = false;
   lastFrame: FakeXrFrame | null = null;
   private frameCallback: ((frame: FakeXrFrame) => void) | null = null;
@@ -109,7 +109,7 @@ describe("emulated immersive XR frame lifecycle", () => {
       expect(session.enabledFeatures.has("hand-tracking")).toBe(true);
       expect(session.enabledFeatures.has("local-floor")).toBe(referenceSpaceType === "local-floor");
       expect(session.inputSources).toHaveLength(1);
-      expect(session.requestedFeatures).toEqual(["local-floor", "local", "hand-tracking"]);
+      expect(session.requestedFeatures).toEqual(["local-floor", "hand-tracking"]);
       expect(session.hitTestSourceRequested).toBe(false);
       expect(renderedFrames).toBe(2);
       expect(viewCount).toBe(2);

@@ -317,14 +317,28 @@ describe("ArSessionController", () => {
 
     await expect(result.controller.start("immersive-vr")).resolves.toMatchObject({
       status: "active",
-      requestedFeatures: ["local-floor", "local", "hand-tracking"],
+      requestedFeatures: ["local-floor", "hand-tracking"],
       grantedFeatures: ["local-floor", "hand-tracking"],
     });
     expect(result.requestSession).toHaveBeenCalledWith("immersive-vr", {
-      optionalFeatures: ["local-floor", "local", "hand-tracking"],
+      optionalFeatures: ["local-floor", "hand-tracking"],
     });
     expect(result.presentation.enter).toHaveBeenCalledWith(session, "immersive-vr");
     expect(result.controller.sessionInfo).toMatchObject({ overlayGranted: false, mode: "immersive-vr" });
+    await result.controller.stop();
+  });
+
+  it("starts VR when the emulator declines optional floor and hand features", async () => {
+    const session = new MockSession([]);
+    const result = setup({ session, supportedModes: ["immersive-vr"] });
+
+    await expect(result.controller.start("immersive-vr")).resolves.toMatchObject({
+      status: "active",
+      requestedFeatures: ["local-floor", "hand-tracking"],
+      grantedFeatures: [],
+    });
+    expect(result.presentation.enter).toHaveBeenCalledWith(session, "immersive-vr");
+    expect(result.controller.sessionInfo.referenceSpaceType).toBe("local");
     await result.controller.stop();
   });
 

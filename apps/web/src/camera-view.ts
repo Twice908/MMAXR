@@ -402,7 +402,11 @@ export function mountCameraView(options: CameraViewOptions): () => void {
       ".camera-view-panel, .spatial-settings-fallback, .spatial-edge-hints",
     ) !== null;
   const onCameraHudInput = (event: Event): void => {
-    if (!root.classList.contains("camera-active") || !isCameraHudTarget(event.target)) {
+    if (
+      root.classList.contains("xr-session-active") ||
+      !root.classList.contains("camera-active") ||
+      !isCameraHudTarget(event.target)
+    ) {
       return;
     }
     // Panels keep native wheel and touch scrolling; the renderer never sees these gestures.

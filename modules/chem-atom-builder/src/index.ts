@@ -227,6 +227,8 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   let spatialArControlsVisible = false;
   let spatialExitLabel = "Exit AR";
   let xrInputAdapter: InstanceType<typeof XrSessionInputAdapter> | null = null;
+  let input: ScreenInputAdapter | null = null;
+  let xrSessionActive = false;
   let spatialFailureLogged = false;
   let refreshSpatialPanels: () => void = () => undefined;
   let routeSpatialPanelAction: (inputId: string) => void = () => undefined;
@@ -349,6 +351,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     () => renderer.getDistance(),
     (distance) => renderer.setDistance(distance),
     screenZoomConfig,
+    () => !xrSessionActive,
   );
   const reducer = createAtomBuilderLearningReducer(manifest.missions, assessmentItems);
   const idGenerator = createIdGenerator({
@@ -479,6 +482,14 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     },
     recordLocalEvent: recordLocalArEvent,
     onSpatialActiveChange: (active, sessionInfo, session) => {
+      xrSessionActive = active;
+      input?.setEnabled(!active);
+      spatialSession?.setPointerEventsEnabled(!active);
+      root.classList.toggle("xr-session-active", active);
+      root.classList.toggle(
+        "xr-vr-active",
+        active && sessionInfo.mode === "immersive-vr",
+      );
       spatialExitLabel = sessionInfo.mode === "immersive-vr" ? "Exit VR" : "Exit AR";
       setSpatialPresentation(active, "ar", undefined, sessionInfo.overlayGranted ?? undefined);
       if (active && session) {
@@ -775,7 +786,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
       bounceParticle(source);
     }
   });
-  const input = new ScreenInputAdapter({
+  input = new ScreenInputAdapter({
     root,
     dispatch: onInput,
     pickTarget: (x, y, source, pointerType) => renderer.pickTarget(x, y, source, pointerType),
@@ -810,7 +821,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
 
   return () => {
     disposeZoomControls();
-    input.dispose();
+    input?.dispose();
     xrInputAdapter?.dispose();
     xrInputAdapter = null;
     unsubscribe();

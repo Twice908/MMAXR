@@ -45,4 +45,9 @@ export class ScreenInputAdapter {
   dispose(): void {
     this.manager.dispose();
   }
+
+  /** Suspend screen pointer handlers without affecting XR controller/hand input. */
+  setEnabled(enabled: boolean): void {
+    this.manager.setScreenInputEnabled(enabled);
+  }
 }

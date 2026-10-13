@@ -92,6 +92,8 @@ export interface SpatialPanelItems {
 export interface SpatialPanelSession {
   update(items: SpatialPanelItems): void;
   setExpanded(expanded: boolean): void;
+  /** Suspend browser pointer interception while an immersive session owns input. */
+  setPointerEventsEnabled(enabled: boolean): void;
   handleRay(ray: THREE.Ray, phase: "move" | "down" | "up" | "cancel", sourceId?: string): boolean;
   setHintListener(listener: ((hints: readonly SpatialPanelEdgeHint[]) => void) | null): void;
   focusPanel(key: SpatialPanelEdgeHint["key"]): void;
@@ -1265,6 +1267,7 @@ export class ScreenSceneRenderer {
         camera: viewerCamera,
         pointerTarget: arPointerTarget ?? this.canvas,
         panels: mounts,
+        enablePointerEvents: !this.arActive,
         onPanelAction: (inputId) => {
           if (inputId === "dock:previous") {
             page = Math.max(0, page - 1);
@@ -1355,6 +1358,9 @@ export class ScreenSceneRenderer {
           if (disposed) return;
           activeKey = expanded ? (activeKey ?? "mission") : "mission";
           updateDetail();
+        },
+        setPointerEventsEnabled: (enabled) => {
+          if (!disposed) panelHost.setPointerEventsEnabled(enabled);
         },
         handleRay: (ray, phase, sourceId) => panelHost.handleRay(ray, phase, sourceId),
         setHintListener: () => undefined,

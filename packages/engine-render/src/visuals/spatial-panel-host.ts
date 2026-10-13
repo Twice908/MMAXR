@@ -19,6 +19,7 @@ export interface SpatialPanelHostOptions {
   readonly pointerTarget: HTMLElement;
   readonly panels: readonly SpatialPanelMount[];
   readonly onPanelAction: (inputId: string) => void;
+  readonly enablePointerEvents?: boolean;
   readonly onPanelSelection?: (selectionId: string) => void;
   readonly shouldIgnorePointerTarget?: (target: EventTarget | null) => boolean;
 }
@@ -54,6 +55,8 @@ export function consumeSpatialPanelHit(
 export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
   update(panelId: string, state: readonly GlassPanelItem[] | GlassPanelState): void;
   setExpanded(expanded: boolean): void;
+  /** Enable or remove browser-pointer listeners without disabling XR ray input. */
+  setPointerEventsEnabled(enabled: boolean): void;
   handleRay(ray: THREE.Ray, phase: SpatialPanelPhase, sourceId?: string): boolean;
   dispose(): void;
 } {
@@ -63,15 +66,18 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
     pointerTarget,
     panels,
     onPanelAction,
+    enablePointerEvents = true,
     onPanelSelection,
     shouldIgnorePointerTarget,
   } = options;
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
   const pressed = new Map<string, PressedPanel>();
+  const capturedPointerIds = new Set<number>();
   const collapsed = new Map<GlassPanel, boolean>();
   let hovered: PanelHit | null = null;
   let disposed = false;
+  let pointerEventsEnabled = false;
 
   for (const mount of panels) {
     if (mount.position) mount.panel.object3d.position.set(mount.position.x, mount.position.y, mount.position.z);
@@ -174,6 +180,16 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
     pressed.delete(sourceId);
   };
 
+  const releaseCapturedPointer = (pointerId: number): void => {
+    if (!capturedPointerIds.delete(pointerId)) return;
+    if (
+      pointerTarget instanceof HTMLCanvasElement &&
+      pointerTarget.hasPointerCapture(pointerId)
+    ) {
+      pointerTarget.releasePointerCapture(pointerId);
+    }
+  };
+
   const screenRay = (event: PointerEvent): THREE.Ray | null => {
     const bounds = pointerTarget.getBoundingClientRect();
     if (!bounds.width || !bounds.height) return null;
@@ -198,6 +214,7 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
     if (consumed) {
       if (phase === "down" && pointerTarget instanceof HTMLCanvasElement) {
         pointerTarget.setPointerCapture(event.pointerId);
+        capturedPointerIds.add(event.pointerId);
       }
       event.preventDefault();
       event.stopPropagation();
@@ -206,13 +223,37 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
   };
   const onPointerMove = (event: PointerEvent): void => consumePointerEvent(event, "move");
   const onPointerDown = (event: PointerEvent): void => consumePointerEvent(event, "down");
-  const onPointerUp = (event: PointerEvent): void => consumePointerEvent(event, "up");
-  const onPointerCancel = (event: PointerEvent): void => consumePointerEvent(event, "cancel");
+  const onPointerUp = (event: PointerEvent): void => {
+    consumePointerEvent(event, "up");
+    releaseCapturedPointer(event.pointerId);
+  };
+  const onPointerCancel = (event: PointerEvent): void => {
+    consumePointerEvent(event, "cancel");
+    releaseCapturedPointer(event.pointerId);
+  };
 
-  pointerTarget.addEventListener("pointermove", onPointerMove, true);
-  pointerTarget.addEventListener("pointerdown", onPointerDown, true);
-  pointerTarget.addEventListener("pointerup", onPointerUp, true);
-  pointerTarget.addEventListener("pointercancel", onPointerCancel, true);
+  const setPointerEventsEnabled = (enabled: boolean): void => {
+    if (disposed || pointerEventsEnabled === enabled) return;
+    pointerEventsEnabled = enabled;
+    if (!enabled) {
+      for (const pointerId of capturedPointerIds) {
+        clearPressed(`pointer:${pointerId}`);
+        releaseCapturedPointer(pointerId);
+      }
+    }
+    if (enabled) {
+      pointerTarget.addEventListener("pointermove", onPointerMove, true);
+      pointerTarget.addEventListener("pointerdown", onPointerDown, true);
+      pointerTarget.addEventListener("pointerup", onPointerUp, true);
+      pointerTarget.addEventListener("pointercancel", onPointerCancel, true);
+    } else {
+      pointerTarget.removeEventListener("pointermove", onPointerMove, true);
+      pointerTarget.removeEventListener("pointerdown", onPointerDown, true);
+      pointerTarget.removeEventListener("pointerup", onPointerUp, true);
+      pointerTarget.removeEventListener("pointercancel", onPointerCancel, true);
+    }
+  };
+  setPointerEventsEnabled(enablePointerEvents);
 
   return {
     update(panelId, state) {
@@ -224,17 +265,15 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
         setPanelCollapsed(mount, !expanded);
       }
     },
+    setPointerEventsEnabled,
     handleRay(ray, phase, sourceId = "xr:primary") {
       if (disposed) return false;
       return routeHit(panelForRay(ray), phase, sourceId, () => undefined);
     },
     dispose() {
       if (disposed) return;
+      setPointerEventsEnabled(false);
       disposed = true;
-      pointerTarget.removeEventListener("pointermove", onPointerMove, true);
-      pointerTarget.removeEventListener("pointerdown", onPointerDown, true);
-      pointerTarget.removeEventListener("pointerup", onPointerUp, true);
-      pointerTarget.removeEventListener("pointercancel", onPointerCancel, true);
       for (const mount of panels) {
         group.remove(mount.panel.object3d);
         mount.panel.dispose();

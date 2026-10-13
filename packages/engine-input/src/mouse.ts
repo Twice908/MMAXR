@@ -6,6 +6,7 @@ export interface MouseInputOptions extends PointerAdapterOptions {
 
 export class MouseInputAdapter extends PointerAdapterBase {
   private readonly rotateSensitivity: number;
+  private enabled = true;
   private active = false;
   private target: string | null = null;
   private traySource: string | null = null;
@@ -32,7 +33,17 @@ export class MouseInputAdapter extends PointerAdapterBase {
     super.dispose();
   }
 
+  setEnabled(enabled: boolean): void {
+    this.enabled = enabled;
+    if (!enabled) {
+      this.active = false;
+      this.target = null;
+      this.traySource = null;
+    }
+  }
+
   private readonly onDown = (event: MouseEvent): void => {
+    if (!this.enabled) return;
     if (event.button !== 0) return;
     this.active = true;
     this.x = event.clientX;
@@ -68,6 +79,7 @@ export class MouseInputAdapter extends PointerAdapterBase {
   };
 
   private readonly onMove = (event: MouseEvent): void => {
+    if (!this.enabled) return;
     const target = this.pickTarget(
       event.clientX,
       event.clientY,
@@ -116,6 +128,7 @@ export class MouseInputAdapter extends PointerAdapterBase {
   };
 
   private readonly onUp = (event: MouseEvent): void => {
+    if (!this.enabled) return;
     if (event.button !== 0) return;
     if (this.traySource) {
       const target = this.pickTarget(
@@ -145,6 +158,7 @@ export class MouseInputAdapter extends PointerAdapterBase {
   };
 
   private readonly onLeave = (): void => {
+    if (!this.enabled) return;
     if (this.active && this.traySource) {
       this.dispatcher.emit({
         type: "release",
@@ -162,6 +176,7 @@ export class MouseInputAdapter extends PointerAdapterBase {
   };
 
   private readonly onContextMenu = (event: MouseEvent): void => {
+    if (!this.enabled) return;
     event.preventDefault();
   };
 }
