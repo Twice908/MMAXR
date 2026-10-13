@@ -66,7 +66,10 @@ export function layoutPanel(
   for (const item of items) {
     const fontSizePx = Math.max(minText, item.fontSizePx ?? defaultFontSize(item.kind));
     const height = item.kind === "button" || item.kind === "toggle"
-      ? Math.max(44, fontSizePx + Number.parseFloat(tokens.padControl.split(" ")[0]!) * 2)
+      ? Math.max(
+          spatialLayout.minControlSizePx,
+          fontSizePx + Number.parseFloat(tokens.padControl.split(" ")[0]!) * 2,
+        )
       : Math.max(fontSizePx * 1.45, item.kind === "heading" ? 30 : 26);
     if (y + height > size.height - pad) {
       break;
@@ -125,6 +128,6 @@ function defaultFontSize(kind: GlassPanelItem["kind"]): number {
     case "text":
     case "button":
     case "toggle":
-      return spatialLayout.minTextSizePx;
+      return Math.max(18, spatialLayout.minTextSizePx);
   }
 }

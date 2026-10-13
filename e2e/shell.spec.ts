@@ -1362,10 +1362,19 @@ async function installMockXr(page: import("@playwright/test").Page): Promise<voi
     };
     const frame = {
       getViewerPose: () => ({
+        transform: {
+          matrix: viewerMatrix(),
+          position: { x: cameraX, y: cameraY, z: cameraZ },
+          orientation: { x: 0, y: 0, z: 0, w: 1 },
+        },
         views: [{
           eye: "none",
           projectionMatrix: identityMatrix(),
-          transform: { matrix: viewerMatrix() },
+          transform: {
+            matrix: viewerMatrix(),
+            position: { x: cameraX, y: cameraY, z: cameraZ },
+            orientation: { x: 0, y: 0, z: 0, w: 1 },
+          },
         }],
       }),
     };

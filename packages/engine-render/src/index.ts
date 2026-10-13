@@ -52,6 +52,7 @@ export {
 export {
   ScreenSceneRenderer,
   calculateArViewerPlacement,
+  resolveArFramePlacement,
   clampArPlacementDistance,
   hasArHitTest,
   moveArPlacement,
@@ -62,6 +63,7 @@ export {
   setScreenRendererTransparentBackground,
   type ArRenderDiagnostics,
   type ArPlacementTransform,
+  type ArFramePlacement,
   type ArViewerPose,
   type ArViewGesture,
   type ArViewTransform,
@@ -79,8 +81,16 @@ export {
   type SpatialPanelEdgeHint,
   type SpatialPanelItems,
   type SpatialPanelSession,
+  readXrViewerPose,
+  type XrSceneDiagnostics,
+  type XrViewerPoseFrame,
 } from "./screen-renderer.js";
-export { spatialLayout, type SpatialLayout, type SpatialPanelLayout } from "./spatial-layout.js";
+export {
+  spatialLayout,
+  validateSpatialDockProfile,
+  type SpatialDockProfile,
+  type SpatialLayout,
+} from "./spatial-layout.js";
 export {
   createGlassPanel,
   type CreateGlassPanelOptions,
@@ -107,7 +117,14 @@ export {
   type SpatialPanelPhase,
 } from "./visuals/spatial-panel-host.js";
 export {
-  calculateSpatialPanelPlacements,
+  calculateSpatialDockLayout,
+  pixelsPerMeterAtDepth,
+  profileSettings,
+  spatialDockOrientation,
+  gravityAlignedQuaternion,
+  selectSpatialPresentationProfile,
+  toggleSpatialDockSelection,
   type SpatialPanelKey,
-  type SpatialPanelPlacement,
+  type SpatialDockLayout,
+  type SpatialPresentationProfile,
 } from "./visuals/spatial-placement.js";

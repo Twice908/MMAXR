@@ -10,6 +10,7 @@ export interface SpatialPanelMount {
   readonly quaternion?: THREE.Quaternion;
   readonly scale?: number;
   readonly collapsible?: boolean;
+  readonly selectionId?: string;
 }
 
 export interface SpatialPanelHostOptions {
@@ -18,6 +19,7 @@ export interface SpatialPanelHostOptions {
   readonly pointerTarget: HTMLElement;
   readonly panels: readonly SpatialPanelMount[];
   readonly onPanelAction: (inputId: string) => void;
+  readonly onPanelSelection?: (selectionId: string) => void;
   readonly shouldIgnorePointerTarget?: (target: EventTarget | null) => boolean;
 }
 
@@ -61,6 +63,7 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
     pointerTarget,
     panels,
     onPanelAction,
+    onPanelSelection,
     shouldIgnorePointerTarget,
   } = options;
   const raycaster = new THREE.Raycaster();
@@ -145,6 +148,12 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
         previous.inputId === hit.inputId
       ) {
         onPanelAction(hit.inputId);
+      } else if (
+        previous?.mount === hit.mount &&
+        previous.mount.selectionId &&
+        previous.mount === hit.mount
+      ) {
+        onPanelSelection?.(previous.mount.selectionId);
       } else if (
         previous?.mount === hit.mount &&
         previous.headerHit &&

@@ -9,6 +9,7 @@ import {
   type ArSessionHandle,
   type ArSessionRuntimeInfo,
 } from "@mma/engine-xr";
+import type { XrSceneDiagnostics } from "@mma/engine-render";
 import { arTelemetryEventSchema } from "@mma/schema";
 
 export interface ArControlsOptions {
@@ -41,12 +42,38 @@ export interface XrDiagnosticsData {
   readonly inputSourceTypes: readonly string[];
   readonly referenceSpaceType: string | null;
   readonly frameRate: number | null;
+  readonly scene: XrSceneDiagnostics;
   readonly lastErrorMessage?: string | null;
   readonly lastErrorStack?: string | null;
 }
 
+function formatPosition(position: Readonly<{ x: number; y: number; z: number }> | null): string {
+  return position
+    ? `(${position.x.toFixed(3)}, ${position.y.toFixed(3)}, ${position.z.toFixed(3)})`
+    : "unavailable";
+}
+
+function formatPose(pose: XrSceneDiagnostics["latestFramePose"]): string {
+  if (!pose) return "unavailable";
+  const { orientation } = pose;
+  return `position ${formatPosition(pose.position)}, orientation (${
+    [orientation.x, orientation.y, orientation.z, orientation.w]
+      .map((value) => value.toFixed(3))
+      .join(", ")
+  })`;
+}
+
 /** Build a PII-free, copyable XR support and session report. */
 export function buildXrDiagnosticsText(data: XrDiagnosticsData): string {
+  const scene = data.scene;
+  const framebuffer = scene.framebufferSize
+    ? `${scene.framebufferSize.width} x ${scene.framebufferSize.height}`
+    : "unavailable";
+  const atomViewerSpace = scene.atomViewerSpace
+    ? `${scene.atomViewerSpace.distanceMeters.toFixed(3)} m, direction ${
+      formatPosition(scene.atomViewerSpace.direction)
+    }`
+    : "unavailable";
   return [
     `Supported session modes: ${data.supportedModes.join(", ") || "none"}`,
     `Requested features: ${data.requestedFeatures.join(", ") || "none"}`,
@@ -57,6 +84,21 @@ export function buildXrDiagnosticsText(data: XrDiagnosticsData): string {
     `Input sources: ${data.inputSourceTypes.join(", ") || "none"}`,
     `Reference space: ${data.referenceSpaceType ?? "unavailable"}`,
     `Frame rate: ${data.frameRate === null ? "unavailable" : `${data.frameRate} Hz`}`,
+    `Scene session mode: ${scene.sessionMode ?? "unavailable"}`,
+    `Renderer reference space actually used: ${scene.referenceSpaceType ?? "unavailable"} (ready: ${scene.referenceSpaceReady ? "yes" : "no"})`,
+    `First frame pose was null: ${scene.firstFramePoseWasNull === null ? "unknown" : scene.firstFramePoseWasNull ? "yes" : "no"}`,
+    `First non-null viewer pose: ${formatPose(scene.firstNonNullViewerPose)}`,
+    `Latest frame viewer pose: ${formatPose(scene.latestFramePose)}`,
+    `Atom world position: ${formatPosition(scene.atomWorldPosition)}`,
+    `Dock/panel group world position: ${formatPosition(scene.panelGroupWorldPosition)}`,
+    `Atom in viewer space: ${atomViewerSpace}`,
+    `Atom position inside view frustum: ${scene.atomInsideViewFrustum === null ? "unknown" : scene.atomInsideViewFrustum ? "yes" : "no"}`,
+    `renderer.xr.isPresenting: ${scene.rendererPresenting ? "yes" : "no"}`,
+    `XR base layer framebuffer: ${framebuffer}`,
+    `Frames rendered since start: ${scene.framesRendered}`,
+    `View count: ${scene.viewCount ?? "unavailable"}`,
+    `VR environment present: ${scene.environmentPresent ? "yes" : "no"}`,
+    `Scene object issues: ${scene.sceneIssues.join("; ") || "none"}`,
     `Last XR error: ${data.lastErrorMessage || "none"}`,
     `Last XR error stack:\n${data.lastErrorStack || "unavailable"}`,
   ].join("\n");
@@ -314,6 +356,7 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
       inputSourceTypes: latestSessionInfo?.inputSourceTypes ?? [],
       referenceSpaceType: latestSessionInfo?.referenceSpaceType ?? null,
       frameRate: latestSessionInfo?.frameRate ?? null,
+      scene: renderer.getXrSceneDiagnostics(),
       lastErrorMessage: lastXrErrorMessage,
       lastErrorStack: lastXrErrorStack,
     });

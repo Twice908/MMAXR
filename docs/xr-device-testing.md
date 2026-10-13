@@ -63,10 +63,15 @@ then reload the deployed HTTPS page. Do not assume passthrough is available.
 ## Capturing XR startup errors
 
 Append `?xrdebug=1` to the page URL to show the XR diagnostics report on the
-device. If session startup fails, the report includes the last error message
-and stack, with common personal identifiers redacted. Copy the report before
-reloading; startup failures also return to screen mode and the short status
-message dismisses automatically.
+device. The copyable report includes the session mode and renderer reference
+space, first/latest viewer poses, atom and panel-group world positions, the
+atom's viewer-space distance/direction and frustum result, first-frame null-pose
+status, renderer/layer/frame/view facts, VR environment presence, and objects
+with hidden, zero-scale, or non-finite transforms. A hidden reticle is normal
+while surface placement is inactive. If session startup fails, it also includes
+the last error message and stack, with common personal identifiers redacted.
+Copy the report before reloading; startup failures also return to screen mode
+and the short status message dismisses automatically.
 
 ## Manual run log
 

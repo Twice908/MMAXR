@@ -32,12 +32,8 @@ existing breakpoints and dimensions, not suggested overrides.
   Settings button above the settings scrim so it can close the sheet.
 - **Bottom bar:** the collapsed lesson/camera panel is anchored to the bottom
   safe area. Its control says “Expand panels” or “Collapse panels” according
-  to state; initial state stays collapsed.
-- **Edge hints:** 36px circles only in the open band between top controls and
-  the bottom panel/sheet. Keep their full 36px bounds inside at least
-  `max(36px, safe-area-inset + 8px)` margins; hide a hint when it collides with a control
-  or no clear placement remains. The implementation is in `spatial-hints.ts`
-  and `index.ts`.
+  to state; the dock keeps Mission open by default.
+- **Edge hints:** disabled for the dock; all five cards are in one paged row.
 - **Settings sheet:** a two-column, scrollable sheet capped at 40dvh; controls
   use the 44px glass tap target and 16px text. Sound, captions, and speed use
   existing narration actions and speed-change handling. The scrim, Close, or
@@ -67,49 +63,43 @@ then a modal in the browser's dialog top layer. `camera-view.css`,
 - Canvas spatial tokens mirror `spatial-tokens.css`: 22px panel padding,
   17px sidebar padding, 10px 14px control padding, 18px layout gap, 22px
   sidebar gap, and 8px control gap.
-- Spatial body text is at least 18 CSS-pixel-equivalent units in
-  `spatial-layout.ts`/`panel-layout.ts`; spatial interactive rectangles are at
-  least 44 canvas pixels high. DOM sheet text is 16px and its buttons are at
-  least 44 CSS pixels high. The code does not define a physical-metre
-  conversion for screen-pixel hit targets.
+- Spatial dock text is at least 16 CSS-pixel-equivalent units, with interactive
+  rectangles at least 44px in both dimensions. DOM sheet text is 16px and its
+  buttons are at least 44 CSS pixels high.
 
-## Spatial panel slots
+## Spatial dock row
 
-Positions are panel centres relative to the atom origin, in metres; dimensions
-are width × height, also metres. Collapsed sizes are shown as width × height.
-All panels face the viewer.
+AR, camera view, and VR use one viewer-facing dock below the atom. Its compact
+cards are ordered Mission, Particles, Element, Narration, Settings. Mission is
+open initially; selecting a card opens its detail directly above the row, and
+selecting it again (or the open detail) closes it. At most one detail is open.
+On narrow viewports, the dock pages horizontally using 44px arrow targets
+instead of shrinking cards. DOM Exit, Reset view, Settings, and the bottom
+bar remain separate controls.
 
-| Slot | Position (m) | Expanded (m) | Collapsed (m) | Collapsible |
-|---|---:|---:|---:|---|
-| Mission | (0, 0.37, -0.15) | 0.55 × 0.16 | 0.55 × 0.16 | No |
-| Particles | (-0.36, 0, -0.15) | 0.28 × 0.38 | 0.28 × 0.11 | Yes |
-| Element info | (0.36, 0, -0.15) | 0.28 × 0.38 | 0.28 × 0.11 | Yes |
-| Narration | (0, -0.37, -0.15) | 0.50 × 0.16 | 0.50 × 0.11 | Yes |
-| AR controls | (0, -0.62, -0.4) | 0.58 × 0.20 | 0.58 × 0.20 | No |
-| Diagnostics | (-0.6, -0.42, -0.28) | 0.72 × 0.82 | 0.72 × 0.82 | No |
-| Settings | (0.5, -0.57, -0.15) | 0.34 × 0.66 | 0.34 × 0.11 | Yes |
+The row is sized in CSS-pixel-equivalent units, then converted to metres using
+the view projection at the dock depth:
 
-`spatial-layout.ts` is the shared slot source; `screen-renderer.ts` registers
-the slot keys and their collapsibility, while a module supplies the content
-items through `spatial-panels.ts`-style builders. There is no per-module
-manifest for spatial slots today. A new slot therefore requires an intentional
-engine layout/type and renderer registration change as well as module content;
-do not silently redefine a shared slot.
+`pixelsPerMeter = viewportHeight * projectionY / (2 * distanceMeters)`
 
-## Collapse and expand rules
+where `projectionY` is the vertical projection-matrix scale (equivalently,
+`1 / tan(verticalFov / 2)`). Width is capped at 92% of the viewport. Card and
+pager targets are at least 44px, and panel text is at least 16px in compact and
+detail views. A 10%-top/14%-bottom safe band reserves space for overlay
+controls. Handheld AR and camera view use the 0.75m profile; world-space
+headsets use the 1m profile and a gentler 15-degree downward arc. Both
+parameter sets and their validation live in `spatial-layout.ts`.
 
-The mission, AR controls, and diagnostics are fixed-size/non-collapsible.
-Particles, element info, narration, and settings have declared collapsed
-dimensions. The lesson/camera DOM bar begins collapsed and uses the
-state-aware Expand/Collapse label. Keep that default when adding controls.
+The module continues to supply the same content items and action ids through
+`spatial-panels.ts`; the renderer changes only their presentation. The dock is
+view-only and does not change learning state directly.
 
 ## Handheld, headset, and orientation
 
-Handheld layouts use safe-area insets, phone-sized controls, and portrait scale
-0.82; landscape uses scale 1. Headsets use the viewer-facing spatial panels and
-do not depend on the phone DOM settings sheet. Camera view remains a DOM
-overlay and screen-mode fallback. The scale and viewer-relative placement are
-from `spatial-layout.ts` and `visuals/spatial-placement.ts`.
+The dock is upright and yaw-aligned to the viewer (no pitch or roll). Handheld
+AR/camera uses the phone-distance profile; headsets use the 1m arc profile.
+Camera view continues to use local video and screen input. Ordinary desktop
+and Android screen mode retain their existing layout.
 
 ## Do and do not
 
@@ -117,16 +107,16 @@ from `spatial-layout.ts` and `visuals/spatial-placement.ts`.
   panels.
 - Do reserve safe areas and keep 44px DOM targets / 44 canvas-pixel spatial
   controls.
-- Do keep content in the declared spatial slots and preserve the screen
+- Do keep the five dock cards in their declared order and preserve the screen
   fallback.
-- Do not overlap hints with controls, hide a collapsed default, or add new
-  slots by hard-coding a transform in a module.
+- Do not hide the default Mission detail or add dock cards by hard-coding a
+  transform in a module.
 - Do not assume headset APIs, camera access, or backdrop-filter support.
 
 ## Before adding a block
 
 1. Identify its screen-mode fallback and the existing screen/AR/camera zone.
-2. Reuse a declared slot or request an engine-level slot change.
+2. Reuse the dock card model or request an engine-level layout change.
 3. Check safe-area, top/bottom control, hint, sheet, and modal collisions in
    portrait and landscape.
 4. Use existing tokens, readable text, and minimum target dimensions.

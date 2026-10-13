@@ -24,9 +24,13 @@ export interface CreateGlassPanelOptions {
   readonly id: string;
   readonly widthM: number;
   readonly heightM: number;
+  readonly pixelWidth?: number;
+  /** Canvas padding for dense compact cards or full-surface controls. */
+  readonly contentPaddingPx?: number;
   readonly collapsedHeightM?: number;
   readonly surface: "uniform" | "framed";
   readonly title?: string;
+  readonly compactTitle?: string;
   readonly items: readonly GlassPanelItem[];
   readonly collapsed?: boolean;
 }
@@ -46,8 +50,9 @@ export function panelTextureDimensions(
   expandedHeightM: number,
   collapsedHeightM: number,
   collapsed: boolean,
+  pixelWidth = CANVAS_WIDTH,
 ): Readonly<{ width: number; height: number }> {
-  const width = Math.round(CANVAS_WIDTH * Math.min(MAX_PIXEL_RATIO, 1));
+  const width = Math.round(THREE.MathUtils.clamp(pixelWidth, 64, CANVAS_WIDTH));
   const displayedHeight = collapsed ? collapsedHeightM : expandedHeightM;
   return {
     width,
@@ -63,7 +68,9 @@ export function createGlassPanel(options: CreateGlassPanelOptions): GlassPanel {
 
   const aspect = options.heightM / options.widthM;
   const pixelRatio = Math.min(MAX_PIXEL_RATIO, 1);
-  const canvasWidth = Math.round(CANVAS_WIDTH * pixelRatio);
+  const canvasWidth = Math.round(
+    THREE.MathUtils.clamp(options.pixelWidth ?? CANVAS_WIDTH, 64, CANVAS_WIDTH) * pixelRatio,
+  );
   const canvasHeight = Math.min(MAX_CANVAS_HEIGHT, Math.max(1, Math.round(canvasWidth * aspect)));
   const canvas = document.createElement("canvas");
   canvas.width = canvasWidth;
@@ -101,7 +108,7 @@ export function createGlassPanel(options: CreateGlassPanelOptions): GlassPanel {
   const expandedHeight = options.heightM;
   const compactHeight = Math.min(
     expandedHeight,
-    options.collapsedHeightM ?? spatialLayout.particles.collapsedSize.height,
+    options.collapsedHeightM ?? 0.11,
   );
   const disposeResources = (): void => {
     if (disposed) return;
@@ -113,7 +120,10 @@ export function createGlassPanel(options: CreateGlassPanelOptions): GlassPanel {
 
   const compactItems = (heightPx: number): readonly GlassPanelItem[] => {
     const activeItems = displayItems();
-    const titleText = options.title ?? activeItems.find((item) => item.kind === "heading")?.text ?? "";
+    const titleText = options.compactTitle ??
+      options.title ??
+      activeItems.find((item) => item.kind === "heading")?.text ??
+      "";
     const summaryText = activeItems.find((item) => item.kind === "text")?.text
       ?? activeItems.find((item) => item.kind !== "heading")?.text
       ?? "";
@@ -137,11 +147,24 @@ export function createGlassPanel(options: CreateGlassPanelOptions): GlassPanel {
       expandedHeight,
       compactHeight,
       collapsed,
+      canvasWidth,
     ).height;
     if (canvas.height !== height) canvas.height = height;
     context.clearRect(0, 0, canvas.width, canvas.height);
     const drawnItems = collapsed ? compactItems(canvas.height) : displayItems();
-    rects = layoutPanel(drawnItems, { width: canvas.width, height: canvas.height });
+    const panelTokens = options.contentPaddingPx === undefined
+      ? spatialTokens
+      : { ...spatialTokens, padPanel: `${options.contentPaddingPx}px` };
+    const compactTokens = {
+      ...panelTokens,
+      padPanel: `${Math.min(options.contentPaddingPx ?? 6, 6)}px`,
+      gapControl: "3px",
+    };
+    rects = layoutPanel(
+      drawnItems,
+      { width: canvas.width, height: canvas.height },
+      collapsed ? compactTokens : panelTokens,
+    );
     drawSurface(context, canvas.width, canvas.height, options.surface);
     drawItems(context, rects, toggles, hoveredInputId, pressedInputId);
     texture.needsUpdate = true;
