@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import type { InputAction } from "@mma/engine-input";
 import type { GlassPanel, GlassPanelState } from "./glass-panel.js";
 import type { GlassPanelItem } from "./panel-layout.js";
 
@@ -22,6 +23,8 @@ export interface SpatialPanelHostOptions {
   readonly enablePointerEvents?: boolean;
   readonly onPanelSelection?: (selectionId: string) => void;
   readonly shouldIgnorePointerTarget?: (target: EventTarget | null) => boolean;
+  /** Receive the shared action vocabulary for particle-token ray gestures. */
+  readonly onSpatialInput?: (action: InputAction) => void;
 }
 
 interface PanelHit {
@@ -69,11 +72,13 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
     enablePointerEvents = true,
     onPanelSelection,
     shouldIgnorePointerTarget,
+    onSpatialInput,
   } = options;
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
   const pressed = new Map<string, PressedPanel>();
   const capturedPointerIds = new Set<number>();
+  const particleDrags = new Map<string, string>();
   const collapsed = new Map<GlassPanel, boolean>();
   let hovered: PanelHit | null = null;
   let disposed = false;
@@ -134,10 +139,23 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
     if (!hit) {
       if (phase === "move") updateHover(null);
       if (phase === "cancel" || phase === "up") clearPressed(sourceId);
+      const draggingParticle = particleDrags.get(sourceId);
+      if (draggingParticle) {
+        dispatchParticleDrag(phase, draggingParticle, sourceId, raycaster.ray);
+        if (phase === "up" || phase === "cancel") particleDrags.delete(sourceId);
+        return true;
+      }
       return false;
     }
 
-    if (phase === "move") updateHover(hit);
+    if (phase === "move") {
+      updateHover(hit);
+      const draggingParticle = particleDrags.get(sourceId);
+      if (draggingParticle) {
+        dispatchParticleDrag("move", draggingParticle, sourceId, raycaster.ray);
+        return true;
+      }
+    }
     if (phase === "down") {
       pressed.set(sourceId, {
         mount: hit.mount,
@@ -145,10 +163,19 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
         headerHit: hit.uv.y >= 0.78,
       });
       if (hit.inputId) hit.mount.panel.update({ pressedInputId: hit.inputId });
+      const particle = particleForToken(hit.inputId);
+      if (particle) {
+        particleDrags.set(sourceId, particle);
+        dispatchParticleDrag("down", particle, sourceId, raycaster.ray);
+      }
     } else if (phase === "up") {
       const previous = pressed.get(sourceId);
       clearPressed(sourceId);
-      if (
+      const draggingParticle = particleDrags.get(sourceId);
+      if (draggingParticle) {
+        dispatchParticleDrag("up", draggingParticle, sourceId, raycaster.ray);
+        particleDrags.delete(sourceId);
+      } else if (
         previous?.mount === hit.mount &&
         previous.inputId !== null &&
         previous.inputId === hit.inputId
@@ -170,8 +197,52 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
       }
     } else if (phase === "cancel") {
       clearPressed(sourceId);
+      const draggingParticle = particleDrags.get(sourceId);
+      if (draggingParticle) {
+        dispatchParticleDrag("cancel", draggingParticle, sourceId, raycaster.ray);
+        particleDrags.delete(sourceId);
+      }
     }
-    return consumed;
+    return consumed || particleDrags.has(sourceId);
+  };
+
+  const dispatchParticleDrag = (
+    phase: SpatialPanelPhase,
+    particle: string,
+    sourceId: string,
+    ray: THREE.Ray,
+  ): void => {
+    const rayPayload = {
+      rayOriginX: ray.origin.x,
+      rayOriginY: ray.origin.y,
+      rayOriginZ: ray.origin.z,
+      rayDirectionX: ray.direction.x,
+      rayDirectionY: ray.direction.y,
+      rayDirectionZ: ray.direction.z,
+    };
+    const source = `tray:${particle}`;
+    if (phase === "down") {
+      onSpatialInput?.({
+        type: "grab",
+        payload: { source, sourceId, spatialParticleDrag: true, ...rayPayload },
+      });
+    } else if (phase === "move") {
+      onSpatialInput?.({
+        type: "move",
+        payload: { source, sourceId, spatialParticleDrag: true, ...rayPayload },
+      });
+    } else {
+      onSpatialInput?.({
+        type: "release",
+        payload: {
+          source,
+          sourceId,
+          spatialParticleDrag: true,
+          cancelled: phase === "cancel",
+          ...rayPayload,
+        },
+      });
+    }
   };
 
   const clearPressed = (sourceId: string): void => {
@@ -183,7 +254,7 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
   const releaseCapturedPointer = (pointerId: number): void => {
     if (!capturedPointerIds.delete(pointerId)) return;
     if (
-      pointerTarget instanceof HTMLCanvasElement &&
+      "hasPointerCapture" in pointerTarget &&
       pointerTarget.hasPointerCapture(pointerId)
     ) {
       pointerTarget.releasePointerCapture(pointerId);
@@ -212,7 +283,7 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
       () => undefined,
     );
     if (consumed) {
-      if (phase === "down" && pointerTarget instanceof HTMLCanvasElement) {
+      if (phase === "down" && "setPointerCapture" in pointerTarget) {
         pointerTarget.setPointerCapture(event.pointerId);
         capturedPointerIds.add(event.pointerId);
       }
@@ -239,6 +310,11 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
       for (const pointerId of capturedPointerIds) {
         clearPressed(`pointer:${pointerId}`);
         releaseCapturedPointer(pointerId);
+      }
+      for (const [sourceId, particle] of particleDrags) {
+        if (!sourceId.startsWith("pointer:")) continue;
+        dispatchParticleDrag("cancel", particle, sourceId, new THREE.Ray());
+        particleDrags.delete(sourceId);
       }
     }
     if (enabled) {
@@ -272,6 +348,10 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
     },
     dispose() {
       if (disposed) return;
+      for (const [sourceId, particle] of particleDrags) {
+        dispatchParticleDrag("cancel", particle, sourceId, new THREE.Ray());
+      }
+      particleDrags.clear();
       setPointerEventsEnabled(false);
       disposed = true;
       for (const mount of panels) {
@@ -283,4 +363,9 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
       hovered = null;
     },
   };
+}
+
+function particleForToken(inputId: string | null): string | null {
+  const match = /^particle:token:(proton|neutron|electron)$/.exec(inputId ?? "");
+  return match?.[1] ?? null;
 }

@@ -138,22 +138,24 @@ describe("emulated immersive XR frame lifecycle", () => {
         800,
         viewer.projectionMatrix.elements[5]!,
         "headset",
+        true,
       );
       const dockProfile = profileSettings("headset");
       expect(dock.keys).toHaveLength(5);
       const leftEdge = -dock.rowWidthPx / 2;
       const verticalDrop = Math.tan(dockProfile.downAngleRadians) * dockProfile.distanceMeters;
       for (let index = 0; index < dock.keys.length; index += 1) {
-        const xPixels = leftEdge + (index + 0.5) *
-          (dockProfile.cardWidthPx + dockProfile.gapPx);
+        const xPixels = leftEdge + (index + 0.5) * dock.tabWidthPx;
         const cardCenter = new THREE.Vector3(
           xPixels / dock.pixelsPerMeter,
-          1.6 - verticalDrop - dockProfile.gapPx / dock.pixelsPerMeter,
+          1.6 - verticalDrop,
           -dockProfile.distanceMeters,
         );
         expect(cardCenter.z).toBeLessThan(0);
         expect(frustum.containsPoint(cardCenter)).toBe(true);
       }
+      expect(dock.rowWidthPx).toBeLessThanOrEqual(1280 * 0.92);
+      expect(dock.tabWidthPx).toBeGreaterThanOrEqual(48);
       expect(drawnEnvironmentObjects).toEqual(expect.arrayContaining([
         "vr-gradient-sky",
         "vr-dim-grid-floor",

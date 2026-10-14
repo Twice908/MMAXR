@@ -5,8 +5,13 @@ come from `modules/chem-atom-builder/src/atom-builder.css`,
 `apps/web/src/camera-view.css`,
 `modules/chem-atom-builder/src/glass-tokens.css`,
 `modules/chem-atom-builder/src/spatial-tokens.css`,
+`modules/chem-atom-builder/src/horizon-tokens.css`,
 `packages/engine-render/src/spatial-layout.ts`, and
 `packages/engine-render/src/visuals/panel-layout.ts`.
+
+Before changing AR/VR/MR/XR UI, read [docs/horizon-ui.md](./horizon-ui.md)
+and use its Meta Horizon OS UI Set components and verified tokens. Do not
+infer kit dimensions or visual styles.
 
 ## Principles
 
@@ -28,18 +33,21 @@ existing breakpoints and dimensions, not suggested overrides.
 
 ## AR and camera DOM overlay zones
 
+- XR-facing in-scene UI uses Horizon OS UI Set components and values from
+  [horizon-ui.md](./horizon-ui.md); the 2D screen-mode UI is unchanged.
 - **Top controls:** safe-area-inset-aware exit and Settings buttons. Keep the
   Settings button above the settings scrim so it can close the sheet.
 - **Bottom bar:** the collapsed lesson/camera panel is anchored to the bottom
   safe area. Its control says “Expand panels” or “Collapse panels” according
   to state; the dock keeps Mission open by default.
-- **Edge hints:** disabled for the dock; all five cards are in one paged row.
+- **Edge hints:** disabled for the dock; all four/five tabs are in one row.
 - **Settings sheet:** a two-column, scrollable sheet capped at 40dvh; controls
-  use the 44px glass tap target and 16px text. Sound, captions, and speed use
-  existing narration actions and speed-change handling. The scrim, Close, or
-  Settings closes it.
+  use at least the kit's 48 dp hit target and 16 CSS px handheld body-text
+  floor. The floor supports readability for world-anchored text viewed on a
+  phone. Sound, captions, and speed use existing narration actions and
+  speed-change handling. The scrim, Close, or Settings closes it.
 - **Modal:** near-opaque white (0.97 alpha) surface, dark blurred backdrop, and
-  visible 48px minimum action buttons. Keep dialog content and actions inside
+  visible 48 dp minimum action targets. Keep dialog content and actions inside
   the viewport.
 - **Toast/status:** status copy is brief, auto-dismisses, and on phone sits
   above the panel/control region rather than over particle controls.
@@ -58,24 +66,35 @@ then a modal in the browser's dialog top layer. `camera-view.css`,
 ## Spacing, type, and hit targets
 
 - DOM glass spacing: panel padding 14px, pill padding 4px 12px, panel radius
-  16px, button radius 12px, and 44px minimum tap target from
-  `glass-tokens.css`. Sheet groups add an 8px local gap.
+  16px, button radius 12px, and a legacy minimum tap target from
+  `glass-tokens.css`. For XR-facing UI this is superseded by the kit's 48 dp
+  minimum (60 dp for primary controls with hand tracking). Sheet groups add an
+  8px local gap; see [horizon-ui.md](./horizon-ui.md) for kit typography.
 - Canvas spatial tokens mirror `spatial-tokens.css`: 22px panel padding,
   17px sidebar padding, 10px 14px control padding, 18px layout gap, 22px
   sidebar gap, and 8px control gap.
-- Spatial dock text is at least 16 CSS-pixel-equivalent units, with interactive
-  rectangles at least 44px in both dimensions. DOM sheet text is 16px and its
-  buttons are at least 44 CSS pixels high.
+- Spatial dock text uses the kit type scale, with interactive rectangles at
+  least 48 dp in both dimensions; primary controls with hand tracking are at
+  least 60 dp. Keep a 16 CSS px body-text floor for handheld world-anchored
+  text because it is viewed at a phone's distance.
 
 ## Spatial dock row
 
-AR, camera view, and VR use one viewer-facing dock below the atom. Its compact
-cards are ordered Mission, Particles, Element, Narration, Settings. Mission is
-open initially; selecting a card opens its detail directly above the row, and
-selecting it again (or the open detail) closes it. At most one detail is open.
-On narrow viewports, the dock pages horizontally using 44px arrow targets
-instead of shrinking cards. DOM Exit, Reset view, Settings, and the bottom
-bar remain separate controls.
+AR, camera view, and VR use one viewer-facing dock, independent of atom
+placement. It has one row of equal-width tabs: Mission, Particles, Element,
+Sound; Settings is appended only if the DOM overlay is unavailable. All tabs
+are visible at once, with row width capped at 92% of the visible viewport.
+Mission is selected initially. Tapping a tab selects its detail; tapping the
+selected tab collapses the detail. Particles and Element remain available in
+free play. A tooltip-style hint, “Tap a tab to open it. Open Particles to build
+the atom.”, is shown until the first tab tap.
+
+The one open detail is a Card on a Panel surface, directly above the tabs,
+with the same width as the row and height capped at 38% of the visible height.
+Mission controls use a 2x2 grid: Check is primary; Hint, Free play, and Reset
+atom are secondary. Content is wrapped without ellipses; longer details page
+with previous/next controls. Tab and control states include default, hover,
+pressed, and disabled.
 
 The row is sized in CSS-pixel-equivalent units, then converted to metres using
 the view projection at the dock depth:
@@ -83,12 +102,14 @@ the view projection at the dock depth:
 `pixelsPerMeter = viewportHeight * projectionY / (2 * distanceMeters)`
 
 where `projectionY` is the vertical projection-matrix scale (equivalently,
-`1 / tan(verticalFov / 2)`). Width is capped at 92% of the viewport. Card and
-pager targets are at least 44px, and panel text is at least 16px in compact and
-detail views. A 10%-top/14%-bottom safe band reserves space for overlay
-controls. Handheld AR and camera view use the 0.75m profile; world-space
-headsets use the 1m profile and a gentler 15-degree downward arc. Both
-parameter sets and their validation live in `spatial-layout.ts`.
+`1 / tan(verticalFov / 2)`). The dock is placed once from the viewer's gaze and
+heading, about 0.7 m ahead and in the lower portion of the visible area; it is
+not continuously attached to the viewer or atom anchor. Reset view re-places
+it from the current gaze. Headsets use the 1 m distance and 15-degree arc.
+Targets are at least 48 dp; primary controls with hand tracking are at least
+60 dp. Panel text follows the kit scale with a 16 CSS px handheld body-text
+floor. A 10%-top/14%-bottom safe band reserves space for overlay controls.
+Parameters and validation live in `spatial-layout.ts`.
 
 The module continues to supply the same content items and action ids through
 `spatial-panels.ts`; the renderer changes only their presentation. The dock is
@@ -105,9 +126,9 @@ and Android screen mode retain their existing layout.
 
 - Do reuse `glass-tokens.css` for DOM glass and `spatial-tokens.css` for canvas
   panels.
-- Do reserve safe areas and keep 44px DOM targets / 44 canvas-pixel spatial
-  controls.
-- Do keep the five dock cards in their declared order and preserve the screen
+- Do reserve safe areas and keep 48 dp minimum targets / 60 dp primary
+  hand-tracked controls.
+- Do keep the four/five tabs in their declared order and preserve the screen
   fallback.
 - Do not hide the default Mission detail or add dock cards by hard-coding a
   transform in a module.

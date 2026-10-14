@@ -1,3 +1,5 @@
+import { horizonTokens } from "./horizon-tokens.js";
+
 /** Spatial panel dimensions and placement, expressed in metres and radians. */
 /** Projection-based sizing and viewer-relative placement for a spatial dock. */
 export interface SpatialDockProfile {
@@ -24,6 +26,8 @@ export interface SpatialLayout {
   /** Minimum rendered body-text size, in CSS-pixel-equivalent units. */
   readonly minTextSizePx: number;
   readonly minControlSizePx: number;
+  /** Minimum primary-control target for hand-tracked use, in dp. */
+  readonly minPrimaryHandControlSizeDp: number;
   readonly dockProfiles: Readonly<{
     readonly handheld: SpatialDockProfile;
     readonly headset: SpatialDockProfile;
@@ -35,7 +39,7 @@ export interface SpatialLayout {
 /** Reject invalid projection/layout parameters during module initialization. */
 export function validateSpatialDockProfile(
   profile: SpatialDockProfile,
-  minimumControlSizePx = 44,
+  minimumControlSizePx = horizonTokens.minimumHitTargetDp,
 ): void {
   if (!Number.isFinite(minimumControlSizePx) || minimumControlSizePx <= 0) {
     throw new RangeError("The minimum dock control size must be finite and positive.");
@@ -67,6 +71,22 @@ export function validateSpatialDockProfile(
   }
 }
 
+/** Validate the shared kit minimums and every configured dock profile. */
+export function validateSpatialLayout(layout: SpatialLayout): void {
+  if (
+    !Number.isFinite(layout.minTextSizePx) ||
+    layout.minTextSizePx < 16 ||
+    !Number.isFinite(layout.minControlSizePx) ||
+    layout.minControlSizePx < horizonTokens.minimumHitTargetDp ||
+    !Number.isFinite(layout.minPrimaryHandControlSizeDp) ||
+    layout.minPrimaryHandControlSizeDp < horizonTokens.primaryHandHitTargetDp
+  ) {
+    throw new RangeError("Spatial layout does not meet Horizon UI text and hit-target minimums.");
+  }
+  validateSpatialDockProfile(layout.dockProfiles.handheld, layout.minControlSizePx);
+  validateSpatialDockProfile(layout.dockProfiles.headset, layout.minControlSizePx);
+}
+
 /** Shared projection and placement constraints for the spatial dock. */
 export const spatialLayout: SpatialLayout = Object.freeze({
   arPlacement: {
@@ -77,16 +97,17 @@ export const spatialLayout: SpatialLayout = Object.freeze({
     moveMetersPerSecond: 0.45,
     reticleRadiusMeters: 0.035,
   },
-  minTextSizePx: 18,
-  minControlSizePx: 44,
+  minTextSizePx: 16,
+  minControlSizePx: horizonTokens.minimumHitTargetDp,
+  minPrimaryHandControlSizeDp: horizonTokens.primaryHandHitTargetDp,
   dockProfiles: {
     handheld: {
-      distanceMeters: 0.75,
+      distanceMeters: 0.7,
       downAngleRadians: 25 * Math.PI / 180,
       cardWidthPx: 104,
       compactHeightPx: 72,
       gapPx: 8,
-      pagerButtonPx: 44,
+      pagerButtonPx: 48,
       detailWidthPx: 360,
       detailHeightFraction: 0.75,
     },
@@ -104,5 +125,4 @@ export const spatialLayout: SpatialLayout = Object.freeze({
   edgeHints: false,
 });
 
-validateSpatialDockProfile(spatialLayout.dockProfiles.handheld);
-validateSpatialDockProfile(spatialLayout.dockProfiles.headset);
+validateSpatialLayout(spatialLayout);

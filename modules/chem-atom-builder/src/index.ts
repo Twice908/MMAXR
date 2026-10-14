@@ -26,6 +26,7 @@ import {
   screenZoomConfig,
   spatialLayout,
   type InputAction,
+  type SpatialAtomCaption,
   type SpatialPanelEdgeHint,
   type SpatialPanelSession,
 } from "@mma/engine-render";
@@ -55,7 +56,9 @@ import {
 } from "./learning.js";
 import { layoutAtom } from "./layout.js";
 import {
+  buildAtomCaptionItems,
   buildSpatialPanelItems,
+  createAtomCaptionUpdater,
   readSpatialPanelSources,
   routeSpatialAction,
 } from "./spatial-panels.js";
@@ -65,8 +68,13 @@ import {
   tryCreateSpatialPanels,
 } from "./spatial-presentation.js";
 import "./glass-tokens.css";
+import "./horizon-tokens.css";
 import "./atom-builder.css";
 import { placeSpatialHint } from "./spatial-hints.js";
+import {
+  blocksViewInputDuringParticleDrag,
+  createSpatialParticleDragHandler,
+} from "./spatial-particle-drag.js";
 
 interface LocalEventEntry {
   readonly type: string;
@@ -191,7 +199,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
           <output class="chemistry-feedback" id="chemistry-feedback" aria-live="polite"></output>
         </section>
         <aside class="atom-inspector" aria-label="Atom properties">
-          <div class="element-summary"><span class="element-symbol" id="element-symbol">H</span><div><h2 id="element-name">Hydrogen</h2><span id="element-number">ELEMENT 01</span></div></div>
+          <div class="element-summary"><span class="element-symbol" id="element-symbol"></span><div><h2 id="element-name" data-empty-label="No element yet">No element yet</h2><span id="element-number"></span></div></div>
           <dl class="property-list">
             <div><dt>Atomic number <span>Z</span></dt><dd id="atomic-number">1</dd></div>
             <div><dt>Mass number <span>A</span></dt><dd id="mass-number">1</dd></div>
@@ -221,10 +229,13 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     ...(options.diagnostics === undefined ? {} : { diagnostics: options.diagnostics }),
   });
   let spatialSession: SpatialPanelSession | null = null;
+  let spatialCaption: SpatialAtomCaption | null = null;
+  let updateSpatialCaption: (source: ReturnType<typeof readSpatialPanelSources>) => boolean = () => false;
   let spatialHintRoot: HTMLElement | null = null;
   let spatialStyle: HTMLStyleElement | null = null;
   let spatialExpanded = false;
   let spatialArControlsVisible = false;
+  let spatialArDragEnabled = false;
   let spatialExitLabel = "Exit AR";
   let xrInputAdapter: InstanceType<typeof XrSessionInputAdapter> | null = null;
   let input: ScreenInputAdapter | null = null;
@@ -235,11 +246,15 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   const clearSpatialPresentation = (): void => {
     spatialSession?.dispose();
     spatialSession = null;
+    spatialCaption?.dispose();
+    spatialCaption = null;
+    updateSpatialCaption = () => false;
     spatialHintRoot?.remove();
     spatialHintRoot = null;
     spatialStyle?.remove();
     spatialStyle = null;
     spatialArControlsVisible = false;
+    spatialArDragEnabled = false;
     spatialExitLabel = "Exit AR";
     setSpatialPanelsDomHidden(root, false);
     root.classList.remove("spatial-dom-settings-open");
@@ -257,6 +272,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     overlayGranted?: boolean,
   ): void => {
     spatialArControlsVisible = mode === "ar" && overlayGranted === false;
+    spatialArDragEnabled = mode === "ar";
     spatialExpanded = expanded ?? (spatialSession ? spatialExpanded : false);
     if (!isSpatialPresentationMode(mode)) {
       clearSpatialPresentation();
@@ -280,18 +296,25 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
         readSpatialPanelSources(root),
         !spatialArControlsVisible,
         spatialExitLabel,
+        spatialArDragEnabled,
       );
       const session = tryCreateSpatialPanels(
         () => renderer.createSpatialPanelSession(
           items,
           (inputId) => routeSpatialPanelAction(inputId),
           mode === "ar" ? root : undefined,
+          mode === "ar" ? onInput : undefined,
         ),
         failSpatialPresentation,
       );
       if (!session) return;
       spatialSession = session;
       session.setExpanded(spatialExpanded);
+      if (mode === "ar") {
+        spatialCaption = renderer.createAtomCaption(buildAtomCaptionItems(readSpatialPanelSources(root)));
+        updateSpatialCaption = createAtomCaptionUpdater((items) => spatialCaption?.update(items));
+        session.setActivePanelListener((key) => spatialCaption?.setVisible(key !== "elementInfo"));
+      }
       spatialStyle = document.createElement("style");
       spatialStyle.textContent = `
         .spatial-panels-active #lesson-panel,
@@ -580,12 +603,17 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   };
   refreshSpatialPanels = () => {
     try {
-      if (spatialSession) {
-        spatialSession.update(buildSpatialPanelItems(
-          readSpatialPanelSources(root),
-          !spatialArControlsVisible,
-          spatialExitLabel,
-        ));
+      if (spatialSession || spatialCaption) {
+        const source = readSpatialPanelSources(root);
+        if (spatialSession) {
+          spatialSession.update(buildSpatialPanelItems(
+            source,
+            !spatialArControlsVisible,
+            spatialExitLabel,
+            spatialArDragEnabled,
+          ));
+        }
+        updateSpatialCaption(source);
       }
     } catch (error) {
       failSpatialPresentation(error);
@@ -613,6 +641,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
               "[data-ar-action='reset-view'], [data-command='reset-view']",
             );
         resetView?.click();
+        spatialSession?.reposition();
       },
       onPanelToggle: () => {
         const panelToggle = root.querySelector<HTMLButtonElement>(
@@ -630,17 +659,18 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   const renderState = (state: Readonly<AtomBuilderLearningState>): void => {
     const chemistry = state.chemistry;
     const element = elementByAtomicNumber(chemistry.protons);
-    if (!element) {
-      return;
-    }
     const electrons = chemistry.shells.reduce((sum, count) => sum + count, 0);
     setText(root, "#proton-count", String(chemistry.protons));
     setText(root, "#neutron-count", String(chemistry.neutrons));
     setText(root, "#electron-count", String(electrons));
-    setText(root, "#element-symbol", element.symbol);
-    setText(root, "#element-name", element.name);
-    setText(root, "#element-number", `ELEMENT ${String(element.atomicNumber).padStart(2, "0")}`);
-    setText(root, "#atomic-number", String(element.atomicNumber));
+    setText(root, "#element-symbol", element?.symbol ?? "");
+    setText(
+      root,
+      "#element-name",
+      element?.name ?? requiredElement<HTMLElement>(root, "#element-name").dataset.emptyLabel ?? "",
+    );
+    setText(root, "#element-number", element ? `ELEMENT ${String(element.atomicNumber).padStart(2, "0")}` : "");
+    setText(root, "#atomic-number", String(chemistry.protons));
     setText(root, "#mass-number", String(calculateMassNumber(chemistry.protons, chemistry.neutrons)));
     setText(root, "#atom-charge", formatCharge(calculateCharge(chemistry.protons, electrons)));
     setText(root, "#electron-configuration", chemistry.shells.join(",") || "0");
@@ -692,6 +722,23 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     }
     renderState(store.getState());
   };
+  const spatialParticleDrag = createSpatialParticleDragHandler({
+    begin: (particle) => {
+      activeParticle = `tray:${particle}`;
+      const swatch = root.querySelector<HTMLElement>(`[data-particle="${particle}"]`);
+      const color = swatch ? getComputedStyle(swatch).backgroundColor : undefined;
+      renderer.beginDrag(particle, color);
+      ghost.textContent = particle;
+      ghost.classList.add("is-visible");
+    },
+    move: (ray) => renderer.updateSpatialDragRay(ray.origin, ray.direction),
+    runCommand,
+    end: () => {
+      activeParticle = null;
+      ghost.classList.remove("is-visible");
+      renderer.endDrag();
+    },
+  });
 
   const onCommandClick = (event: MouseEvent): void => {
     const command = (event.target as Element | null)
@@ -707,6 +754,8 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   };
 
   const onInput = (action: InputAction): void => {
+    if (spatialParticleDrag.handle(action)) return;
+    if (blocksViewInputDuringParticleDrag(action.type, spatialParticleDrag.isActive())) return;
     const payload = asPayload(action.payload);
     switch (action.type) {      case "grab": {
         activeParticle = typeof payload.source === "string" ? payload.source : null;

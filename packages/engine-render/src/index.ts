@@ -81,6 +81,7 @@ export {
   type SpatialPanelEdgeHint,
   type SpatialPanelItems,
   type SpatialPanelSession,
+  type SpatialAtomCaption,
   readXrViewerPose,
   type XrSceneDiagnostics,
   type XrViewerPoseFrame,
@@ -88,6 +89,7 @@ export {
 export {
   spatialLayout,
   validateSpatialDockProfile,
+  validateSpatialLayout,
   type SpatialDockProfile,
   type SpatialLayout,
 } from "./spatial-layout.js";
@@ -100,10 +102,15 @@ export {
 export { mountGlassPanelGallery } from "./visuals/glass-panel-gallery.js";
 export {
   hitTest as hitTestPanel,
+  glassPanelButtonState,
   layoutPanel,
+  layoutPanelPages,
+  wrapPanelText,
   type GlassPanelButton,
+  type GlassPanelButtonState,
   type GlassPanelHeading,
   type GlassPanelItem,
+  type GlassPanelPages,
   type GlassPanelRect,
   type GlassPanelSize,
   type GlassPanelText,
@@ -124,7 +131,9 @@ export {
   gravityAlignedQuaternion,
   selectSpatialPresentationProfile,
   toggleSpatialDockSelection,
+  SPATIAL_DOCK_HINT,
   type SpatialPanelKey,
+  type SpatialDockTabKey,
   type SpatialDockLayout,
   type SpatialPresentationProfile,
 } from "./visuals/spatial-placement.js";

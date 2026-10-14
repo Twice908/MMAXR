@@ -90,6 +90,7 @@ Also: new logic has unit tests; public APIs have TSDoc; no leftover debug code; 
 - Engine: `packages/engine-core` (store, actions, events, missions).
 - Chemistry rules: `packages/kits/chemistry`.
 - Narration: `packages/engine-voice`; mock asset generator: `tools/generate-narration`.
+- XR UI reference and tokens: read `docs/horizon-ui.md` before any AR/VR/MR/XR UI work.
 - Decisions: `docs/adr/`.
 - Device testing record: `docs/device-matrix.md`.
 - Layout reference: `docs/layout.md` (screen, AR/camera overlays, safe zones, and spatial panel slots).

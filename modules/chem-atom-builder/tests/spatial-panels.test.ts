@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  buildAtomCaptionItems,
   buildSpatialPanelItems,
+  createAtomCaptionUpdater,
   routeSpatialAction,
   type SpatialPanelsSource,
 } from "../src/spatial-panels.js";
@@ -40,20 +42,48 @@ const source: SpatialPanelsSource = {
       continueHidden: false,
     },
   },
-  particles: [{
-    label: "particle label source",
-    count: "particle count source",
-    addLabel: "+",
-    addCommand: "particle:add:proton",
-    removeLabel: "-",
-    removeCommand: "particle:remove:proton",
-  }],
+  particles: [
+    {
+      label: "Proton",
+      count: "6",
+      color: "rgb(214, 76, 53)",
+      addLabel: "+",
+      addCommand: "particle:add:proton",
+      removeLabel: "-",
+      removeCommand: "particle:remove:proton",
+    },
+    {
+      label: "Neutron",
+      count: "6",
+      color: "rgb(40, 127, 131)",
+      addLabel: "+",
+      addCommand: "particle:add:neutron",
+      removeLabel: "-",
+      removeCommand: "particle:remove:neutron",
+    },
+    {
+      label: "Electron",
+      count: "6",
+      color: "rgb(240, 179, 35)",
+      addLabel: "+",
+      addCommand: "particle:add:electron",
+      removeLabel: "-",
+      removeCommand: "particle:remove:electron",
+    },
+  ],
   particleHeading: "particle heading source",
   element: {
-    symbol: "symbol source",
-    name: "element name source",
-    number: "element number source",
-    properties: [{ label: "property label source", value: "property value source" }],
+    symbol: "C",
+    name: "Carbon",
+    number: "ELEMENT 06",
+    status: "ATOM STATE",
+    properties: [
+      { label: "Atomic number Z", value: "6" },
+      { label: "Mass number A", value: "12" },
+      { label: "Charge", value: "0" },
+      { label: "Electron configuration", value: "2,4" },
+      { label: "Outer shell", value: "Incomplete" },
+    ],
   },
   narration: {
     enableLabel: "enable source",
@@ -97,10 +127,27 @@ describe("spatial panel data and routing", () => {
         "lesson:assessment:continue",
         "atom/reset",
       ]));
-    expect(panels.particles.map((item) => item.text)).toContain("particle label source particle count source");
+    expect(panels.particles.map((item) => item.text)).toEqual(expect.arrayContaining([
+      "Proton 6",
+      "Neutron 6",
+      "Electron 6",
+    ]));
     expect(panels.particles.map((item) => "inputId" in item ? item.inputId : null))
-      .toEqual(expect.arrayContaining(["particle:add:proton", "particle:remove:proton"]));
-    expect(panels.elementInfo.map((item) => item.text)).toContain("property label source property value source");
+      .toEqual(expect.arrayContaining([
+        "particle:add:proton",
+        "particle:remove:proton",
+        "particle:add:neutron",
+        "particle:remove:neutron",
+        "particle:add:electron",
+        "particle:remove:electron",
+      ]));
+    expect(panels.particles.filter((item) => item.kind === "button").every((item) =>
+      item.variant === "secondary" && item.targetSizeDp === 48 && item.layoutGroup === "particle-row",
+    )).toBe(true);
+    expect(panels.particles.every((item) =>
+      item.kind !== "text" || item.layoutGroup !== "particle-row" || item.markerColor !== undefined,
+    )).toBe(true);
+    expect(panels.elementInfo.map((item) => item.text)).toContain("Electron configuration 2,4");
     expect(panels.narration.map((item) => item.text))
       .toEqual(expect.arrayContaining(["enable source", "mute source", "caption source"]));
     expect(panels.narration.map((item) => item.text))
@@ -195,5 +242,135 @@ describe("spatial panel data and routing", () => {
     expect(handlers.onResetView).toHaveBeenCalledOnce();
     expect(handlers.onPanelToggle).toHaveBeenCalledOnce();
     expect(handlers.onExitAr).toHaveBeenCalledOnce();
+  });
+
+  it("builds caption text from the Element and particle values shared with the DOM panel source", () => {
+    const carbonCaption = buildAtomCaptionItems(source).map((item) => item.text);
+    expect(carbonCaption).toEqual([
+      "Carbon (C)",
+      "Atomic number Z 6",
+      "Mass number A 12",
+      "Charge 0",
+      "Proton 6",
+      "Neutron 6",
+      "Electron 6",
+    ]);
+
+    const noElement = {
+      ...source,
+      element: {
+        ...source.element,
+        symbol: "",
+        name: "No element yet",
+        number: "",
+        properties: [
+          { label: "Atomic number Z", value: "0" },
+          { label: "Mass number A", value: "0" },
+          { label: "Charge", value: "0" },
+          ...source.element.properties.slice(3),
+        ],
+      },
+      particles: source.particles.map((particle) => ({ ...particle, count: "0" })),
+    };
+    expect(buildAtomCaptionItems(noElement).map((item) => item.text)).toEqual([
+      "No element yet",
+      "Atomic number Z 0",
+      "Mass number A 0",
+      "Charge 0",
+      "Proton 0",
+      "Neutron 0",
+      "Electron 0",
+    ]);
+
+    const sodiumIon = {
+      ...source,
+      particles: source.particles.map((particle) => ({
+        ...particle,
+        count: particle.label === "Proton" ? "11" : particle.label === "Neutron" ? "12" : "10",
+      })),
+      element: {
+        ...source.element,
+        symbol: "Na",
+        name: "Sodium",
+        number: "ELEMENT 11",
+        properties: [
+          { label: "Atomic number Z", value: "11" },
+          { label: "Mass number A", value: "23" },
+          { label: "Charge", value: "+1" },
+          ...source.element.properties.slice(3),
+        ],
+      },
+    };
+    expect(buildAtomCaptionItems(sodiumIon).map((item) => item.text)).toEqual([
+      "Sodium (Na)",
+      "Atomic number Z 11",
+      "Mass number A 23",
+      "Charge +1",
+      "Proton 11",
+      "Neutron 12",
+      "Electron 10",
+    ]);
+  });
+
+  it("routes particle +/- controls to the same commands used by the DOM rows", () => {
+    const handlers = {
+      runCommand: vi.fn(),
+      onNarrationAction: vi.fn(),
+      onNarrationSpeedChange: vi.fn(),
+    };
+    const buttons = buildSpatialPanelItems(source).particles.filter((item) =>
+      item.kind === "button" && "inputId" in item);
+    expect(buildSpatialPanelItems(source).particles
+      .filter((item) => item.kind === "text" && item.layoutGroup === "particle-row")
+      .map((item) => "inputId" in item ? item.inputId : null))
+      .toEqual([
+        "particle:token:proton",
+        "particle:token:neutron",
+        "particle:token:electron",
+      ]);
+    expect(buildSpatialPanelItems(source, true, "Exit AR", false).particles
+      .filter((item) => item.kind === "text" && item.layoutGroup === "particle-row")
+      .every((item) => !("inputId" in item))).toBe(true);
+    for (const button of buttons) {
+      if (!("inputId" in button)) continue;
+      expect(routeSpatialAction(button.inputId, handlers)).toBe(true);
+    }
+    expect(handlers.runCommand.mock.calls.map(([command]) => command)).toEqual([
+      "particle:remove:proton",
+      "particle:add:proton",
+      "particle:remove:neutron",
+      "particle:add:neutron",
+      "particle:remove:electron",
+      "particle:add:electron",
+    ]);
+  });
+
+  it("keeps Particles and Element available in both mission and free play", () => {
+    const missionPanels = buildSpatialPanelItems(source);
+    const freePlayPanels = buildSpatialPanelItems({
+      ...source,
+      mission: { ...source.mission, view: "free-play" },
+    });
+    expect(freePlayPanels.particles.map((item) => item.text))
+      .toEqual(missionPanels.particles.map((item) => item.text));
+    expect(freePlayPanels.elementInfo.map((item) => item.text))
+      .toEqual(missionPanels.elementInfo.map((item) => item.text));
+    expect(freePlayPanels.particles.map((item) => "inputId" in item ? item.inputId : null))
+      .toContain("particle:add:electron");
+    expect(freePlayPanels.elementInfo).toHaveLength(missionPanels.elementInfo.length);
+  });
+
+  it("only emits caption updates when DOM-derived caption content changes", () => {
+    const update = vi.fn();
+    const updater = createAtomCaptionUpdater(update);
+    expect(updater(source)).toBe(true);
+    expect(updater(source)).toBe(false);
+    expect(update).toHaveBeenCalledOnce();
+    const changed = { ...source, particles: source.particles.map((particle) => ({
+      ...particle,
+      count: particle.label === "Proton" ? "7" : particle.count,
+    })) };
+    expect(updater(changed)).toBe(true);
+    expect(update).toHaveBeenCalledTimes(2);
   });
 });

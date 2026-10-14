@@ -35,6 +35,7 @@ export interface SpatialMissionSources {
 export interface SpatialParticleSource {
   readonly label: string;
   readonly count: string;
+  readonly color: string;
   readonly addLabel: string;
   readonly addCommand: string;
   readonly removeLabel: string;
@@ -49,6 +50,7 @@ export interface SpatialPanelsSource {
     readonly symbol: string;
     readonly name: string;
     readonly number: string;
+    readonly status: string;
     readonly properties: readonly { readonly label: string; readonly value: string }[];
   };
   readonly narration: {
@@ -108,6 +110,7 @@ export function buildSpatialPanelItems(
   source: SpatialPanelsSource,
   overlayGranted = true,
   exitLabel = "Exit AR",
+  particleDragEnabled = true,
 ): SpatialPanelItems {
   const arControls = overlayGranted
     ? {}
@@ -151,7 +154,7 @@ export function buildSpatialPanelItems(
           regionId: source.mission.resetCommand,
         },
       ],
-      particles: buildParticles(source),
+      particles: buildParticles(source, particleDragEnabled),
       elementInfo: buildElementInfo(source),
       narration: buildNarration(source),
       ...arControls,
@@ -170,7 +173,7 @@ export function buildSpatialPanelItems(
           regionId: source.mission.resetCommand,
         },
       ],
-      particles: buildParticles(source),
+      particles: buildParticles(source, particleDragEnabled),
       elementInfo: buildElementInfo(source),
       narration: buildNarration(source),
       ...arControls,
@@ -186,22 +189,20 @@ export function buildSpatialPanelItems(
     { kind: "text", text: source.mission.progress },
     ...(source.mission.hintFeedback ? [{ kind: "text" as const, text: source.mission.hintFeedback }] : []),
     ...(source.mission.missionFeedback ? [{ kind: "text" as const, text: source.mission.missionFeedback }] : []),
-    ...(!source.mission.hintDisabled
-      ? [{
-          kind: "button" as const,
-          text: source.mission.hintLabel,
-          inputId: source.mission.hintCommand,
-          regionId: source.mission.hintCommand,
-        }]
-      : []),
-    ...(!source.mission.checkDisabled
-      ? [{
-          kind: "button" as const,
-          text: source.mission.checkLabel,
-          inputId: source.mission.checkCommand,
-          regionId: source.mission.checkCommand,
-        }]
-      : []),
+    {
+      kind: "button",
+      text: source.mission.hintLabel,
+      inputId: source.mission.hintCommand,
+      regionId: source.mission.hintCommand,
+      disabled: source.mission.hintDisabled,
+    },
+    {
+      kind: "button",
+      text: source.mission.checkLabel,
+      inputId: source.mission.checkCommand,
+      regionId: source.mission.checkCommand,
+      disabled: source.mission.checkDisabled,
+    },
     {
       kind: "button",
       text: source.mission.freePlayLabel,
@@ -240,7 +241,7 @@ export function buildSpatialPanelItems(
 
   return {
     mission,
-    particles: buildParticles(source),
+    particles: buildParticles(source, particleDragEnabled),
     elementInfo: buildElementInfo(source),
     narration: buildNarration(source),
     ...arControls,
@@ -249,13 +250,50 @@ export function buildSpatialPanelItems(
   };
 }
 
-function buildParticles(source: SpatialPanelsSource): GlassPanelItem[] {
+function buildParticles(
+  source: SpatialPanelsSource,
+  particleDragEnabled: boolean,
+): GlassPanelItem[] {
   const particles: GlassPanelItem[] = [{ kind: "heading", text: source.particleHeading }];
   for (const particle of source.particles) {
+    const particleType = particle.addCommand.slice("particle:add:".length);
+    if (particleType !== "proton" && particleType !== "neutron" && particleType !== "electron") {
+      throw new Error("Spatial panel particle add command is invalid.");
+    }
     particles.push(
-      { kind: "text", text: `${particle.label} ${particle.count}` },
-      { kind: "button", text: particle.removeLabel, inputId: particle.removeCommand, regionId: particle.removeCommand },
-      { kind: "button", text: particle.addLabel, inputId: particle.addCommand, regionId: particle.addCommand },
+      {
+        kind: "text",
+        text: `${particle.label} ${particle.count}`,
+        fontSizePx: 16,
+        layoutGroup: "particle-row",
+        markerColor: particle.color,
+        ...(particleDragEnabled ? {
+          inputId: `particle:token:${particleType}`,
+          regionId: `particle:token:${particleType}`,
+          variant: "secondary" as const,
+          targetSizeDp: 48,
+        } : {}),
+      },
+      {
+        kind: "button",
+        text: particle.removeLabel,
+        inputId: particle.removeCommand,
+        regionId: particle.removeCommand,
+        variant: "secondary",
+        fontSizePx: 16,
+        targetSizeDp: 48,
+        layoutGroup: "particle-row",
+      },
+      {
+        kind: "button",
+        text: particle.addLabel,
+        inputId: particle.addCommand,
+        regionId: particle.addCommand,
+        variant: "secondary",
+        fontSizePx: 16,
+        targetSizeDp: 48,
+        layoutGroup: "particle-row",
+      },
     );
   }
 
@@ -264,14 +302,64 @@ function buildParticles(source: SpatialPanelsSource): GlassPanelItem[] {
 
 function buildElementInfo(source: SpatialPanelsSource): GlassPanelItem[] {
   return [
-    { kind: "heading", text: source.element.symbol },
+    ...(source.element.symbol.trim()
+      ? [{ kind: "heading" as const, text: source.element.symbol }]
+      : []),
     { kind: "heading", text: source.element.name },
-    { kind: "text", text: source.element.number },
+    ...(source.element.number.trim()
+      ? [{ kind: "text" as const, text: source.element.number, fontSizePx: 16 }]
+      : []),
     ...source.element.properties.map((property) => ({
       kind: "text" as const,
       text: `${property.label} ${property.value}`,
+      fontSizePx: 16,
+      layoutGroup: "property-grid" as const,
+    })),
+    {
+      kind: "text",
+      text: source.element.status,
+      fontSizePx: 16,
+      layoutGroup: "property-grid",
+    },
+  ];
+}
+
+/** Build the atom-attached caption from the same rendered DOM fields as the dock. */
+export function buildAtomCaptionItems(source: SpatialPanelsSource): GlassPanelItem[] {
+  const name = source.element.name.trim();
+  const symbol = source.element.symbol.trim();
+  const heading = symbol ? `${name} (${symbol})` : name;
+  const chemistryProperties = source.element.properties.filter(({ label }) =>
+    /^(atomic number|mass number|charge)\b/i.test(label.trim()),
+  );
+  return [
+    { kind: "heading", text: heading, fontSizePx: 20 },
+    ...chemistryProperties.map(({ label, value }) => ({
+      kind: "text" as const,
+      text: `${label} ${value}`,
+      fontSizePx: 16,
+    })),
+    ...source.particles.map(({ label, count }) => ({
+      kind: "text" as const,
+      text: `${label} ${count}`,
+      fontSizePx: 16,
     })),
   ];
+}
+
+/** Update the caption only when its DOM-derived text has changed. */
+export function createAtomCaptionUpdater(
+  update: (items: readonly GlassPanelItem[]) => void,
+): (source: SpatialPanelsSource) => boolean {
+  let previous = "";
+  return (source) => {
+    const items = buildAtomCaptionItems(source);
+    const next = JSON.stringify(items);
+    if (next === previous) return false;
+    previous = next;
+    update(items);
+    return true;
+  };
 }
 
 function buildNarration(source: SpatialPanelsSource): GlassPanelItem[] {
@@ -416,9 +504,20 @@ export function readSpatialPanelSources(root: ParentNode): SpatialPanelsSource {
     particles: [...required<HTMLElement>(".particle-rail").querySelectorAll<HTMLElement>(".particle-row")].map((row) => {
       const add = row.querySelector<HTMLButtonElement>('[data-command^="particle:add:"]');
       const remove = row.querySelector<HTMLButtonElement>('[data-command^="particle:remove:"]');
+      const swatch = row.querySelector<HTMLElement>(".tray-particle");
+      if (!swatch) throw new Error("Spatial panel particle swatch not found.");
+      const particleCommand = add?.dataset.command ?? "";
+      if (!particleCommand.startsWith("particle:add:")) {
+        throw new Error("Spatial panel particle add command is invalid.");
+      }
+      const color = getComputedStyle(swatch).backgroundColor;
+      if (!color || color === "rgba(0, 0, 0, 0)") {
+        throw new Error("Spatial panel particle swatch color is unavailable.");
+      }
       return {
         label: row.querySelector(".particle-label strong")?.textContent ?? "",
         count: row.querySelector(".particle-label span")?.textContent ?? "",
+        color,
         addLabel: add?.textContent ?? "",
         addCommand: add?.dataset.command ?? "",
         removeLabel: remove?.textContent ?? "",
@@ -430,6 +529,7 @@ export function readSpatialPanelSources(root: ParentNode): SpatialPanelsSource {
       symbol: text("#element-symbol"),
       name: text("#element-name"),
       number: text("#element-number"),
+      status: text(".inspector-foot"),
       properties: [...required<HTMLElement>(".property-list").querySelectorAll<HTMLElement>("div")].map((row) => ({
         label: row.querySelector("dt")?.textContent ?? "",
         value: row.querySelector("dd")?.textContent ?? "",

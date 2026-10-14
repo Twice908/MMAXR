@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   spatialLayout,
   validateSpatialDockProfile,
+  validateSpatialLayout,
 } from "../src/spatial-layout.js";
 import {
   calculateSpatialDockLayout,
@@ -10,10 +11,12 @@ import {
   pixelsPerMeterAtDepth,
   profileSettings,
   selectSpatialPresentationProfile,
+  shouldEnableSpatialPanelPointerEvents,
   toggleSpatialDockSelection,
+  SPATIAL_DOCK_HINT,
   type SpatialPanelKey,
 } from "../src/visuals/spatial-placement.js";
-import { layoutPanel } from "../src/visuals/panel-layout.js";
+import { hitTest, layoutPanel, layoutPanelPages, wrapPanelText } from "../src/visuals/panel-layout.js";
 import { spatialTokens } from "../src/spatial-tokens.js";
 import {
   canCreateSpatialPanels,
@@ -28,57 +31,154 @@ describe("spatial dock layout", () => {
     expect(pixelsPerMeterAtDepth(915, 0.75, phoneFov)).toBeCloseTo(1056.5, 0);
     expect(pixelsPerMeterAtDepth(1080, 1, phoneFov)).toBeCloseTo(935.3, 0);
     const phone = calculateSpatialDockLayout(412, 915, phoneProjectionY, "handheld");
-    const desktop = calculateSpatialDockLayout(1440, 900, phoneProjectionY, "headset");
-    expect(phone.pixelsPerMeter).toBeCloseTo(1056.5, 0);
+    const desktop = calculateSpatialDockLayout(1440, 900, phoneProjectionY, "headset", true);
+    expect(phone.pixelsPerMeter).toBeCloseTo(1132, 0);
     expect(desktop.keys).toHaveLength(5);
     expect(desktop.rowWidthPx).toBeLessThanOrEqual(desktop.maxRowWidthPx);
   });
 
-  it("pages the phone row to fit 92 percent of the visible width", () => {
-    const layout = calculateSpatialDockLayout(412, 915, phoneProjectionY, "handheld");
-    expect(layout.visibleCount).toBeLessThan(5);
-    expect(layout.pageCount).toBeGreaterThan(1);
-    expect(layout.rowWidthPx).toBeLessThanOrEqual(layout.maxRowWidthPx);
-    expect(layout.keys).toEqual(["mission", "particles"]);
-    expect(calculateSpatialDockLayout(412, 915, phoneProjectionY, "handheld", 1).keys)
-      .toEqual(["elementInfo", "narration"]);
+  it("fits four and five equal-width tabs on a 412px phone without paging", () => {
+    for (const includeSettings of [false, true]) {
+      const layout = calculateSpatialDockLayout(
+        412,
+        915,
+        phoneProjectionY,
+        "handheld",
+        includeSettings,
+      );
+      expect(layout.keys).toHaveLength(includeSettings ? 5 : 4);
+      expect(layout.rowWidthPx).toBe(412 * 0.92);
+      expect(layout.rowWidthPx).toBeLessThanOrEqual(layout.maxRowWidthPx);
+      expect(layout.tabWidthPx).toBeGreaterThanOrEqual(48);
+      expect(layout.tabHeightMeters * layout.pixelsPerMeter).toBeGreaterThanOrEqual(48);
+      expect(layout.keys.includes("settings")).toBe(includeSettings);
+    }
+    const headsetWithSettings = calculateSpatialDockLayout(
+      412,
+      915,
+      phoneProjectionY,
+      "headset",
+      true,
+    );
+    expect(headsetWithSettings.tabWidthPx).toBeGreaterThanOrEqual(60);
+    expect(headsetWithSettings.tabHeightMeters * headsetWithSettings.pixelsPerMeter)
+      .toBeGreaterThanOrEqual(60);
   });
 
-  it("keeps compact cards, pager targets, detail controls, and text at minimum sizes", () => {
-    for (const profile of ["handheld", "headset"] as const) {
-      const settings = profileSettings(profile);
-      expect(settings.cardWidthPx).toBeGreaterThanOrEqual(44);
-      expect(settings.compactHeightPx).toBeGreaterThanOrEqual(44);
-      expect(settings.pagerButtonPx).toBeGreaterThanOrEqual(44);
-      expect(spatialLayout.minTextSizePx).toBeGreaterThanOrEqual(16);
-      const compact = layoutPanel(
-        [
-          { kind: "heading", text: "Mission", fontSizePx: 18 },
-          { kind: "text", text: "Current goal", fontSizePx: 18 },
-        ],
-        { width: settings.cardWidthPx, height: settings.compactHeightPx },
-        { ...spatialTokens, padPanel: "6px", gapControl: "3px" },
-      );
-      expect(compact).toHaveLength(2);
-      expect(compact.every(({ fontSizePx }) => fontSizePx >= 16)).toBe(true);
-      const button = layoutPanel(
-        [{ kind: "button", text: "Action", inputId: "action" }],
-        { width: settings.detailWidthPx, height: 120 },
-      )[0];
-      expect(button?.width).toBeGreaterThanOrEqual(44);
-      expect(button?.height).toBeGreaterThanOrEqual(44);
-      expect(button?.fontSizePx).toBeGreaterThanOrEqual(16);
-      const pager = layoutPanel(
-        [{ kind: "button", text: "›", inputId: "next" }],
-        { width: settings.pagerButtonPx, height: settings.pagerButtonPx },
-        { ...spatialTokens, padPanel: "0px" },
-      )[0];
-      expect(pager?.width).toBeGreaterThanOrEqual(44);
-      expect(pager?.height).toBeGreaterThanOrEqual(44);
-    }
+  it("routes handheld AR taps to spatial panels but keeps headset pointer input off", () => {
+    expect(shouldEnableSpatialPanelPointerEvents(false, true, "handheld")).toBe(true);
+    expect(shouldEnableSpatialPanelPointerEvents(false, true, "headset")).toBe(false);
+    expect(shouldEnableSpatialPanelPointerEvents(false, false, "handheld")).toBe(false);
+    expect(shouldEnableSpatialPanelPointerEvents(true, true, "headset")).toBe(true);
+  });
+
+  it("renders mission actions in a 2x2 grid with kit minimum targets", () => {
+    const actions = [
+      { kind: "button" as const, text: "Hint", inputId: "lesson:hint", layoutGroup: "mission-actions" as const, variant: "secondary" as const },
+      { kind: "button" as const, text: "Check", inputId: "lesson:check", layoutGroup: "mission-actions" as const, variant: "primary" as const },
+      { kind: "button" as const, text: "Free play", inputId: "lesson:free-play", layoutGroup: "mission-actions" as const, variant: "secondary" as const },
+      { kind: "button" as const, text: "Reset atom", inputId: "atom/reset", layoutGroup: "mission-actions" as const, variant: "secondary" as const },
+    ];
+    const rects = layoutPanel(actions, { width: 379, height: 347 });
+    expect(rects.map(({ inputId }) => inputId)).toEqual(actions.map(({ inputId }) => inputId));
+    expect(rects.every(({ width, height }) => width >= 48 && height >= 48)).toBe(true);
+    expect(rects[0]?.variant).toBe("secondary");
+    expect(rects[1]?.variant).toBe("primary");
+    expect(spatialLayout.minControlSizePx).toBe(48);
+    expect(spatialLayout.minPrimaryHandControlSizeDp).toBe(60);
+    expect(spatialLayout.minTextSizePx).toBe(16);
+    expect(profileSettings("handheld").distanceMeters).toBeCloseTo(0.7);
+    const handActions = layoutPanel(
+      actions.map((action) => action.inputId === "lesson:check"
+        ? { ...action, targetSizeDp: 60 }
+        : action),
+      { width: 379, height: 347 },
+    );
+    expect(handActions.find(({ inputId }) => inputId === "lesson:check")?.height)
+      .toBeGreaterThanOrEqual(60);
+  });
+
+  it("uses Body 1 labels with the handheld floor and 48/60 dp tab heights", () => {
+    const phoneTabs = calculateSpatialDockLayout(412, 915, phoneProjectionY, "handheld");
+    const headsetTabs = calculateSpatialDockLayout(412, 915, phoneProjectionY, "headset");
+    const label = layoutPanel(
+      [{
+        kind: "button",
+        text: "Particles",
+        inputId: "particles",
+        variant: "secondary",
+        textAlign: "center",
+        fontSizePx: 14,
+      }],
+      { width: phoneTabs.tabWidthPx, height: 48 },
+      { ...spatialTokens, padPanel: "0px" },
+    )[0];
+
+    expect(label?.fontSizePx).toBe(16);
+    expect(label?.lines).toEqual(["Particles"]);
+    expect(phoneTabs.tabHeightMeters * phoneTabs.pixelsPerMeter).toBe(48);
+    expect(headsetTabs.tabHeightMeters * headsetTabs.pixelsPerMeter).toBeCloseTo(60);
+  });
+
+  it("wraps lesson text without ellipses and provides page controls for overflow", () => {
+    const text = "A complete lesson sentence must remain readable and available on the detail card even when the card needs several pages.";
+    const lines = wrapPanelText(text, 64, (value) => value.length * 8);
+    expect(lines.join(" ")).toBe(text);
+    expect(lines.some((line) => line.includes("…"))).toBe(false);
+    const pages = layoutPanelPages(
+      [{ kind: "text", text }],
+      { width: 120, height: 96 },
+      { ...spatialTokens, padPanel: "0px", gapControl: "0px" },
+      (value) => value.length * 8,
+    ).pages;
+    expect(pages.length).toBeGreaterThan(1);
+    const renderedText = pages.flatMap((page) =>
+      page.filter(({ inputId }) => inputId === undefined).flatMap(({ lines: pageLines }) => pageLines),
+    ).join(" ");
+    expect(renderedText).toBe(text);
+    expect(pages.every((page) => page.filter(({ inputId }) => inputId?.startsWith("dock:detail:"))
+      .every(({ width, height }) => width >= 48 && height >= 48))).toBe(true);
+  });
+
+  it("uses the one-source tooltip text until a tab is first selected", () => {
+    expect(SPATIAL_DOCK_HINT).toBe("Tap a tab to open it. Open Particles to build the atom.");
+    let active: SpatialPanelKey | null = "mission";
+    active = toggleSpatialDockSelection(active, "mission");
+    expect(active).toBeNull();
+    active = toggleSpatialDockSelection(active, "particles");
+    expect(active).toBe("particles");
+  });
+
+  it("keeps disabled controls out of hit testing while preserving the disabled state", () => {
+    const rects = layoutPanel([
+      { kind: "button", text: "Unavailable", inputId: "disabled", disabled: true },
+      { kind: "button", text: "Available", inputId: "enabled" },
+    ], { width: 320, height: 180 });
+    const disabled = rects.find(({ inputId }) => inputId === "disabled")!;
+    const uv = {
+      x: (disabled.x + disabled.width / 2) / 320,
+      y: 1 - (disabled.y + disabled.height / 2) / 180,
+    };
+    expect(disabled.disabled).toBe(true);
+    expect(hitTest(rects, uv)).toBeNull();
     expect(() => validateSpatialDockProfile({
       ...profileSettings("handheld"),
-      pagerButtonPx: 43,
+      pagerButtonPx: 47,
+    })).toThrow(RangeError);
+  });
+
+  it("rejects layouts below the kit text or target minimums", () => {
+    expect(() => validateSpatialLayout({
+      ...spatialLayout,
+      minTextSizePx: 15,
+    })).toThrow(RangeError);
+    expect(() => validateSpatialLayout({
+      ...spatialLayout,
+      minControlSizePx: 47,
+    })).toThrow(RangeError);
+    expect(() => validateSpatialLayout({
+      ...spatialLayout,
+      minPrimaryHandControlSizeDp: 59,
     })).toThrow(RangeError);
   });
 
@@ -87,7 +187,7 @@ describe("spatial dock layout", () => {
     expect(selectSpatialPresentationProfile("camera")).toBe("handheld");
     expect(selectSpatialPresentationProfile("immersive-ar", "world-space")).toBe("headset");
     expect(selectSpatialPresentationProfile("immersive-vr")).toBe("headset");
-    expect(profileSettings("handheld").distanceMeters).toBeCloseTo(0.75);
+    expect(profileSettings("handheld").distanceMeters).toBeCloseTo(0.7);
     expect(profileSettings("headset").distanceMeters).toBeCloseTo(1);
     expect(profileSettings("headset").downAngleRadians).toBeCloseTo(15 * Math.PI / 180);
   });

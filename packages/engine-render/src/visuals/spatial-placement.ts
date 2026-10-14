@@ -1,7 +1,10 @@
 import * as THREE from "three";
+import { horizonTokens } from "../horizon-tokens.js";
 import { spatialLayout, type SpatialDockProfile } from "../spatial-layout.js";
 
 export type SpatialPanelKey = "mission" | "particles" | "elementInfo" | "narration" | "settings";
+export type SpatialDockTabKey = Exclude<SpatialPanelKey, "settings">;
+export const SPATIAL_DOCK_HINT = "Tap a tab to open it. Open Particles to build the atom.";
 
 /** Device-specific dock placement; handheld AR/camera keeps phone-safe sizing. */
 export type SpatialPresentationProfile = "handheld" | "headset";
@@ -9,16 +12,13 @@ export type SpatialPresentationProfile = "handheld" | "headset";
 export interface SpatialDockLayout {
   readonly pixelsPerMeter: number;
   readonly maxRowWidthPx: number;
-  readonly visibleCount: number;
-  readonly pageCount: number;
   readonly keys: readonly SpatialPanelKey[];
   readonly rowWidthPx: number;
+  readonly tabWidthPx: number;
   readonly cardWidthMeters: number;
-  readonly compactHeightMeters: number;
   readonly detailWidthMeters: number;
   readonly detailHeightMeters: number;
-  readonly gapMeters: number;
-  readonly pagerButtonMeters: number;
+  readonly tabHeightMeters: number;
 }
 
 /** Toggle one detail card while preserving the single-open-card invariant. */
@@ -58,6 +58,15 @@ export function selectSpatialPresentationProfile(
   return mode === "immersive-vr" || interactionMode === "world-space" ? "headset" : "handheld";
 }
 
+/** Keep touch pointer picking for handheld AR while controller rays own headset input. */
+export function shouldEnableSpatialPanelPointerEvents(
+  requested: boolean,
+  arActive: boolean,
+  profile: SpatialPresentationProfile,
+): boolean {
+  return requested || (arActive && profile === "handheld");
+}
+
 /** Compute CSS pixels per metre at a depth using the vertical projection scale. */
 export function pixelsPerMeterAtDepth(
   viewportHeightPx: number,
@@ -82,13 +91,13 @@ export function pixelsPerMeterAtDepth(
   return viewportHeightPx * projectionScale / (2 * distanceMeters);
 }
 
-/** Fit the dock row in 92% of the viewport, paging rather than shrinking targets. */
+/** Fit equal-width dock tabs in 92% of the visible viewport without paging. */
 export function calculateSpatialDockLayout(
   viewportWidthPx: number,
   viewportHeightPx: number,
   projectionY: number,
   profile: SpatialPresentationProfile,
-  page = 0,
+  includeSettings = false,
 ): SpatialDockLayout {
   if (!Number.isFinite(viewportWidthPx) || viewportWidthPx <= 0) {
     throw new RangeError("Viewport width must be finite and positive.");
@@ -106,37 +115,26 @@ export function calculateSpatialDockLayout(
     "particles",
     "elementInfo",
     "narration",
-    "settings",
+    ...(includeSettings ? ["settings" as const] : []),
   ];
-  const allCardsWidth = keys.length * settings.cardWidthPx + (keys.length - 1) * settings.gapPx;
-  const visibleCount = allCardsWidth <= maxRowWidthPx
-    ? keys.length
-    : Math.max(1, Math.min(keys.length, Math.floor(
-      (maxRowWidthPx - 2 * settings.pagerButtonPx - 3 * settings.gapPx) /
-        (settings.cardWidthPx + settings.gapPx),
-    )));
-  const pageCount = Math.ceil(keys.length / visibleCount);
-  const safePage = Math.min(Math.max(0, Math.floor(page)), pageCount - 1);
-  const visibleKeys = keys.slice(safePage * visibleCount, (safePage + 1) * visibleCount);
-  const pagerWidth = visibleCount < keys.length
-    ? 2 * settings.pagerButtonPx + 2 * settings.gapPx
-    : 0;
-  const rowWidthPx = visibleKeys.length * settings.cardWidthPx +
-    Math.max(0, visibleKeys.length - 1) * settings.gapPx +
-    pagerWidth;
+  const rowWidthPx = maxRowWidthPx;
+  const tabWidthPx = rowWidthPx / keys.length;
+  const minimumTabTargetDp = profile === "headset"
+    ? horizonTokens.primaryHandHitTargetDp
+    : horizonTokens.minimumHitTargetDp;
+  if (tabWidthPx < minimumTabTargetDp) {
+    throw new RangeError("The viewport is too narrow for the minimum Horizon UI tab target.");
+  }
   return {
     pixelsPerMeter,
     maxRowWidthPx,
-    visibleCount,
-    pageCount,
-    keys: visibleKeys,
+    keys,
     rowWidthPx,
-    cardWidthMeters: settings.cardWidthPx / pixelsPerMeter,
-    compactHeightMeters: settings.compactHeightPx / pixelsPerMeter,
-    detailWidthMeters: Math.min(settings.detailWidthPx, maxRowWidthPx) / pixelsPerMeter,
-    detailHeightMeters: viewportHeightPx * settings.detailHeightFraction / pixelsPerMeter,
-    gapMeters: settings.gapPx / pixelsPerMeter,
-    pagerButtonMeters: settings.pagerButtonPx / pixelsPerMeter,
+    tabWidthPx,
+    cardWidthMeters: rowWidthPx / pixelsPerMeter,
+    detailWidthMeters: rowWidthPx / pixelsPerMeter,
+    detailHeightMeters: viewportHeightPx * 0.38 / pixelsPerMeter,
+    tabHeightMeters: minimumTabTargetDp / pixelsPerMeter,
   };
 }
 

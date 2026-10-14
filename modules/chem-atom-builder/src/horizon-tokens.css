@@ -1,0 +1,28 @@
+:root {
+  --horizon-components: primary button, secondary button, borderless button, destructive button, tile button, shelf button, tooltip, card, dialog, dropdown, toggle selector, checkbox selector, radio selector, slider, panel, window;
+  --horizon-states: default, hover, pressed, disabled;
+  --horizon-type-headline-1-size: 32px;
+  --horizon-type-headline-1-line-height: 36px;
+  --horizon-type-headline-2-size: 24px;
+  --horizon-type-headline-2-line-height: 28px;
+  --horizon-type-headline-3-size: 20px;
+  --horizon-type-headline-3-line-height: 24px;
+  --horizon-type-body-1-size: 14px;
+  --horizon-type-body-1-line-height: 20px;
+  --horizon-type-body-2-size: 11px;
+  --horizon-type-body-2-line-height: 16px;
+  --horizon-type-weight-strong: TODO(kit);
+  --horizon-type-weight-regular: TODO(kit);
+  --horizon-type-italics: false;
+  --horizon-icon-size: 24px;
+  --horizon-hit-target-min: 48px;
+  --horizon-hit-target-primary-hands: 60px;
+  --horizon-panel-default-width: 1024px;
+  --horizon-panel-default-height: 640px;
+  --horizon-panel-min-width: 384px;
+  --horizon-panel-min-height: 500px;
+  --horizon-panel-max-width: 1440px;
+  --horizon-panel-max-height: 1000px;
+  --horizon-handheld-css-pixels-per-dp: 1;
+  --horizon-metres-per-dp: 0.000958;
+}

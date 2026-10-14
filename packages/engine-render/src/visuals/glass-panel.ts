@@ -3,7 +3,8 @@ import { spatialLayout } from "../spatial-layout.js";
 import { spatialTokens } from "../spatial-tokens.js";
 import {
   hitTest,
-  layoutPanel,
+  glassPanelButtonState,
+  layoutPanelPages,
   sameToggleValues,
   type GlassPanelItem,
   type GlassPanelRect,
@@ -22,6 +23,8 @@ export interface GlassPanelState {
 
 export interface CreateGlassPanelOptions {
   readonly id: string;
+  readonly component?: "button" | "card" | "panel";
+  readonly surfaceComponent?: "panel";
   readonly widthM: number;
   readonly heightM: number;
   readonly pixelWidth?: number;
@@ -40,6 +43,7 @@ export interface GlassPanel {
   update(itemsOrState: readonly GlassPanelItem[] | GlassPanelState): void;
   hitTest(uv: Readonly<{ x: number; y: number }>): string | null;
   setCollapsed(collapsed: boolean): void;
+  setPage(page: number): void;
   setScale(scale: number): void;
   dispose(): void;
 }
@@ -95,12 +99,17 @@ export function createGlassPanel(options: CreateGlassPanelOptions): GlassPanel {
   const object3d = new THREE.Mesh(geometry, material);
   object3d.name = options.id;
   object3d.userData.inputId = options.id;
+  object3d.userData.horizonComponents = [
+    ...(options.surfaceComponent ? [options.surfaceComponent] : []),
+    options.component ?? "panel",
+  ];
 
   let items = options.items;
   let collapsed = options.collapsed ?? false;
   let hoveredInputId: string | null = null;
   let pressedInputId: string | null = null;
   let toggles: Readonly<Record<string, boolean>> = {};
+  let pageIndex = 0;
   let rects: readonly GlassPanelRect[] = [];
   let dirty = true;
   let disposed = false;
@@ -160,11 +169,18 @@ export function createGlassPanel(options: CreateGlassPanelOptions): GlassPanel {
       padPanel: `${Math.min(options.contentPaddingPx ?? 6, 6)}px`,
       gapControl: "3px",
     };
-    rects = layoutPanel(
+    context.font = `${spatialLayout.minTextSizePx}px "Avenir Next", "Trebuchet MS", sans-serif`;
+    const pages = layoutPanelPages(
       drawnItems,
       { width: canvas.width, height: canvas.height },
       collapsed ? compactTokens : panelTokens,
-    );
+      (text, fontSizePx) => {
+        context.font = `${fontSizePx}px "Avenir Next", "Trebuchet MS", sans-serif`;
+        return context.measureText(text).width;
+      },
+    ).pages;
+    pageIndex = Math.min(pageIndex, pages.length - 1);
+    rects = pages[pageIndex] ?? [];
     drawSurface(context, canvas.width, canvas.height, options.surface);
     drawItems(context, rects, toggles, hoveredInputId, pressedInputId);
     texture.needsUpdate = true;
@@ -197,10 +213,12 @@ export function createGlassPanel(options: CreateGlassPanelOptions): GlassPanel {
     if (isItems(itemsOrState)) {
       if (sameItems(items, itemsOrState)) return;
       items = itemsOrState;
+      pageIndex = 0;
     } else {
       let changed = false;
       if (itemsOrState.items && !sameItems(items, itemsOrState.items)) {
         items = itemsOrState.items;
+        pageIndex = 0;
         changed = true;
       }
       if (itemsOrState.hoveredInputId !== undefined && hoveredInputId !== itemsOrState.hoveredInputId) {
@@ -241,6 +259,12 @@ export function createGlassPanel(options: CreateGlassPanelOptions): GlassPanel {
       return hitTest(rects, uv);
     },
     setCollapsed,
+    setPage(page) {
+      if (!Number.isInteger(page) || page < 0) return;
+      pageIndex = page;
+      dirty = true;
+      draw();
+    },
     setScale(scale) {
       if (!Number.isFinite(scale) || scale <= 0) {
         throw new RangeError("Glass panel scale must be positive.");
@@ -275,6 +299,13 @@ function sameItems(
       item.kind === next.kind &&
       item.text === next.text &&
       item.fontSizePx === next.fontSizePx &&
+      ("variant" in item ? item.variant : undefined) === ("variant" in next ? next.variant : undefined) &&
+      ("selected" in item ? item.selected : undefined) === ("selected" in next ? next.selected : undefined) &&
+      ("disabled" in item ? item.disabled : undefined) === ("disabled" in next ? next.disabled : undefined) &&
+      ("layoutGroup" in item ? item.layoutGroup : undefined) === ("layoutGroup" in next ? next.layoutGroup : undefined) &&
+      ("markerColor" in item ? item.markerColor : undefined) === ("markerColor" in next ? next.markerColor : undefined) &&
+      ("textAlign" in item ? item.textAlign : undefined) === ("textAlign" in next ? next.textAlign : undefined) &&
+      item.component === next.component &&
       ("inputId" in item ? item.inputId : undefined) === ("inputId" in next ? next.inputId : undefined) &&
       ("regionId" in item ? item.regionId : undefined) === ("regionId" in next ? next.regionId : undefined);
   });
@@ -337,49 +368,67 @@ function drawItems(
     const isInteractive = rect.inputId !== undefined;
     const isPressed = rect.inputId === pressedInputId;
     const isHovered = rect.inputId === hoveredInputId;
+    const state = rect.inputId === undefined
+      ? "default"
+      : glassPanelButtonState(rect, isHovered, isPressed);
+    context.globalAlpha = state === "disabled" ? 0.45 : 1;
     if (rect.kind === "button" || rect.kind === "toggle") {
       roundedRect(context, rect.x, rect.y, rect.width, rect.height, 10);
       const checked = rect.kind === "toggle" && toggles[rect.inputId!] === true;
-      context.fillStyle = checked
-        ? "rgba(32, 185, 119, 0.2)"
-        : isPressed
+      context.fillStyle = rect.variant === "borderless"
+        ? "rgba(255, 255, 255, 0)"
+        : state === "pressed"
           ? "rgba(32, 185, 119, 0.32)"
-          : isHovered
+          : state === "hover"
             ? "rgba(32, 185, 119, 0.14)"
-            : "rgba(255, 255, 255, 0.72)";
+            : rect.selected || rect.variant === "primary" || checked
+              ? "rgba(32, 185, 119, 0.2)"
+              : "rgba(255, 255, 255, 0.72)";
       context.fill();
-      context.strokeStyle = checked || isHovered ? spatialTokens.accentGreen : spatialTokens.edge;
+      if (rect.variant !== "borderless" || isHovered || isPressed) {
+        context.strokeStyle = rect.selected || checked || isHovered ? spatialTokens.accentGreen : spatialTokens.edge;
+        context.lineWidth = 1;
+        context.stroke();
+      }
+    }
+    if (rect.kind === "text" && isInteractive) {
+      roundedRect(context, rect.x, rect.y, rect.width, rect.height, 10);
+      context.fillStyle = state === "pressed"
+        ? "rgba(32, 185, 119, 0.32)"
+        : state === "hover"
+          ? "rgba(32, 185, 119, 0.14)"
+          : "rgba(255, 255, 255, 0.72)";
+      context.fill();
+      context.strokeStyle = state === "default" ? spatialTokens.edge : spatialTokens.accentGreen;
       context.lineWidth = 1;
       context.stroke();
     }
 
-    context.font = `${rect.kind === "heading" ? 700 : 500} ${rect.fontSizePx}px ${rect.kind === "heading"
-      ? 'Georgia, "Times New Roman", serif'
-      : '"Avenir Next", "Trebuchet MS", sans-serif'}`;
-    context.letterSpacing = rect.kind === "heading" ? spatialTokens.headingLetterSpacing : "0px";
+    context.font = `${rect.selected || rect.kind === "heading" ? 700 : 500} ${rect.fontSizePx}px "Avenir Next", "Trebuchet MS", sans-serif`;
+    context.letterSpacing = "0px";
     context.textBaseline = "middle";
-    context.textAlign = "left";
+    context.textAlign = rect.textAlign === "center" ? "center" : "left";
     context.fillStyle = isInteractive ? spatialTokens.ink : rect.kind === "text" ? spatialTokens.inkMuted : spatialTokens.ink;
-    const textX = rect.x + (rect.kind === "button" || rect.kind === "toggle" ? 12 : 0);
-    const textY = rect.kind === "button" || rect.kind === "toggle"
-      ? rect.y + rect.height / 2
-      : rect.y + rect.height / 2;
-    const available = rect.width - (rect.kind === "toggle" ? 64 : (isInteractive ? 24 : 0));
+    if (rect.markerColor) {
+      context.beginPath();
+      context.arc(rect.x + 8, rect.y + rect.height / 2, 5, 0, Math.PI * 2);
+      context.fillStyle = rect.markerColor;
+      context.fill();
+      context.fillStyle = isInteractive ? spatialTokens.ink : spatialTokens.inkMuted;
+    }
+    const textX = rect.textAlign === "center"
+      ? rect.x + rect.width / 2
+      : rect.x + (rect.kind === "button" || rect.kind === "toggle" ? 12 : rect.markerColor ? 20 : 0);
+    const textY = rect.y + (rect.height - rect.lines.length * rect.lineHeightPx) / 2 +
+      rect.lineHeightPx / 2;
     if (rect.kind === "toggle") {
       context.fillStyle = toggles[rect.inputId!] ? spatialTokens.accentGreen : spatialTokens.inkMuted;
       context.fillText(toggles[rect.inputId!] ? "On" : "Off", rect.x + rect.width - 52, textY);
     }
-    context.fillText(ellipsize(context, rect.text, available), textX, textY, available);
+    rect.lines.forEach((line, index) =>
+      context.fillText(line, textX, textY + index * rect.lineHeightPx));
+    context.globalAlpha = 1;
   }
-}
-
-function ellipsize(context: CanvasRenderingContext2D, text: string, maxWidth: number): string {
-  if (context.measureText(text).width <= maxWidth) return text;
-  let value = text;
-  while (value.length > 0 && context.measureText(`${value}…`).width > maxWidth) {
-    value = value.slice(0, -1);
-  }
-  return `${value}…`;
 }
 
 function roundedRect(

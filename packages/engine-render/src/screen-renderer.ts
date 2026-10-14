@@ -1,11 +1,15 @@
 import * as THREE from "three";
+import type { InputAction } from "@mma/engine-input";
+import { horizonTokens } from "./horizon-tokens.js";
 import { spatialLayout } from "./spatial-layout.js";
-import { createGlassPanel } from "./visuals/glass-panel.js";
+import { createGlassPanel, type GlassPanel } from "./visuals/glass-panel.js";
 import type { GlassPanelItem } from "./visuals/panel-layout.js";
 import {
   calculateSpatialDockLayout,
+  SPATIAL_DOCK_HINT,
   spatialDockOrientation,
   selectSpatialPresentationProfile,
+  shouldEnableSpatialPanelPointerEvents,
   toggleSpatialDockSelection,
   type SpatialPresentationProfile,
   type SpatialPanelKey,
@@ -92,11 +96,20 @@ export interface SpatialPanelItems {
 export interface SpatialPanelSession {
   update(items: SpatialPanelItems): void;
   setExpanded(expanded: boolean): void;
+  setActivePanelListener(listener: ((key: SpatialPanelKey | null) => void) | null): void;
+  /** Re-place the dock from the viewer's current heading and gaze. */
+  reposition(): void;
   /** Suspend browser pointer interception while an immersive session owns input. */
   setPointerEventsEnabled(enabled: boolean): void;
   handleRay(ray: THREE.Ray, phase: "move" | "down" | "up" | "cancel", sourceId?: string): boolean;
   setHintListener(listener: ((hints: readonly SpatialPanelEdgeHint[]) => void) | null): void;
   focusPanel(key: SpatialPanelEdgeHint["key"]): void;
+  dispose(): void;
+}
+
+export interface SpatialAtomCaption {
+  update(items: readonly GlassPanelItem[]): void;
+  setVisible(visible: boolean): void;
   dispose(): void;
 }
 
@@ -469,6 +482,9 @@ export class ScreenSceneRenderer {
   }[] = [];
   private readonly interactiveMeshes: THREE.Object3D[] = [];
   private readonly nucleusPickMesh: THREE.Mesh;
+  private readonly atomDropOutline: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
+  private readonly dragGhost: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
+  private readonly dragGhostOutline: THREE.LineSegments<THREE.EdgesGeometry, THREE.LineBasicMaterial>;
   private readonly slotLayer: HTMLDivElement;
   private readonly resizeObserver: ResizeObserver;
   private readonly reducedMotion: MediaQueryList;
@@ -481,6 +497,7 @@ export class ScreenSceneRenderer {
   private distance: number = screenZoomConfig.defaultDistance;
   private arViewTransform: ArViewTransform = DEFAULT_AR_VIEW_TRANSFORM;
   private nucleusRadius = 0.2;
+  private atomBoundingRadius = 0.2;
   private dragParticle: string | null = null;
   private arActive = false;
   private cameraViewActive = false;
@@ -495,6 +512,8 @@ export class ScreenSceneRenderer {
   private latestViewCount: number | null = null;
   private framesRendered = 0;
   private spatialPanelGroup: THREE.Group | null = null;
+  private atomCaptionPanel: GlassPanel | null = null;
+  private atomCaptionAnchor: THREE.Group | null = null;
   private hitTestSource: XRHitTestSource | null = null;
   private hitTestReferenceSpace: XRReferenceSpace | null = null;
   private lastHitTestPose: XRPose | null = null;
@@ -510,7 +529,6 @@ export class ScreenSceneRenderer {
   private vrEnvironment: VrEnvironment | null = null;
   private vrFloorUsesViewerFallback = false;
   private xrRenderLoopRunning = false;
-  private spatialDockPoseUpdater: (() => void) | null = null;
   private arDiagnosticsListener: ((diagnostics: ArRenderDiagnostics) => void) | null = null;
   private spatialHintUpdater: (() => void) | null = null;
   private disposed = false;
@@ -569,6 +587,36 @@ export class ScreenSceneRenderer {
     this.nucleusPickMesh.userData.interactionTarget = "nucleus";
     this.atomRoot.add(this.nucleusPickMesh);
     this.interactiveMeshes.push(this.nucleusPickMesh);
+    this.atomDropOutline = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 24, 16),
+      new THREE.MeshBasicMaterial({
+        color: 0xf0b323,
+        transparent: true,
+        opacity: 0.88,
+        wireframe: true,
+        depthWrite: false,
+      }),
+    );
+    this.atomDropOutline.visible = false;
+    this.atomDropOutline.renderOrder = 3;
+    this.atomRoot.add(this.atomDropOutline);
+    this.dragGhost = new THREE.Mesh(
+      new THREE.SphereGeometry(0.018, 16, 12),
+      new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.78,
+        depthWrite: false,
+      }),
+    );
+    this.dragGhost.visible = false;
+    this.dragGhost.renderOrder = 4;
+    this.scene.add(this.dragGhost);
+    this.dragGhostOutline = new THREE.LineSegments(
+      new THREE.EdgesGeometry(this.dragGhost.geometry),
+      new THREE.LineBasicMaterial({ color: 0x20222a, transparent: true, opacity: 0.9 }),
+    );
+    this.dragGhost.add(this.dragGhostOutline);
 
     this.diagnosticsElement = options.diagnostics ? document.createElement("output") : null;
     if (this.diagnosticsElement) {
@@ -595,6 +643,13 @@ export class ScreenSceneRenderer {
     this.clearSphereMeshes();
     this.clearRingMeshes();
     this.nucleusRadius = Math.max(frame.nucleusRadius, 0.2);
+    this.atomBoundingRadius = Math.max(
+      frame.nucleusRadius,
+      ...frame.rings.map((ring) => ring.radius + RING_TUBE_RADIUS),
+      ...frame.spheres.flatMap((batch) =>
+        batch.positions.map((position) => Math.hypot(position.x, position.y, position.z) + batch.radius)),
+    );
+    this.atomDropOutline.scale.setScalar(this.atomBoundingRadius);
 
     for (const batch of frame.spheres) {
       if (batch.positions.length === 0) {
@@ -655,7 +710,59 @@ export class ScreenSceneRenderer {
       );
     }
     this.positionSlotMarkers();
+    this.updateAtomCaptionPlacement();
     this.render();
+  }
+
+  /** Create a small kit Card attached below the atom for handheld AR. */
+  createAtomCaption(items: readonly GlassPanelItem[]): SpatialAtomCaption {
+    if (!this.arActive) {
+      throw new Error("An atom caption requires an active AR presentation.");
+    }
+    this.atomCaptionPanel?.dispose();
+    this.atomCaptionAnchor?.removeFromParent();
+    const widthDp = 520;
+    const heightDp = 192;
+    const panel = createGlassPanel({
+      id: "ar-atom-caption",
+      component: "card",
+      widthM: widthDp * horizonTokens.metresPerDp,
+      heightM: heightDp * horizonTokens.metresPerDp,
+      pixelWidth: widthDp,
+      contentPaddingPx: 8,
+      surface: "uniform",
+      items,
+    });
+    const anchor = new THREE.Group();
+    anchor.name = "ar-atom-caption-anchor";
+    anchor.add(panel.object3d);
+    this.atomRoot.add(anchor);
+    this.atomCaptionPanel = panel;
+    this.atomCaptionAnchor = anchor;
+    this.updateAtomCaptionPlacement();
+    this.render();
+    let disposed = false;
+    return {
+      update: (nextItems) => {
+        if (disposed) return;
+        panel.update(nextItems);
+        this.render();
+      },
+      setVisible: (visible) => {
+        if (disposed) return;
+        panel.object3d.visible = visible;
+        this.render();
+      },
+      dispose: () => {
+        if (disposed) return;
+        disposed = true;
+        panel.dispose();
+        anchor.removeFromParent();
+        if (this.atomCaptionPanel === panel) this.atomCaptionPanel = null;
+        if (this.atomCaptionAnchor === anchor) this.atomCaptionAnchor = null;
+        this.render();
+      },
+    };
   }
 
   /** Present the atom at tabletop scale through the active WebXR session. */
@@ -789,7 +896,6 @@ export class ScreenSceneRenderer {
     this.activeXRMode = null;
     this.activeXRReferenceSpaceType = null;
     this.spatialPresentationProfile = "handheld";
-    this.spatialDockPoseUpdater = null;
     this.firstFramePoseWasNull = null;
     this.firstNonNullViewerPose = null;
     this.latestFramePose = null;
@@ -965,18 +1071,45 @@ export class ScreenSceneRenderer {
     return typeof target === "string" ? { target } : null;
   }
 
-  /** Show electron slot markers while a particle is being dragged. */
-  beginDrag(particle: string): void {
+  /** Show the drag ghost and electron slot markers for a particle gesture. */
+  beginDrag(particle: string, color?: string): void {
     this.dragParticle = particle;
     this.slotLayer.classList.toggle("is-visible", particle === "electron");
     this.positionSlotMarkers();
+    if (this.arActive) {
+      if (color) this.dragGhost.material.color.set(color);
+      this.dragGhost.visible = true;
+    }
   }
 
   /** Clear transient drop-zone highlights after a drag ends or is cancelled. */
   endDrag(): void {
     this.dragParticle = null;
+    this.dragGhost.visible = false;
+    this.atomDropOutline.visible = false;
     this.slotLayer.classList.remove("is-visible");
     this.updateDropHighlight(null, null);
+  }
+
+  /** Update the in-scene drag preview and return whether the ray hits the atom bounds. */
+  updateSpatialDragRay(
+    origin: Readonly<{ x: number; y: number; z: number }>,
+    direction: Readonly<{ x: number; y: number; z: number }>,
+  ): "nucleus" | null {
+    if (!this.arActive || !this.dragParticle) return null;
+    const rayDirection = new THREE.Vector3(direction.x, direction.y, direction.z).normalize();
+    const rayOrigin = new THREE.Vector3(origin.x, origin.y, origin.z);
+    const ray = new THREE.Ray(rayOrigin, rayDirection);
+    this.dragGhost.position.copy(rayOrigin).addScaledVector(rayDirection, 0.45);
+    this.scene.updateMatrixWorld(true);
+    const center = this.atomRoot.getWorldPosition(new THREE.Vector3());
+    const worldScale = this.atomRoot.getWorldScale(new THREE.Vector3());
+    const scale = Math.max(worldScale.x, worldScale.y, worldScale.z);
+    const radius = this.atomBoundingRadius * scale;
+    const target = ray.intersectsSphere(new THREE.Sphere(center, radius)) ? "nucleus" : null;
+    this.atomDropOutline.visible = target !== null;
+    this.render();
+    return target;
   }
 
   /** Rotate the view without changing atom state. */
@@ -1082,6 +1215,7 @@ export class ScreenSceneRenderer {
     items: SpatialPanelItems,
     onPanelAction: (inputId: string) => void,
     arPointerTarget?: HTMLElement,
+    onSpatialInput?: (action: InputAction) => void,
   ): SpatialPanelSession {
     if (!canCreateSpatialPanels(this.arActive, this.cameraViewActive)) {
       throw new Error("Spatial panels require an active AR or camera-view presentation.");
@@ -1095,17 +1229,19 @@ export class ScreenSceneRenderer {
     const projectionCamera = viewerCamera instanceof THREE.ArrayCamera
       ? viewerCamera.cameras[0] ?? viewerCamera
       : viewerCamera;
+    const includeSettings = (items.arControls?.length ?? 0) > 0;
     const dockLayout = calculateSpatialDockLayout(
       viewportWidth,
       viewportHeight,
       projectionCamera.projectionMatrix.elements[5]!,
       this.spatialPresentationProfile,
+      includeSettings,
     );
     const profile = spatialLayout.dockProfiles[
       this.spatialPresentationProfile === "headset" ? "headset" : "handheld"
     ];
     const safeRect = readSpatialDockSafeRect(viewport, viewportHeight);
-    const rowHeightPx = profile.compactHeightPx;
+    const rowHeightPx = horizonTokens.minimumHitTargetDp;
     const desiredRowY = viewportHeight / 2 +
       Math.tan(profile.downAngleRadians) * profile.distanceMeters * dockLayout.pixelsPerMeter;
     const rowCenterY = THREE.MathUtils.clamp(
@@ -1113,45 +1249,37 @@ export class ScreenSceneRenderer {
       safeRect.top + rowHeightPx / 2,
       safeRect.bottom - rowHeightPx / 2,
     );
-    const detailHeightPx = Math.max(
-      spatialLayout.minControlSizePx * 2 + 32,
-      Math.min(
-        dockLayout.detailHeightMeters * dockLayout.pixelsPerMeter,
-        rowCenterY - safeRect.top - rowHeightPx / 2 - profile.gapPx,
-      ),
-    );
-    const detailHeightMeters = detailHeightPx / dockLayout.pixelsPerMeter;
+    const detailHeightMeters = dockLayout.detailHeightMeters;
     const group = new THREE.Group();
     group.name = "spatial-glass-panels";
-    const panelParent = this.arActive ? this.arPlacementRoot : this.scene;
+    const panelParent = this.scene;
     panelParent.add(group);
     this.spatialPanelGroup = group;
-    const updateDockPose = (): void => {
+    const repositionDock = (): void => {
       viewerCamera.updateMatrixWorld(true);
       const viewerPosition = viewerCamera.getWorldPosition(new THREE.Vector3());
       const viewerQuaternion = viewerCamera.getWorldQuaternion(new THREE.Quaternion());
       const orientation = spatialDockOrientation(viewerQuaternion);
-      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(orientation);
-      const screenOffset = new THREE.Vector3(
-        0,
-        (viewportHeight / 2 - rowCenterY) / dockLayout.pixelsPerMeter,
-        -profile.distanceMeters,
-      ).applyQuaternion(orientation);
-      const centerWorld = viewerPosition.add(forward.clone().multiplyScalar(profile.distanceMeters))
-        .add(new THREE.Vector3(0, screenOffset.y, 0));
+      const gaze = new THREE.Vector3(0, 0, -1).applyQuaternion(viewerQuaternion);
+      const centerWorld = viewerPosition
+        .add(gaze.multiplyScalar(profile.distanceMeters))
+        .add(new THREE.Vector3(
+          0,
+          (viewportHeight / 2 - rowCenterY) / dockLayout.pixelsPerMeter,
+          0,
+        ));
       panelParent.updateMatrixWorld(true);
       const parentWorldQuaternion = panelParent.getWorldQuaternion(new THREE.Quaternion());
       group.position.copy(centerWorld.applyMatrix4(panelParent.matrixWorld.clone().invert()));
       group.quaternion.copy(parentWorldQuaternion.invert().multiply(orientation));
     };
-    updateDockPose();
-    this.spatialDockPoseUpdater = updateDockPose;
+    repositionDock();
     const keys: readonly SpatialPanelKey[] = [
       "mission",
       "particles",
       "elementInfo",
       "narration",
-      "settings",
+      ...(includeSettings ? ["settings" as const] : []),
     ];
     const currentItems = (source: SpatialPanelItems, key: SpatialPanelKey): readonly GlassPanelItem[] => {
       if (key === "settings") {
@@ -1177,120 +1305,175 @@ export class ScreenSceneRenderer {
       collapsible?: boolean;
     }[] = [];
     let activeKey: SpatialPanelKey | null = "mission";
-    let page = 0;
     const rowPanels = new Map<SpatialPanelKey, ReturnType<typeof createGlassPanel>>();
     let detailPanel: ReturnType<typeof createGlassPanel> | null = null;
     const detailId = "spatial-dock-detail";
     let host: ReturnType<typeof createSpatialPanelHost> | null = null;
     try {
-      const panelPixelWidth = Math.round(profile.cardWidthPx);
       const rowWidthPx = dockLayout.rowWidthPx;
-      const leftEdgePx = -rowWidthPx / 2;
-      const paging = dockLayout.visibleCount < keys.length;
-      let cursorPx = leftEdgePx;
-      const cardOffsets = new Map<SpatialPanelKey, number>();
-      if (paging) cursorPx += profile.pagerButtonPx + profile.gapPx;
-      for (const key of dockLayout.keys) {
-        cardOffsets.set(key, cursorPx + profile.cardWidthPx / 2);
-        cursorPx += profile.cardWidthPx + profile.gapPx;
-      }
-      for (const key of keys) {
-        const panel = createGlassPanel({
-          id: `spatial-dock-${key}`,
-          widthM: dockLayout.cardWidthMeters,
-          heightM: detailHeightMeters,
-          pixelWidth: panelPixelWidth,
-          contentPaddingPx: 6,
-          collapsedHeightM: dockLayout.compactHeightMeters,
-          surface: "uniform",
-          compactTitle: labels[key],
-          items: currentItems(initialItems, key),
-          collapsed: true,
-        });
+      const tabs = keys.map((key) => {
+        const label = key === "elementInfo" ? "Element" : key === "narration" ? "Sound" : labels[key];
+        return {
+          key,
+          panel: createGlassPanel({
+            id: `spatial-dock-${key}`,
+            component: "button",
+            widthM: dockLayout.tabWidthPx / dockLayout.pixelsPerMeter,
+            heightM: dockLayout.tabHeightMeters,
+            pixelWidth: Math.round(dockLayout.tabWidthPx),
+            contentPaddingPx: 0,
+            surface: "uniform",
+            items: [{
+              kind: "button" as const,
+              text: label,
+              inputId: `dock:tab:${key}`,
+              regionId: `dock:tab:${key}`,
+              variant: "secondary" as const,
+              textAlign: "center" as const,
+              fontSizePx: horizonTokens.typeScale.body1.sizeDp,
+              targetSizeDp: this.spatialPresentationProfile === "headset"
+                ? horizonTokens.primaryHandHitTargetDp
+                : horizonTokens.minimumHitTargetDp,
+            }],
+          }),
+        };
+      });
+      for (const [index, { key, panel }] of tabs.entries()) {
+        panel.object3d.position.set(
+          (-rowWidthPx / 2 + (index + 0.5) * dockLayout.tabWidthPx) /
+            dockLayout.pixelsPerMeter,
+          0,
+          0,
+        );
         rowPanels.set(key, panel);
-        const visible = dockLayout.keys.includes(key);
-        if (visible) {
-          panel.object3d.position.set(
-            cardOffsets.get(key)! / dockLayout.pixelsPerMeter,
-            0,
-            0,
-          );
-        }
-        panel.object3d.visible = visible;
-        mounts.push({
-          panel,
-          selectionId: key,
-        });
+        mounts.push({ panel });
       }
       const detailPanelWidthM = dockLayout.detailWidthMeters;
       detailPanel = createGlassPanel({
         id: detailId,
+        component: "card",
+        surfaceComponent: "panel",
         widthM: detailPanelWidthM,
         heightM: detailHeightMeters,
         pixelWidth: Math.round(detailPanelWidthM * dockLayout.pixelsPerMeter),
+        contentPaddingPx: 6,
         surface: "uniform",
-        items: activeKey ? currentItems(initialItems, activeKey) : [],
+        items: [],
       });
-      const detailCenterY = dockLayout.compactHeightMeters / 2 +
-        2 * profile.gapPx / dockLayout.pixelsPerMeter + detailHeightMeters / 2;
+      const detailCenterY = dockLayout.tabHeightMeters / 2 + detailHeightMeters / 2;
       detailPanel.object3d.position.set(0, detailCenterY, 0);
-      detailPanel.object3d.visible = activeKey !== null;
+      detailPanel.object3d.visible = true;
       mounts.push({
         panel: detailPanel,
-        selectionId: "detail",
       });
-      if (paging) {
-        for (const [direction, glyph] of [["previous", "‹"], ["next", "›"]] as const) {
-          const arrow = createGlassPanel({
-            id: `spatial-dock-${direction}`,
-            widthM: dockLayout.pagerButtonMeters,
-            heightM: dockLayout.pagerButtonMeters,
-            pixelWidth: profile.pagerButtonPx,
-            contentPaddingPx: 0,
-            surface: "uniform",
-            items: [{
-              kind: "button",
-              text: glyph,
-              inputId: `dock:${direction}`,
-              regionId: `dock:${direction}`,
-            }],
-          });
-          const x = direction === "previous"
-            ? (leftEdgePx + profile.pagerButtonPx / 2) / dockLayout.pixelsPerMeter
-            : (-leftEdgePx - profile.pagerButtonPx / 2) / dockLayout.pixelsPerMeter;
-          arrow.object3d.position.set(x, 0, 0);
-          mounts.push({ panel: arrow });
+      let detailPage = 0;
+      let hasTabTapped = false;
+      let activePanelListener: ((key: SpatialPanelKey | null) => void) | null = null;
+      const updateTabs = (): void => {
+        for (const key of keys) {
+          const panel = rowPanels.get(key);
+          if (!panel) continue;
+          const label = key === "elementInfo" ? "Element" : key === "narration" ? "Sound" : labels[key];
+          const selected = activeKey === key;
+          panel.update([{
+            kind: "button",
+            text: label,
+            inputId: `dock:tab:${key}`,
+            regionId: `dock:tab:${key}`,
+            variant: selected ? "primary" : "secondary",
+            selected,
+            textAlign: "center",
+            fontSizePx: horizonTokens.typeScale.body1.sizeDp,
+            targetSizeDp: this.spatialPresentationProfile === "headset"
+              ? horizonTokens.primaryHandHitTargetDp
+              : horizonTokens.minimumHitTargetDp,
+          }]);
         }
-      }
+      };
+      const decorateDetailItems = (
+        key: SpatialPanelKey,
+        source: SpatialPanelItems,
+      ): readonly GlassPanelItem[] => {
+        const content = currentItems(source, key).map((item) => {
+          if (item.kind !== "button") return item;
+          const variant = item.inputId === "exit-ar"
+            ? "destructive" as const
+            : key === "mission" && item.inputId === "lesson:check"
+              ? "primary" as const
+              : "secondary" as const;
+          if (key !== "mission") {
+            return {
+              ...item,
+              variant,
+              ...(key === "particles" ? {
+                targetSizeDp: this.spatialPresentationProfile === "headset"
+                  ? horizonTokens.primaryHandHitTargetDp
+                  : horizonTokens.minimumHitTargetDp,
+              } : {}),
+            };
+          }
+          const actionButton = ["lesson:check", "lesson:hint", "lesson:free-play", "atom/reset"]
+            .includes(item.inputId);
+          return {
+            ...item,
+            variant,
+            ...(item.inputId === "lesson:check" && this.spatialPresentationProfile === "headset"
+              ? { targetSizeDp: horizonTokens.primaryHandHitTargetDp }
+              : {}),
+            ...(actionButton ? { layoutGroup: "mission-actions" as const } : {}),
+          };
+        });
+        return !hasTabTapped && key === "mission"
+          ? [{ kind: "text", text: SPATIAL_DOCK_HINT, component: "tooltip" } as GlassPanelItem, ...content]
+          : content;
+      };
+      const updateDetail = (): void => {
+        if (!detailPanel) return;
+        detailPanel.object3d.visible = activeKey !== null;
+        if (activeKey) {
+          detailPage = 0;
+          const current = decorateDetailItems(activeKey, currentData);
+          detailPanel.update({
+            items: current,
+            ...(activeKey === "settings" ? { toggles: currentData.settingsToggles } : {}),
+          });
+          detailPanel.setPage(0);
+        } else {
+          detailPage = 0;
+        }
+        activePanelListener?.(activeKey);
+        this.render();
+      };
       const panelHost = createSpatialPanelHost({
         group,
-        camera: viewerCamera,
+        camera: projectionCamera,
         pointerTarget: arPointerTarget ?? this.canvas,
         panels: mounts,
-        enablePointerEvents: !this.arActive,
+        enablePointerEvents: shouldEnableSpatialPanelPointerEvents(
+          !this.arActive,
+          this.arActive,
+          this.spatialPresentationProfile,
+        ),
         onPanelAction: (inputId) => {
-          if (inputId === "dock:previous") {
-            page = Math.max(0, page - 1);
-            updatePage();
+          if (inputId === "dock:detail:previous" || inputId === "dock:detail:next") {
+            const currentPage = detailPage;
+            detailPanel?.setPage(currentPage + (inputId.endsWith("previous") ? -1 : 1));
+            detailPage = Math.max(0, currentPage + (inputId.endsWith("previous") ? -1 : 1));
+            this.render();
             return;
           }
-          if (inputId === "dock:next") {
-            page = Math.min(dockLayout.pageCount - 1, page + 1);
-            updatePage();
+          if (inputId.startsWith("dock:tab:")) {
+            const key = inputId.slice("dock:tab:".length) as SpatialPanelKey;
+            if (!keys.includes(key)) return;
+            hasTabTapped = true;
+            activeKey = toggleSpatialDockSelection(activeKey, key);
+            updateTabs();
+            updateDetail();
             return;
           }
           onPanelAction(inputId);
         },
-        onPanelSelection: (selectionId) => {
-          if (selectionId === "detail") {
-            activeKey = null;
-          } else if (keys.includes(selectionId as SpatialPanelKey)) {
-            const next = selectionId as SpatialPanelKey;
-            activeKey = toggleSpatialDockSelection(activeKey, next);
-          }
-
-          updateDetail();
-        },
+        ...(onSpatialInput ? { onSpatialInput } : {}),
         ...(arPointerTarget
           ? {
               shouldIgnorePointerTarget: (target: EventTarget | null) =>
@@ -1301,79 +1484,55 @@ export class ScreenSceneRenderer {
           : {}),
       });
       host = panelHost;
-      const updatePage = (): void => {
-        const nextLayout = calculateSpatialDockLayout(
-          viewportWidth,
-          viewportHeight,
-          projectionCamera.projectionMatrix.elements[5]!,
-          this.spatialPresentationProfile,
-          page,
-        );
-        for (const key of keys) {
-          const panel = rowPanels.get(key);
-          if (!panel) continue;
-          const visible = nextLayout.keys.includes(key);
-          panel.object3d.visible = visible;
-          if (visible) {
-            const index = nextLayout.keys.indexOf(key);
-            const start = -nextLayout.rowWidthPx / 2 +
-              (paging ? profile.pagerButtonPx + profile.gapPx : 0);
-            panel.object3d.position.x = (start +
-              (index + 0.5) * (profile.cardWidthPx + profile.gapPx)) /
-              dockLayout.pixelsPerMeter;
-            panel.object3d.position.y = 0;
-          }
-        }
-        const previous = mounts.find(({ panel }) => panel.object3d.name === "spatial-dock-previous");
-        const next = mounts.find(({ panel }) => panel.object3d.name === "spatial-dock-next");
-        if (previous) previous.panel.object3d.visible = page > 0;
-        if (next) next.panel.object3d.visible = page < dockLayout.pageCount - 1;
-      };
-      const updateDetail = (): void => {
-        if (!detailPanel) return;
-        detailPanel.object3d.visible = activeKey !== null;
-        if (activeKey) {
-          const current = currentItems(currentData, activeKey);
-          detailPanel.update({
-            items: current,
-            ...(activeKey === "settings" ? { toggles: currentData.settingsToggles } : {}),
-          });
-        }
-        this.render();
-      };
       let currentData = initialItems;
-      updatePage();
+      updateTabs();
       updateDetail();
       let disposed = false;
       return {
         update: (next) => {
           if (disposed) return;
           currentData = next;
-          for (const key of keys) {
-            rowPanels.get(key)?.update(currentItems(next, key));
-          }
+          detailPage = 0;
           updateDetail();
         },
         setExpanded: (expanded) => {
           if (disposed) return;
-          activeKey = expanded ? (activeKey ?? "mission") : "mission";
+          activeKey = expanded ? (activeKey ?? "mission") : null;
+          updateTabs();
           updateDetail();
         },
+        setActivePanelListener: (listener) => {
+          if (disposed) return;
+          activePanelListener = listener;
+          listener?.(activeKey);
+        },
+        reposition: () => {
+          if (!disposed) {
+            repositionDock();
+            this.render();
+          }
+        },
         setPointerEventsEnabled: (enabled) => {
-          if (!disposed) panelHost.setPointerEventsEnabled(enabled);
+          if (!disposed) {
+            panelHost.setPointerEventsEnabled(shouldEnableSpatialPanelPointerEvents(
+              enabled,
+              this.arActive,
+              this.spatialPresentationProfile,
+            ));
+          }
         },
         handleRay: (ray, phase, sourceId) => panelHost.handleRay(ray, phase, sourceId),
         setHintListener: () => undefined,
         focusPanel: (key) => {
           if (keys.includes(key as SpatialPanelKey)) {
             activeKey = key as SpatialPanelKey;
+            updateTabs();
             updateDetail();
           }
         },
         dispose: () => {
           if (disposed) return;
           disposed = true;
-          if (this.spatialDockPoseUpdater === updateDockPose) this.spatialDockPoseUpdater = null;
           if (this.spatialPanelGroup === group) this.spatialPanelGroup = null;
           panelHost.dispose();
           group.removeFromParent();
@@ -1404,11 +1563,21 @@ export class ScreenSceneRenderer {
     this.disposeVrEnvironment();
     this.resizeObserver.disconnect();
     this.reducedMotion.removeEventListener("change", this.onReducedMotionChange);
+    this.atomCaptionPanel?.dispose();
+    this.atomCaptionPanel = null;
+    this.atomCaptionAnchor?.removeFromParent();
+    this.atomCaptionAnchor = null;
     this.clearSphereMeshes();
     this.clearRingMeshes();
     this.nucleonGeometry.dispose();
     this.nucleusPickMesh.geometry.dispose();
     (this.nucleusPickMesh.material as THREE.Material).dispose();
+    this.atomDropOutline.geometry.dispose();
+    this.atomDropOutline.material.dispose();
+    this.dragGhost.geometry.dispose();
+    this.dragGhost.material.dispose();
+    this.dragGhostOutline.geometry.dispose();
+    this.dragGhostOutline.material.dispose();
     for (const material of this.materials.values()) {
       material.dispose();
     }
@@ -1625,13 +1794,41 @@ export class ScreenSceneRenderer {
     if (this.disposed) {
       return;
     }
-    this.spatialDockPoseUpdater?.();
+    this.updateAtomCaptionPlacement();
     this.renderer.render(this.scene, this.camera);
     if (this.diagnosticsElement) {
       this.diagnosticsElement.textContent =
         `${this.renderer.info.render.calls} calls · ${frameTime.toFixed(1)} ms · ${this.qualityTier}`;
     }
     this.publishArDiagnostics();
+  }
+
+  private updateAtomCaptionPlacement(): void {
+    if (!this.atomCaptionAnchor || !this.atomCaptionPanel) return;
+    this.scene.updateMatrixWorld(true);
+    const atomPosition = this.atomRoot.getWorldPosition(new THREE.Vector3());
+    const atomScale = this.atomRoot.getWorldScale(new THREE.Vector3());
+    const modelRadius = this.currentFrame
+      ? Math.max(
+          this.currentFrame.nucleusRadius,
+          ...this.currentFrame.rings.map((ring) => ring.radius),
+          ...this.currentFrame.spheres.flatMap((batch) => batch.positions.map((position) =>
+            Math.hypot(position.x, position.y, position.z) + batch.radius)),
+        )
+      : this.nucleusRadius;
+    const heightM = 192 * horizonTokens.metresPerDp;
+    const captionPosition = atomPosition.clone();
+    captionPosition.y -= modelRadius * atomScale.y + heightM / 2 + 0.02;
+    this.atomCaptionAnchor.position.copy(this.atomRoot.worldToLocal(captionPosition));
+    const placementQuaternion = this.arPlacementRoot.getWorldQuaternion(new THREE.Quaternion());
+    const placementYaw = new THREE.Euler().setFromQuaternion(placementQuaternion, "YXZ").y;
+    const captionWorldQuaternion = new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(0, placementYaw + this.arViewTransform.yaw, 0),
+    );
+    this.atomCaptionAnchor.quaternion.copy(
+      this.atomRoot.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(captionWorldQuaternion),
+    );
+    this.atomCaptionAnchor.scale.setScalar(1 / Math.max(atomScale.x, 0.0001));
   }
 
   private publishArDiagnostics(): void {

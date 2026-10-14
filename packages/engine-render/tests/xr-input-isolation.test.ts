@@ -147,6 +147,7 @@ describe("browser input isolation during XR", () => {
       update: vi.fn(),
       hitTest: vi.fn(() => null),
       setCollapsed: vi.fn(),
+      setPage: vi.fn(),
       setScale: vi.fn(),
       dispose: vi.fn(() => {
         geometry.dispose();
