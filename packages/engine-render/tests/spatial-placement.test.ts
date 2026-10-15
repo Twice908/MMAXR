@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { describe, expect, it } from "vitest";
 import {
   spatialLayout,
+  spatialSurfaceGeometry,
   validateSpatialDockProfile,
   validateSpatialLayout,
 } from "../src/spatial-layout.js";
@@ -19,6 +20,7 @@ import {
 } from "../src/visuals/spatial-placement.js";
 import { hitTest, layoutPanel, layoutPanelPages, wrapPanelText } from "../src/visuals/panel-layout.js";
 import { spatialTokens } from "../src/spatial-tokens.js";
+import { xrTokens } from "../src/xr-tokens.js";
 import {
   canCreateSpatialPanels,
   shouldShowSpatialSettingsFallback,
@@ -28,6 +30,27 @@ const phoneFov = 60 * Math.PI / 180;
 const phoneProjectionY = 1 / Math.tan(phoneFov / 2);
 
 describe("spatial dock layout", () => {
+  it("converts normalized reference bounds into centered physical surface geometry", () => {
+    expect(spatialSurfaceGeometry(
+      { x: 0, y: 0, width: 1, height: 0.5 },
+      xrTokens.shellWidthMeters,
+    )).toEqual({
+      xMeters: 0,
+      yMeters: xrTokens.shellWidthMeters * 0.25,
+      widthMeters: xrTokens.shellWidthMeters,
+      heightMeters: xrTokens.shellWidthMeters * 0.5,
+    });
+    expect(spatialSurfaceGeometry(
+      { x: 0.25, y: 0.25, width: 0.5, height: 0.5 },
+      xrTokens.shellWidthMeters,
+    )).toEqual({
+      xMeters: 0,
+      yMeters: 0,
+      widthMeters: xrTokens.shellWidthMeters * 0.5,
+      heightMeters: xrTokens.shellWidthMeters * 0.5,
+    });
+  });
+
   it("places a headset dock from the first valid viewer pose", () => {
     const placement = calculateSpatialDockPlacement(
       { x: 0, y: 1.6, z: 0 },

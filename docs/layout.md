@@ -8,6 +8,12 @@ come from `modules/chem-atom-builder/src/atom-builder.css`,
 `modules/chem-atom-builder/src/horizon-tokens.css`,
 `packages/engine-render/src/spatial-layout.ts`, and
 `packages/engine-render/src/visuals/panel-layout.ts`.
+Shared immersive glass and XR design values live in
+`packages/engine-render/src/xr-tokens.ts`.
+The supplied desktop/headset Atom Builder reference geometry is recorded as
+data in `modules/chem-atom-builder/src/reference-layout.ts`; immersive AR/VR
+uses that data for an empty shell and four empty glass panels. Camera view
+retains its existing spatial dock.
 
 Before changing AR/VR/MR/XR UI, read [docs/horizon-ui.md](./horizon-ui.md)
 and use its Meta Horizon OS UI Set components and verified tokens. Do not
@@ -70,17 +76,17 @@ then a modal in the browser's dialog top layer. `camera-view.css`,
   `glass-tokens.css`. For XR-facing UI this is superseded by the kit's 48 dp
   minimum (60 dp for primary controls with hand tracking). Sheet groups add an
   8px local gap; see [horizon-ui.md](./horizon-ui.md) for kit typography.
-- Canvas spatial tokens mirror `spatial-tokens.css`: 22px panel padding,
-  17px sidebar padding, 10px 14px control padding, 18px layout gap, 22px
-  sidebar gap, and 8px control gap.
+- The camera-view dock retains the legacy `spatial-tokens.css` values. New
+  immersive panel padding, gaps, radii, and surface treatments use
+  `engine-render/src/xr-tokens.ts`.
 - Spatial dock text uses the kit type scale, with interactive rectangles at
   least 48 dp in both dimensions; primary controls with hand tracking are at
   least 60 dp. Keep a 16 CSS px body-text floor for handheld world-anchored
   text because it is viewed at a phone's distance.
 
-## Spatial dock row
+## Camera-view spatial dock row
 
-AR, camera view, and VR use one viewer-facing dock, independent of atom
+Camera view uses one viewer-facing dock, independent of atom
 placement. It has one row of equal-width tabs: Mission, Particles, Element,
 Sound; Settings is appended only if the DOM overlay is unavailable. All tabs
 are visible at once, with row width capped at 92% of the visible viewport.
@@ -102,10 +108,10 @@ the view projection at the dock depth:
 `pixelsPerMeter = viewportHeight * projectionY / (2 * distanceMeters)`
 
 where `projectionY` is the vertical projection-matrix scale (equivalently,
-`1 / tan(verticalFov / 2)`). The dock is placed once from the viewer's gaze and
-heading, about 0.7 m ahead and in the lower portion of the visible area; it is
-not continuously attached to the viewer or atom anchor. Reset view re-places
-it from the current gaze. Headsets use the 1 m distance and 15-degree arc.
+`1 / tan(verticalFov / 2)`). The dock is placed once from the viewer's gaze and heading, about 0.7 m ahead
+and in the lower portion of the visible area; it is not continuously attached
+to the viewer or atom anchor. Reset view re-places it from the current gaze.
+This dock remains for camera view only.
 Targets are at least 48 dp; primary controls with hand tracking are at least
 60 dp. Panel text follows the kit scale with a 16 CSS px handheld body-text
 floor. A 10%-top/14%-bottom safe band reserves space for overlay controls.
@@ -117,10 +123,11 @@ view-only and does not change learning state directly.
 
 ## Handheld, headset, and orientation
 
-The dock is upright and yaw-aligned to the viewer (no pitch or roll). Handheld
-AR/camera uses the phone-distance profile; headsets use the 1m arc profile.
-Camera view continues to use local video and screen input. Ordinary desktop
-and Android screen mode retain their existing layout.
+The camera dock is upright and yaw-aligned to the viewer (no pitch or roll).
+Immersive AR/VR instead uses the PNG-derived shell and four empty panels at
+the approved default panel size and distance. Camera view continues to use
+local video and screen input. Ordinary desktop and Android screen mode retain
+their existing layout.
 
 ## Do and do not
 
@@ -128,8 +135,8 @@ and Android screen mode retain their existing layout.
   panels.
 - Do reserve safe areas and keep 48 dp minimum targets / 60 dp primary
   hand-tracked controls.
-- Do keep the four/five tabs in their declared order and preserve the screen
-  fallback.
+- Do keep the camera-view four/five tabs in their declared order and preserve
+  the screen fallback.
 - Do not hide the default Mission detail or add dock cards by hard-coding a
   transform in a module.
 - Do not assume headset APIs, camera access, or backdrop-filter support.

@@ -1,7 +1,17 @@
 import * as THREE from "three";
 import type { InputAction } from "@mma/engine-input";
 import { horizonTokens } from "./horizon-tokens.js";
-import { spatialLayout } from "./spatial-layout.js";
+import {
+  spatialLayout,
+  spatialSurfaceGeometry,
+  type NormalizedSpatialSurfaceRect,
+} from "./spatial-layout.js";
+import { PANEL_LIMITS, xrTokens } from "./xr-tokens.js";
+import {
+  createGlassSurface,
+  disposeGlassSurface,
+  type GlassSurface,
+} from "./visuals/glass-material.js";
 import { createGlassPanel, type GlassPanel } from "./visuals/glass-panel.js";
 import type { GlassPanelItem } from "./visuals/panel-layout.js";
 import {
@@ -105,6 +115,15 @@ export interface SpatialPanelSession {
   setHintListener(listener: ((hints: readonly SpatialPanelEdgeHint[]) => void) | null): void;
   focusPanel(key: SpatialPanelEdgeHint["key"]): void;
   dispose(): void;
+}
+
+export interface SpatialSurfaceLayout {
+  readonly shell: NormalizedSpatialSurfaceRect;
+  readonly panels: readonly Readonly<{
+    id: string;
+    variant: "panel" | "card";
+    rect: NormalizedSpatialSurfaceRect;
+  }>[];
 }
 
 export interface SpatialAtomCaption {
@@ -1270,9 +1289,13 @@ export class ScreenSceneRenderer {
     onPanelAction: (inputId: string) => void,
     arPointerTarget?: HTMLElement,
     onSpatialInput?: (action: InputAction) => void,
+    emptySurfaceLayout?: SpatialSurfaceLayout,
   ): SpatialPanelSession {
     if (!canCreateSpatialPanels(this.arActive, this.cameraViewActive)) {
       throw new Error("Spatial panels require an active AR or camera-view presentation.");
+    }
+    if (this.arActive && emptySurfaceLayout) {
+      return this.createEmptySpatialSurfaceSession(emptySurfaceLayout);
     }
     const viewerCamera: THREE.Camera = this.arActive
       ? this.renderer.xr.getCamera()
@@ -1620,6 +1643,104 @@ export class ScreenSceneRenderer {
       group.removeFromParent();
       throw error;
     }
+  }
+
+  private createEmptySpatialSurfaceSession(layout: SpatialSurfaceLayout): SpatialPanelSession {
+    const viewerCamera = this.renderer.xr.getCamera();
+    const group = new THREE.Group();
+    group.name = "atom-builder-spatial-surfaces";
+    const surfaces: GlassSurface[] = [];
+    const parent = this.scene;
+
+    const addSurface = (
+      id: string,
+      variant: "shell" | "panel" | "card",
+      rect: NormalizedSpatialSurfaceRect,
+    ): void => {
+      const geometry = spatialSurfaceGeometry(rect, xrTokens.shellWidthMeters);
+      const surface = createGlassSurface(variant, {
+        width: geometry.widthMeters,
+        height: geometry.heightMeters,
+      });
+      surface.name = `atom-builder-${id}`;
+      surface.position.x = geometry.xMeters;
+      surface.position.y = geometry.yMeters;
+      group.add(surface);
+      surfaces.push(surface);
+    };
+
+    try {
+      addSurface("backing-shell", "shell", layout.shell);
+      for (const panel of layout.panels) {
+        addSurface(panel.id, panel.variant, panel.rect);
+      }
+      parent.add(group);
+      this.spatialPanelGroup = group;
+    } catch (error) {
+      for (const surface of surfaces) disposeGlassSurface(surface);
+      group.removeFromParent();
+      throw error;
+    }
+
+    const reposition = (viewerPose?: ArViewerPose): void => {
+      if (!viewerPose) viewerCamera.updateMatrixWorld(true);
+      const viewerPosition = viewerPose?.position ??
+        viewerCamera.getWorldPosition(new THREE.Vector3());
+      const viewerOrientation = viewerPose?.orientation ??
+        viewerCamera.getWorldQuaternion(new THREE.Quaternion());
+      const placement = calculateSpatialDockPlacement(
+        viewerPosition,
+        viewerOrientation,
+        PANEL_LIMITS.distanceMeters.default,
+        0,
+      );
+      parent.updateMatrixWorld(true);
+      const parentWorldQuaternion = parent.getWorldQuaternion(new THREE.Quaternion());
+      group.position.set(placement.position.x, placement.position.y, placement.position.z)
+        .applyMatrix4(parent.matrixWorld.clone().invert());
+      group.quaternion.copy(parentWorldQuaternion.invert().multiply(
+        new THREE.Quaternion(
+          placement.orientation.x,
+          placement.orientation.y,
+          placement.orientation.z,
+          placement.orientation.w,
+        ),
+      ));
+    };
+    const pendingReposition = (pose: ArViewerPose): void => reposition(pose);
+    if (this.arActive && !this.latestFramePose) {
+      this.pendingSpatialDockReposition = pendingReposition;
+    } else {
+      reposition(this.latestFramePose ?? undefined);
+    }
+    this.render();
+
+    let disposed = false;
+    return {
+      update: () => undefined,
+      setExpanded: () => undefined,
+      setActivePanelListener: (listener) => listener?.(null),
+      reposition: () => {
+        if (disposed) return;
+        reposition(this.latestFramePose ?? undefined);
+        this.render();
+      },
+      setPointerEventsEnabled: () => undefined,
+      handleRay: () => false,
+      setHintListener: () => undefined,
+      focusPanel: () => undefined,
+      dispose: () => {
+        if (disposed) return;
+        disposed = true;
+        if (this.pendingSpatialDockReposition === pendingReposition) {
+          this.pendingSpatialDockReposition = null;
+        }
+        if (this.spatialPanelGroup === group) this.spatialPanelGroup = null;
+        group.removeFromParent();
+        for (const surface of surfaces) disposeGlassSurface(surface);
+        this.render();
+      },
+    };
   }
 
   /** Dispose browser observers, WebGL resources, and owned DOM nodes. */
