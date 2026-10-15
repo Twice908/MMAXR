@@ -74,6 +74,9 @@ export function buildXrDiagnosticsText(data: XrDiagnosticsData): string {
       formatPosition(scene.atomViewerSpace.direction)
     }`
     : "unavailable";
+  const atomVisibilityChain = scene.atomVisibilityChain
+    .map(({ name, visible }) => `${name}:${visible ? "visible" : "hidden"}`)
+    .join(" > ");
   return [
     `Supported session modes: ${data.supportedModes.join(", ") || "none"}`,
     `Requested features: ${data.requestedFeatures.join(", ") || "none"}`,
@@ -90,12 +93,15 @@ export function buildXrDiagnosticsText(data: XrDiagnosticsData): string {
     `First non-null viewer pose: ${formatPose(scene.firstNonNullViewerPose)}`,
     `Latest frame viewer pose: ${formatPose(scene.latestFramePose)}`,
     `Atom world position: ${formatPosition(scene.atomWorldPosition)}`,
+    `Atom root world scale: ${formatPosition(scene.atomWorldScale)}`,
+    `Atom visibility (atom -> scene): ${atomVisibilityChain || "unavailable"}`,
+    `XR camera-to-atom distance: ${scene.xrCameraToAtomDistanceMeters === null ? "unavailable" : `${scene.xrCameraToAtomDistanceMeters.toFixed(3)} m`}`,
     `Dock/panel group world position: ${formatPosition(scene.panelGroupWorldPosition)}`,
     `Atom in viewer space: ${atomViewerSpace}`,
     `Atom position inside view frustum: ${scene.atomInsideViewFrustum === null ? "unknown" : scene.atomInsideViewFrustum ? "yes" : "no"}`,
     `renderer.xr.isPresenting: ${scene.rendererPresenting ? "yes" : "no"}`,
     `XR base layer framebuffer: ${framebuffer}`,
-    `Frames rendered since start: ${scene.framesRendered}`,
+    `XR frame count: ${scene.framesRendered}`,
     `View count: ${scene.viewCount ?? "unavailable"}`,
     `VR environment present: ${scene.environmentPresent ? "yes" : "no"}`,
     `Scene object issues: ${scene.sceneIssues.join("; ") || "none"}`,
@@ -343,6 +349,8 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
   let lastXrErrorMessage: string | null = null;
   let lastXrErrorStack: string | null = null;
   let diagnosticsRefresh: ReturnType<typeof globalThis.setInterval> | null = null;
+  let diagnosticsSnapshotTimeout: ReturnType<typeof globalThis.setTimeout> | null = null;
+  let diagnosticsSnapshotTaken = false;
   let xrInputSession: ArSessionHandle | null = null;
   let statusDismissTimeout: ReturnType<typeof globalThis.setTimeout> | null = null;
   const updateDiagnostics = (): string => {
@@ -437,6 +445,11 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
       if (inAr) {
         mountPanel(sessionInfo.overlayGranted === true);
       } else {
+        if (diagnosticsSnapshotTimeout !== null) {
+          globalThis.clearTimeout(diagnosticsSnapshotTimeout);
+          diagnosticsSnapshotTimeout = null;
+        }
+        diagnosticsSnapshotTaken = false;
         if (state.status === "idle") {
           activeMode = "immersive-ar";
         }
@@ -479,6 +492,13 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
             xrInputSession?.addEventListener("inputsourceschange", onInputSourcesChange);
           }
           updateDiagnostics();
+          if (state.status === "active" && !diagnosticsSnapshotTaken) {
+            diagnosticsSnapshotTaken = true;
+            diagnosticsSnapshotTimeout = globalThis.setTimeout(() => {
+              diagnosticsSnapshotTimeout = null;
+              if (!disposed && sessionState === "active") updateDiagnostics();
+            }, 2000);
+          }
           if (diagnosticsRefresh === null) {
             diagnosticsRefresh = globalThis.setInterval(() => {
               latestSessionInfo = controller.sessionInfo;
@@ -675,6 +695,7 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
     cancelComfortBreak?.();
     cancelComfortBreak = null;
     if (diagnosticsRefresh !== null) globalThis.clearInterval(diagnosticsRefresh);
+    if (diagnosticsSnapshotTimeout !== null) globalThis.clearTimeout(diagnosticsSnapshotTimeout);
     xrInputSession?.removeEventListener("inputsourceschange", onInputSourcesChange);
     if (dialog.open) {
       dialog.close();

@@ -149,3 +149,37 @@ export function profileSettings(profile: SpatialPresentationProfile): SpatialDoc
 export function spatialDockOrientation(viewerQuaternion: THREE.Quaternion): THREE.Quaternion {
   return gravityAlignedQuaternion(viewerQuaternion);
 }
+
+/** Calculate a world-space dock transform from a valid viewer pose. */
+export function calculateSpatialDockPlacement(
+  viewerPosition: Readonly<{ x: number; y: number; z: number }>,
+  viewerOrientation: Readonly<{ x: number; y: number; z: number; w: number }>,
+  distanceMeters: number,
+  verticalOffsetMeters: number,
+): Readonly<{
+  position: Readonly<{ x: number; y: number; z: number }>;
+  orientation: Readonly<{ x: number; y: number; z: number; w: number }>;
+}> {
+  const orientation = new THREE.Quaternion(
+    viewerOrientation.x,
+    viewerOrientation.y,
+    viewerOrientation.z,
+    viewerOrientation.w,
+  ).normalize();
+  const position = new THREE.Vector3(viewerPosition.x, viewerPosition.y, viewerPosition.z)
+    .addScaledVector(
+      new THREE.Vector3(0, 0, -1).applyQuaternion(orientation),
+      distanceMeters,
+    )
+    .add(new THREE.Vector3(0, verticalOffsetMeters, 0));
+  const dockOrientation = spatialDockOrientation(orientation);
+  return {
+    position: { x: position.x, y: position.y, z: position.z },
+    orientation: {
+      x: dockOrientation.x,
+      y: dockOrientation.y,
+      z: dockOrientation.z,
+      w: dockOrientation.w,
+    },
+  };
+}

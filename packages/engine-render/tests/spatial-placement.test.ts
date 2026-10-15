@@ -7,6 +7,7 @@ import {
 } from "../src/spatial-layout.js";
 import {
   calculateSpatialDockLayout,
+  calculateSpatialDockPlacement,
   gravityAlignedQuaternion,
   pixelsPerMeterAtDepth,
   profileSettings,
@@ -27,6 +28,23 @@ const phoneFov = 60 * Math.PI / 180;
 const phoneProjectionY = 1 / Math.tan(phoneFov / 2);
 
 describe("spatial dock layout", () => {
+  it("places a headset dock from the first valid viewer pose", () => {
+    const placement = calculateSpatialDockPlacement(
+      { x: 0, y: 1.6, z: 0 },
+      { x: 0, y: 0, z: 0, w: 1 },
+      profileSettings("headset").distanceMeters,
+      -0.2,
+    );
+
+    expect(placement.position.x).toBeCloseTo(0);
+    expect(placement.position.y).toBeCloseTo(1.4);
+    expect(placement.position.z).toBeCloseTo(-profileSettings("headset").distanceMeters);
+    expect(placement.orientation.x).toBeCloseTo(0);
+    expect(placement.orientation.y).toBeCloseTo(0);
+    expect(placement.orientation.z).toBeCloseTo(0);
+    expect(placement.orientation.w).toBeCloseTo(1);
+  });
+
   it("computes projection scale for a phone and a desktop viewport", () => {
     expect(pixelsPerMeterAtDepth(915, 0.75, phoneFov)).toBeCloseTo(1056.5, 0);
     expect(pixelsPerMeterAtDepth(1080, 1, phoneFov)).toBeCloseTo(935.3, 0);

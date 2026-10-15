@@ -214,7 +214,6 @@
 .ar-active .particle-rail,
 .ar-active .atom-inspector,
 .ar-active .scene-viewport { border-color: transparent; }
-.ar-active .atom-canvas,
 .ar-active .drop-slot-layer,
 .ar-active .render-diagnostics { display: none !important; }
 .ar-overlay-panel .lesson-step,

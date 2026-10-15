@@ -7,7 +7,7 @@ import type { GlassPanelItem } from "./visuals/panel-layout.js";
 import {
   calculateSpatialDockLayout,
   SPATIAL_DOCK_HINT,
-  spatialDockOrientation,
+  calculateSpatialDockPlacement,
   selectSpatialPresentationProfile,
   shouldEnableSpatialPanelPointerEvents,
   toggleSpatialDockSelection,
@@ -215,6 +215,9 @@ export interface XrSceneDiagnostics {
   readonly firstNonNullViewerPose: ArViewerPose | null;
   readonly latestFramePose: ArViewerPose | null;
   readonly atomWorldPosition: Position3;
+  readonly atomWorldScale: Position3;
+  readonly atomVisibilityChain: readonly Readonly<{ name: string; visible: boolean }>[];
+  readonly xrCameraToAtomDistanceMeters: number | null;
   readonly panelGroupWorldPosition: Position3 | null;
   readonly atomViewerSpace: Readonly<{
     distanceMeters: number;
@@ -512,6 +515,7 @@ export class ScreenSceneRenderer {
   private latestViewCount: number | null = null;
   private framesRendered = 0;
   private spatialPanelGroup: THREE.Group | null = null;
+  private pendingSpatialDockReposition: ((pose: ArViewerPose) => void) | null = null;
   private atomCaptionPanel: GlassPanel | null = null;
   private atomCaptionAnchor: THREE.Group | null = null;
   private hitTestSource: XRHitTestSource | null = null;
@@ -815,18 +819,6 @@ export class ScreenSceneRenderer {
       this.activeXRSession = session as XRSession;
       await this.renderer.xr.setSession(this.activeXRSession);
       this.xrRenderLoopRunning = true;
-      this.vrEnvironment = createVrEnvironmentForSession(
-        mode,
-        this.activeXRSession.environmentBlendMode,
-      );
-      if (this.vrEnvironment) {
-        this.scene.add(this.vrEnvironment.root);
-        this.arPlacementRoot.add(this.vrEnvironment.atomRing);
-        this.vrFloorUsesViewerFallback = !enabledFeatures.has("local-floor");
-      }
-      if (mode === "immersive-ar") {
-        await this.enablePhoneHitTest(this.activeXRSession);
-      }
       this.renderer.setAnimationLoop((time, frame) => {
         if (frame) {
           const referenceSpace = this.renderer.xr.getReferenceSpace();
@@ -840,12 +832,51 @@ export class ScreenSceneRenderer {
             this.firstNonNullViewerPose = viewerFrame.pose;
           }
           this.updateArPlacementFromFrame(frame, viewerFrame);
+          if (viewerFrame && this.pendingSpatialDockReposition) {
+            const reposition = this.pendingSpatialDockReposition;
+            this.pendingSpatialDockReposition = null;
+            reposition(viewerFrame.pose);
+          }
           this.framesRendered += 1;
         }
         const frameTime = this.lastFrameTime === 0 ? 0 : time - this.lastFrameTime;
         this.lastFrameTime = time;
         this.render(frameTime);
       });
+      this.vrEnvironment = createVrEnvironmentForSession(
+        mode,
+        this.activeXRSession.environmentBlendMode,
+      );
+      if (this.vrEnvironment) {
+        this.scene.add(this.vrEnvironment.root);
+        this.arPlacementRoot.add(this.vrEnvironment.atomRing);
+        this.vrFloorUsesViewerFallback = !enabledFeatures.has("local-floor");
+      }
+      if (mode === "immersive-ar") {
+        let hitTestFailureLogged = false;
+        let hitTestTimeout: ReturnType<typeof globalThis.setTimeout> | undefined;
+        const hitTestDeadline = new Promise<never>((_, reject) => {
+          hitTestTimeout = globalThis.setTimeout(() => {
+            this.phoneHitTestActive = false;
+            reject(new Error("Phone hit-test setup timed out after 3000 ms."));
+          }, 3000);
+        });
+        void Promise.race([
+          this.enablePhoneHitTest(this.activeXRSession),
+          hitTestDeadline,
+        ])
+          .catch((error: unknown) => {
+            if (!hitTestFailureLogged) {
+              hitTestFailureLogged = true;
+              console.warn("Phone hit-test setup failed; XR rendering will continue.", error);
+            }
+          })
+          .finally(() => {
+            if (hitTestTimeout !== undefined) {
+              globalThis.clearTimeout(hitTestTimeout);
+            }
+          });
+      }
     } catch (error) {
       await this.exitARSession();
       throw error;
@@ -867,6 +898,7 @@ export class ScreenSceneRenderer {
       }
     };
     attempt(() => this.renderer.setAnimationLoop(null));
+    this.pendingSpatialDockReposition = null;
     this.xrRenderLoopRunning = false;
     attempt(() => this.activeXRSession?.removeEventListener("select", this.onPhoneSurfaceSelect));
     attempt(() => this.disposeVrEnvironment());
@@ -930,6 +962,25 @@ export class ScreenSceneRenderer {
   getXrSceneDiagnostics(): XrSceneDiagnostics {
     this.scene.updateMatrixWorld(true);
     const atomWorld = this.atomRoot.getWorldPosition(new THREE.Vector3());
+    const atomWorldScale = this.atomRoot.getWorldScale(new THREE.Vector3());
+    const atomVisibilityChain: { name: string; visible: boolean }[] = [];
+    let ancestor: THREE.Object3D | null = this.atomRoot;
+    while (ancestor) {
+      atomVisibilityChain.push({
+        name: ancestor.name || ancestor.type,
+        visible: ancestor.visible,
+      });
+      if (ancestor === this.scene) break;
+      ancestor = ancestor.parent;
+    }
+    let xrCameraToAtomDistanceMeters: number | null = null;
+    if (this.renderer.xr.isPresenting) {
+      const xrCamera = this.renderer.xr.getCamera();
+      xrCamera.updateMatrixWorld(true);
+      xrCameraToAtomDistanceMeters = xrCamera
+        .getWorldPosition(new THREE.Vector3())
+        .distanceTo(atomWorld);
+    }
     const panelWorld = this.spatialPanelGroup?.getWorldPosition(new THREE.Vector3()) ?? null;
     const viewerPose = this.latestFramePose;
     let atomViewerSpace: XrSceneDiagnostics["atomViewerSpace"] = null;
@@ -997,6 +1048,9 @@ export class ScreenSceneRenderer {
       firstNonNullViewerPose: this.firstNonNullViewerPose,
       latestFramePose: this.latestFramePose,
       atomWorldPosition: { x: atomWorld.x, y: atomWorld.y, z: atomWorld.z },
+      atomWorldScale: { x: atomWorldScale.x, y: atomWorldScale.y, z: atomWorldScale.z },
+      atomVisibilityChain,
+      xrCameraToAtomDistanceMeters,
       panelGroupWorldPosition: panelWorld
         ? { x: panelWorld.x, y: panelWorld.y, z: panelWorld.z }
         : null,
@@ -1255,25 +1309,37 @@ export class ScreenSceneRenderer {
     const panelParent = this.scene;
     panelParent.add(group);
     this.spatialPanelGroup = group;
-    const repositionDock = (): void => {
-      viewerCamera.updateMatrixWorld(true);
-      const viewerPosition = viewerCamera.getWorldPosition(new THREE.Vector3());
-      const viewerQuaternion = viewerCamera.getWorldQuaternion(new THREE.Quaternion());
-      const orientation = spatialDockOrientation(viewerQuaternion);
-      const gaze = new THREE.Vector3(0, 0, -1).applyQuaternion(viewerQuaternion);
-      const centerWorld = viewerPosition
-        .add(gaze.multiplyScalar(profile.distanceMeters))
-        .add(new THREE.Vector3(
-          0,
-          (viewportHeight / 2 - rowCenterY) / dockLayout.pixelsPerMeter,
-          0,
-        ));
+    const repositionDock = (viewerPose?: ArViewerPose): void => {
+      if (!viewerPose) viewerCamera.updateMatrixWorld(true);
+      const viewerPosition = viewerPose?.position ??
+        viewerCamera.getWorldPosition(new THREE.Vector3());
+      const viewerOrientation = viewerPose?.orientation ??
+        viewerCamera.getWorldQuaternion(new THREE.Quaternion());
+      const placement = calculateSpatialDockPlacement(
+        viewerPosition,
+        viewerOrientation,
+        profile.distanceMeters,
+        (viewportHeight / 2 - rowCenterY) / dockLayout.pixelsPerMeter,
+      );
       panelParent.updateMatrixWorld(true);
       const parentWorldQuaternion = panelParent.getWorldQuaternion(new THREE.Quaternion());
-      group.position.copy(centerWorld.applyMatrix4(panelParent.matrixWorld.clone().invert()));
-      group.quaternion.copy(parentWorldQuaternion.invert().multiply(orientation));
+      group.position.set(placement.position.x, placement.position.y, placement.position.z)
+        .applyMatrix4(panelParent.matrixWorld.clone().invert());
+      group.quaternion.copy(parentWorldQuaternion.invert().multiply(
+        new THREE.Quaternion(
+          placement.orientation.x,
+          placement.orientation.y,
+          placement.orientation.z,
+          placement.orientation.w,
+        ),
+      ));
     };
-    repositionDock();
+    const pendingReposition = (pose: ArViewerPose): void => repositionDock(pose);
+    if (this.arActive && !this.latestFramePose) {
+      this.pendingSpatialDockReposition = pendingReposition;
+    } else {
+      repositionDock();
+    }
     const keys: readonly SpatialPanelKey[] = [
       "mission",
       "particles",
@@ -1533,6 +1599,9 @@ export class ScreenSceneRenderer {
         dispose: () => {
           if (disposed) return;
           disposed = true;
+          if (this.pendingSpatialDockReposition === pendingReposition) {
+            this.pendingSpatialDockReposition = null;
+          }
           if (this.spatialPanelGroup === group) this.spatialPanelGroup = null;
           panelHost.dispose();
           group.removeFromParent();
@@ -1540,6 +1609,9 @@ export class ScreenSceneRenderer {
         },
       };
     } catch (error) {
+      if (this.pendingSpatialDockReposition === pendingReposition) {
+        this.pendingSpatialDockReposition = null;
+      }
       if (host) {
         host.dispose();
       } else {
@@ -1560,6 +1632,7 @@ export class ScreenSceneRenderer {
     cancelAnimationFrame(this.animationFrame);
     cancelAnimationFrame(this.resizeFrame);
     this.renderer.setAnimationLoop(null);
+    this.pendingSpatialDockReposition = null;
     this.disposeVrEnvironment();
     this.resizeObserver.disconnect();
     this.reducedMotion.removeEventListener("change", this.onReducedMotionChange);
@@ -1694,11 +1767,12 @@ export class ScreenSceneRenderer {
       this.phonePlacementRepositioning = true;
       this.phoneAtomPlaced = false;
       session.addEventListener("select", this.onPhoneSurfaceSelect);
-    } catch {
+    } catch (error) {
       this.phoneHitTestActive = false;
       this.hitTestSource?.cancel();
       this.hitTestSource = null;
       this.hitTestReferenceSpace = null;
+      throw error;
     }
   }
 

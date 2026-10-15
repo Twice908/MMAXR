@@ -58,6 +58,14 @@ test("lazy-loads Atom Builder and mounts the screen canvas", async ({ page }) =>
   await expectCanvasHasRenderedPixels(page, canvas);
 });
 
+test("keeps the WebGL canvas visible while the immersive session class is active", async ({ page }) => {
+  await page.goto("http://127.0.0.1:5174");
+  const canvas = page.locator("#atom-scene canvas");
+  await expect(canvas).toBeVisible();
+  await page.locator("#app").evaluate((root) => root.classList.add("ar-active"));
+  await expect(canvas).toBeVisible();
+});
+
 test("hides camera view only for touch-first AR devices or missing camera access", async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "xr", {
