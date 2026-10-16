@@ -31,8 +31,24 @@ export const SPATIAL_COMPONENT_REGISTRY: readonly SpatialComponentRegistryEntry[
     },
     {
       component: "Slider",
-      props: ["id", "label", "orientation", "min", "max", "value", "disabled", "onChange"],
+      props: [
+        "id",
+        "label",
+        "orientation",
+        "min",
+        "max",
+        "value",
+        "trackLengthDp",
+        "minimumGroupScale",
+        "disabled",
+        "onChange",
+      ],
       kitComponent: "Slider; orientation and label slot use the shared kit slider",
+    },
+    {
+      component: "SpatialPanelGroup",
+      props: ["layout", "scale", "distance", "profile"],
+      kitComponent: "PanelGroup + exactly one shared scale/position Slider pair",
     },
     {
       component: "Stepper",

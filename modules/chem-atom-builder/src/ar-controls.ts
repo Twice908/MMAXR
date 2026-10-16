@@ -110,6 +110,16 @@ export function buildXrDiagnosticsText(data: XrDiagnosticsData): string {
     `Panel group distance from viewer: ${scene.panelGroupDistanceMeters == null ? "unavailable" : `${scene.panelGroupDistanceMeters.toFixed(3)} m`}`,
     `Position slider value: ${scene.panelGroupSliderValues?.positionMeters.toFixed(3) ?? "unavailable"} m`,
     `Scale slider value: ${scene.panelGroupSliderValues?.scale.toFixed(3) ?? "unavailable"}`,
+    `Active panel layout: ${scene.activeSpatialLayout ?? "unavailable"}`,
+    `Panel limits: ${scene.spatialLayoutLimits
+      ? `scale min/default/max ${scene.spatialLayoutLimits.scale.min}/${scene.spatialLayoutLimits.scale.default}/${scene.spatialLayoutLimits.scale.max}, distance ${scene.spatialLayoutLimits.distanceMeters.min}/${scene.spatialLayoutLimits.distanceMeters.default}/${scene.spatialLayoutLimits.distanceMeters.max} m`
+      : "unavailable"}`,
+    `Required look angles L/R/U/D: ${scene.spatialLayoutLookAngles
+      ? `${scene.spatialLayoutLookAngles.leftDegrees.toFixed(1)} / ${scene.spatialLayoutLookAngles.rightDegrees.toFixed(1)} / ${scene.spatialLayoutLookAngles.upDegrees.toFixed(1)} / ${scene.spatialLayoutLookAngles.downDegrees.toFixed(1)} deg`
+      : "unavailable"}`,
+    `Layout fits at minimum scale: ${scene.spatialLayoutFitsAtMinimumScale == null
+      ? "unavailable"
+      : scene.spatialLayoutFitsAtMinimumScale ? "yes" : "no"}`,
     `Panel group world rotation (x, y, z, w): ${formatRotation(scene.panelGroupWorldRotation)}`,
     `Atom position relative to model-panel centre: ${formatPosition(scene.modelStage?.relativeToModelPanelCenter ?? null)}`,
     `Model stage position: ${formatPosition(scene.modelStage?.position ?? null)}`,

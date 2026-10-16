@@ -83,6 +83,7 @@ export {
   type SpatialPanelGroupContent,
   type SpatialPanelSession,
   type SpatialSurfaceLayout,
+  type SpatialSurfaceLayouts,
   type SpatialAtomCaption,
   readXrViewerPose,
   type XrSceneDiagnostics,
@@ -170,6 +171,7 @@ export {
 } from "./visuals/spatial-pointer.js";
 export {
   GLASS,
+  ANDROID_PANEL_LIMITS,
   MODEL_LIMITS,
   MODEL_STAGE,
   PANEL_LIMITS,
@@ -217,10 +219,12 @@ export {
   clampPanelGroupScale,
   panelHorizontalAngleDegrees,
   calculateSpatialDockLayout,
+  calculateSpatialLayoutLookAngles,
   pixelsPerMeterAtDepth,
   profileSettings,
   spatialDockOrientation,
   gravityAlignedQuaternion,
+  selectSpatialLayoutName,
   selectSpatialPresentationProfile,
   toggleSpatialDockSelection,
   SPATIAL_DOCK_HINT,
@@ -228,5 +232,7 @@ export {
   type SpatialDockTabKey,
   type SpatialDockLayout,
   type PanelGroupPlacement,
+  type PanelGroupLimits,
   type SpatialPresentationProfile,
+  type SpatialLayoutLookAngles,
 } from "./visuals/spatial-placement.js";

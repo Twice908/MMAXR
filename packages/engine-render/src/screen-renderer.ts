@@ -9,6 +9,7 @@ import {
 import {
   dpToMeters,
   MODEL_STAGE,
+  ANDROID_PANEL_LIMITS,
   PANEL_LIMITS,
   xrTokens,
 } from "./xr-tokens.js";
@@ -26,12 +27,15 @@ import {
   calculatePanelGroupPlacement,
   calculatePanelGroupPosition,
   applyPanelGroupScale,
+  calculateSpatialLayoutLookAngles,
   clampPanelGroupDistance,
   clampPanelGroupScale,
+  selectSpatialLayoutName,
   selectSpatialPresentationProfile,
   shouldEnableSpatialPanelPointerEvents,
   toggleSpatialDockSelection,
   type SpatialPresentationProfile,
+  type PanelGroupLimits,
   type SpatialPanelKey,
 } from "./visuals/spatial-placement.js";
 import { createSpatialPanelHost } from "./visuals/spatial-panel-host.js";
@@ -241,15 +245,22 @@ export interface SpatialSurfaceLayout {
     rect: NormalizedSpatialSurfaceRect;
   }>[];
   readonly controls: Readonly<{
-    readonly hintButton: NormalizedSpatialSurfaceRect;
-    readonly checkButton: NormalizedSpatialSurfaceRect;
-    readonly freePlayButton: NormalizedSpatialSurfaceRect;
+    readonly hintButton?: NormalizedSpatialSurfaceRect;
+    readonly checkButton?: NormalizedSpatialSurfaceRect;
+    readonly freePlayButton?: NormalizedSpatialSurfaceRect;
     readonly futureLogoSlot: NormalizedSpatialSurfaceRect;
     readonly positionSliderTrack: NormalizedSpatialSurfaceRect;
     readonly scaleSliderTrack: NormalizedSpatialSurfaceRect;
     readonly resetViewButton: NormalizedSpatialSurfaceRect;
     readonly resetAtomButton: NormalizedSpatialSurfaceRect;
+    readonly positionSliderOrientation?: "horizontal" | "vertical";
+    readonly scaleSliderOrientation?: "horizontal" | "vertical";
   }>;
+}
+
+export interface SpatialSurfaceLayouts {
+  readonly headset: SpatialSurfaceLayout;
+  readonly android: SpatialSurfaceLayout;
 }
 
 export interface SpatialAtomCaption {
@@ -368,6 +379,18 @@ export interface XrSceneDiagnostics {
   readonly panelGroupWorldRotation?: Readonly<{ x: number; y: number; z: number; w: number }> | null;
   readonly panelGroupDistanceMeters?: number | null;
   readonly panelGroupSliderValues?: Readonly<{ positionMeters: number; scale: number }> | null;
+  readonly activeSpatialLayout?: "headset" | "android" | null;
+  readonly spatialLayoutLimits?: Readonly<{
+    scale: Readonly<{ min: number; default: number; max: number }>;
+    distanceMeters: Readonly<{ min: number; default: number; max: number }>;
+  }> | null;
+  readonly spatialLayoutLookAngles?: Readonly<{
+    leftDegrees: number;
+    rightDegrees: number;
+    upDegrees: number;
+    downDegrees: number;
+  }> | null;
+  readonly spatialLayoutFitsAtMinimumScale?: boolean | null;
   readonly atomViewerSpace: Readonly<{
     distanceMeters: number;
     direction: Position3;
@@ -695,6 +718,8 @@ export class ScreenSceneRenderer {
   private latestViewCount: number | null = null;
   private framesRendered = 0;
   private spatialPanelGroup: THREE.Group | null = null;
+  private activeSpatialLayout: "headset" | "android" | null = null;
+  private activeSpatialSurfaceLayout: SpatialSurfaceLayout | null = null;
   private modelStage: THREE.Group | null = null;
   private modelStageLayout: ModelStageLayout | null = null;
   private modelStagePose: ModelStagePose | null = null;
@@ -1200,6 +1225,48 @@ export class ScreenSceneRenderer {
           : null;
       if (viewerPosition) panelGroupDistanceMeters = viewerPosition.distanceTo(panelWorld);
     }
+    const spatialLayoutLimits = this.activeSpatialLayout === "android"
+      ? ANDROID_PANEL_LIMITS
+      : this.activeSpatialLayout === "headset"
+        ? PANEL_LIMITS
+        : null;
+    const activeModelPanel = this.activeSpatialSurfaceLayout?.panels.find(
+      ({ id }) => id === "model-panel",
+    );
+    const xrCamera = this.renderer.xr.getCamera();
+    const projectionCamera = xrCamera instanceof THREE.ArrayCamera
+      ? xrCamera.cameras[0] ?? xrCamera
+      : xrCamera;
+    const projectionX = projectionCamera.projectionMatrix.elements[0]!;
+    const projectionY = projectionCamera.projectionMatrix.elements[5]!;
+    const spatialLayoutLookAngles = this.activeSpatialSurfaceLayout && activeModelPanel &&
+      spatialLayoutLimits && projectionX > 0 && projectionY > 0
+      ? calculateSpatialLayoutLookAngles(
+          {
+            shell: this.activeSpatialSurfaceLayout.shell,
+            modelPanel: activeModelPanel.rect,
+          },
+          xrTokens.shellWidthMeters,
+          this.panelGroupSliderValues?.positionMeters ?? spatialLayoutLimits.distanceMeters.default,
+          this.panelGroupSliderValues?.scale ?? spatialLayoutLimits.scale.default,
+          projectionX,
+          projectionY,
+        )
+      : null;
+    const spatialLayoutMinimumScaleFit = this.activeSpatialSurfaceLayout && activeModelPanel &&
+      spatialLayoutLimits && projectionX > 0 && projectionY > 0
+      ? calculateSpatialLayoutLookAngles(
+          {
+            shell: this.activeSpatialSurfaceLayout.shell,
+            modelPanel: activeModelPanel.rect,
+          },
+          xrTokens.shellWidthMeters,
+          spatialLayoutLimits.distanceMeters.default,
+          spatialLayoutLimits.scale.min,
+          projectionX,
+          projectionY,
+        ).fitsInView
+      : null;
     let atomViewerSpace: XrSceneDiagnostics["atomViewerSpace"] = null;
     let atomInsideViewFrustum: boolean | null = null;
     if (viewerPose) {
@@ -1318,6 +1385,17 @@ export class ScreenSceneRenderer {
         : null,
       panelGroupDistanceMeters,
       panelGroupSliderValues: this.panelGroupSliderValues,
+      activeSpatialLayout: this.activeSpatialLayout,
+      spatialLayoutLimits,
+      spatialLayoutLookAngles: spatialLayoutLookAngles
+        ? {
+            leftDegrees: spatialLayoutLookAngles.leftDegrees,
+            rightDegrees: spatialLayoutLookAngles.rightDegrees,
+            upDegrees: spatialLayoutLookAngles.upDegrees,
+            downDegrees: spatialLayoutLookAngles.downDegrees,
+          }
+        : null,
+      spatialLayoutFitsAtMinimumScale: spatialLayoutMinimumScaleFit,
       atomViewerSpace,
       atomInsideViewFrustum,
       rendererPresenting: this.renderer.xr.isPresenting,
@@ -1537,15 +1615,20 @@ export class ScreenSceneRenderer {
     onPanelAction: (inputId: string) => void,
     arPointerTarget?: HTMLElement,
     onSpatialInput?: (action: InputAction) => void,
-    emptySurfaceLayout?: SpatialSurfaceLayout,
+    emptySurfaceLayout?: SpatialSurfaceLayout | SpatialSurfaceLayouts,
   ): SpatialPanelSession {
     if (!canCreateSpatialPanels(this.arActive, this.cameraViewActive)) {
       throw new Error("Spatial panels require an active AR or camera-view presentation.");
     }
     if (this.arActive && emptySurfaceLayout) {
+      const layoutName = selectSpatialLayoutName(this.spatialPresentationProfile, true);
+      const layout = "android" in emptySurfaceLayout
+        ? emptySurfaceLayout[layoutName]
+        : emptySurfaceLayout;
       return this.createSpatialBentoSession(
         items,
-        emptySurfaceLayout,
+        layout,
+        layoutName,
         onPanelAction,
         arPointerTarget ?? this.canvas,
         onSpatialInput,
@@ -1903,6 +1986,7 @@ export class ScreenSceneRenderer {
   private createSpatialBentoSession(
     initialItems: SpatialPanelItems,
     layout: SpatialSurfaceLayout,
+    layoutName: "headset" | "android",
     onPanelAction: (inputId: string) => void,
     pointerTarget: HTMLElement,
     onSpatialInput?: (action: InputAction) => void,
@@ -1911,9 +1995,12 @@ export class ScreenSceneRenderer {
     const camera = viewerCamera instanceof THREE.ArrayCamera
       ? viewerCamera.cameras[0] ?? viewerCamera
       : viewerCamera;
+    const panelLimits: PanelGroupLimits = layoutName === "android"
+      ? ANDROID_PANEL_LIMITS
+      : PANEL_LIMITS;
     const group = new THREE.Group();
     group.name = "atom-builder-panel-group";
-    applyPanelGroupScale(group, PANEL_LIMITS.scale.default);
+    applyPanelGroupScale(group, panelLimits.scale.default, panelLimits);
     group.visible = false;
     const parent = this.scene;
     const surfaces: GlassSurface[] = [];
@@ -1932,13 +2019,15 @@ export class ScreenSceneRenderer {
       "propertyRowElectronicConfiguration",
       "propertyRowOuterShell",
     ] as const;
-    const positionDistance = PANEL_LIMITS.distanceMeters.default;
+    const positionDistance = panelLimits.distanceMeters.default;
     let distanceMeters = positionDistance;
-    let scale = PANEL_LIMITS.scale.default;
+    let scale = panelLimits.scale.default;
     let currentItems = initialItems;
     let initialViewerPosition: THREE.Vector3 | null = null;
     let initialForward: THREE.Vector3 | null = null;
-    const heightOffset = xrTokens.placement.heightOffsetMeters;
+    const heightOffset = layoutName === "android"
+      ? 0
+      : xrTokens.placement.heightOffsetMeters;
     let swatchGeometry: THREE.SphereGeometry | null = null;
     let progressBar: SpatialProgressBar | null = null;
     let brandText: SpatialText | null = null;
@@ -1957,8 +2046,23 @@ export class ScreenSceneRenderer {
     let hintsLabelText: SpatialText | null = null;
     let hintsBodyText: SpatialText | null = null;
 
-    const geometryFor = (rect: NormalizedSpatialSurfaceRect) =>
-      spatialSurfaceGeometry(rect, xrTokens.shellWidthMeters);
+    const modelPanel = layout.panels.find(({ id }) => id === "model-panel");
+    if (!modelPanel) throw new Error("Atom Builder reference layout is missing the model panel.");
+    const unshiftedModelGeometry = spatialSurfaceGeometry(
+      modelPanel.rect,
+      xrTokens.shellWidthMeters,
+    );
+    const layoutOriginOffset = layoutName === "android"
+      ? { x: unshiftedModelGeometry.xMeters, y: unshiftedModelGeometry.yMeters }
+      : { x: 0, y: 0 };
+    const geometryFor = (rect: NormalizedSpatialSurfaceRect) => {
+      const geometry = spatialSurfaceGeometry(rect, xrTokens.shellWidthMeters);
+      return {
+        ...geometry,
+        xMeters: geometry.xMeters - layoutOriginOffset.x,
+        yMeters: geometry.yMeters - layoutOriginOffset.y,
+      };
+    };
     const regionFor = (id: string): NormalizedSpatialSurfaceRect => {
       const rect = layout.regions[id];
       if (!rect) {
@@ -1966,15 +2070,38 @@ export class ScreenSceneRenderer {
       }
       return rect;
     };
-    const stageLayout = calculateModelStageLayout(
+    const rawStageLayout = calculateModelStageLayout(
       regionFor("modelArea"),
       ["captionTextArea", "captionsOn", "speedChip1x", "narrationOn", "replay"]
-        .map((id) => regionFor(id)),
+        .flatMap((id) => {
+          const region = layout.regions[id];
+          if (!region) return [];
+          const panelRect = modelPanel.rect;
+          const isInsideModelPanel =
+            region.x >= panelRect.x &&
+            region.y >= panelRect.y &&
+            region.x + region.width <= panelRect.x + panelRect.width &&
+            region.y + region.height <= panelRect.y + panelRect.height;
+          return isInsideModelPanel ? [region] : [];
+        }),
       xrTokens.shellWidthMeters,
       this.atomBoundingRadius,
     );
-    const modelPanel = layout.panels.find(({ id }) => id === "model-panel");
-    if (!modelPanel) throw new Error("Atom Builder reference layout is missing the model panel.");
+    const stageLayout = layoutName === "android"
+      ? {
+          ...rawStageLayout,
+          safeRect: {
+            ...rawStageLayout.safeRect,
+            x: rawStageLayout.safeRect.x - layoutOriginOffset.x / xrTokens.shellWidthMeters,
+            y: rawStageLayout.safeRect.y + layoutOriginOffset.y / xrTokens.shellWidthMeters,
+          },
+          home: {
+            ...rawStageLayout.home,
+            x: rawStageLayout.home.x - layoutOriginOffset.x,
+            y: rawStageLayout.home.y - layoutOriginOffset.y,
+          },
+        }
+      : rawStageLayout;
     const modelPanelGeometry = geometryFor(modelPanel.rect);
     const stage = new THREE.Group();
     stage.name = "atom-builder-model-stage";
@@ -2281,7 +2408,7 @@ export class ScreenSceneRenderer {
       });
       button.object3d.name = `atom-builder-${id}`;
       button.object3d.position.set(geometry.xMeters, geometry.yMeters, 0);
-      button.target.object3d.scale.setScalar(1 / PANEL_LIMITS.scale.min);
+      button.target.object3d.scale.setScalar(1 / panelLimits.scale.min);
       group.add(button.object3d);
       primitives.push(button);
       pointerTargets.push(...button.pointerTargets);
@@ -2463,28 +2590,31 @@ export class ScreenSceneRenderer {
       surfaces.push(logoSlot);
 
       const initialContent = initialItems.bento;
-      brandText = initialContent.header
+      brandText = initialContent.header && layout.regions.brand
         ? addText("brand", initialContent.header.brand, "heading", "brand")
         : null;
-      moduleTitleText = initialContent.header
+      moduleTitleText = initialContent.header && layout.regions.moduleTitle
         ? addText("module-title", initialContent.header.title, "title", "moduleTitle", "right")
         : null;
       brandPlate = brandText ? addLabelPlate("brand", brandText) : null;
       moduleTitlePlate = moduleTitleText ? addLabelPlate("module-title", moduleTitleText) : null;
-      captionSurface = createGlassSurface("card", {
-        width: geometryFor(regionFor("captionTextArea")).widthMeters,
-        height: geometryFor(regionFor("captionTextArea")).heightMeters,
-      });
-      captionSurface.name = "atom-builder-caption-surface";
-      const captionGeometry = geometryFor(regionFor("captionTextArea"));
-      captionSurface.position.set(
-        captionGeometry.xMeters,
-        captionGeometry.yMeters,
-        xrTokens.layers.panel.zOffsetM,
-      );
-      group.add(captionSurface);
-      surfaces.push(captionSurface);
-      captionText = addText("model-caption", initialContent.model.caption, "caption", "captionTextArea");
+      const captionTextArea = layout.regions.captionTextArea;
+      if (captionTextArea) {
+        captionSurface = createGlassSurface("card", {
+          width: geometryFor(captionTextArea).widthMeters,
+          height: geometryFor(captionTextArea).heightMeters,
+        });
+        captionSurface.name = "atom-builder-caption-surface";
+        const captionGeometry = geometryFor(captionTextArea);
+        captionSurface.position.set(
+          captionGeometry.xMeters,
+          captionGeometry.yMeters,
+          xrTokens.layers.panel.zOffsetM,
+        );
+        group.add(captionSurface);
+        surfaces.push(captionSurface);
+        captionText = addText("model-caption", initialContent.model.caption, "caption", "captionTextArea");
+      }
       addText(
         "particle-heading",
         initialContent.particleInstruction,
@@ -2512,25 +2642,31 @@ export class ScreenSceneRenderer {
       group.add(progressBar.object3d);
       primitives.push(progressBar);
 
-      const hintButton = addButton(
-        "hint-button",
-        initialContent.mission.hintLabel,
-        initialContent.mission.hintAction,
-        layout.controls.hintButton,
-      );
-      const checkButton = addButton(
-        "check-button",
-        initialContent.mission.checkLabel,
-        initialContent.mission.checkAction,
-        layout.controls.checkButton,
-        { primaryTarget: true },
-      );
-      const freePlayButton = addButton(
-        "free-play-button",
-        initialContent.mission.freePlayLabel,
-        initialContent.mission.freePlayAction,
-        layout.controls.freePlayButton,
-      );
+      const hintButton = layout.controls.hintButton
+        ? addButton(
+            "hint-button",
+            initialContent.mission.hintLabel,
+            initialContent.mission.hintAction,
+            layout.controls.hintButton,
+          )
+        : null;
+      const checkButton = layout.controls.checkButton
+        ? addButton(
+            "check-button",
+            initialContent.mission.checkLabel,
+            initialContent.mission.checkAction,
+            layout.controls.checkButton,
+            { primaryTarget: true },
+          )
+        : null;
+      const freePlayButton = layout.controls.freePlayButton
+        ? addButton(
+            "free-play-button",
+            initialContent.mission.freePlayLabel,
+            initialContent.mission.freePlayAction,
+            layout.controls.freePlayButton,
+          )
+        : null;
       addButton(
         "reset-view-button",
         initialContent.resetViewLabel,
@@ -2543,9 +2679,9 @@ export class ScreenSceneRenderer {
         initialContent.mission.resetAction,
         layout.controls.resetAtomButton,
       );
-      hintButton.setDisabled(initialContent.mission.view !== "lesson" || initialContent.mission.hintDisabled);
-      checkButton.setDisabled(initialContent.mission.view !== "lesson" || initialContent.mission.checkDisabled);
-      freePlayButton.setSelected(initialContent.mission.view === "free-play");
+      hintButton?.setDisabled(initialContent.mission.view !== "lesson" || initialContent.mission.hintDisabled);
+      checkButton?.setDisabled(initialContent.mission.view !== "lesson" || initialContent.mission.checkDisabled);
+      freePlayButton?.setSelected(initialContent.mission.view === "free-play");
 
       const captionButton = addButton(
         "captions-toggle",
@@ -2606,15 +2742,23 @@ export class ScreenSceneRenderer {
       replayButton.setDisabled(initialContent.model.replayDisabled);
 
       const positionGeometry = geometryFor(layout.controls.positionSliderTrack);
+      const positionOrientation = layout.controls.positionSliderOrientation ?? "horizontal";
+      const positionTrackSize = dimensionsDpFor(layout.controls.positionSliderTrack);
       const positionSlider = createSpatialSlider({
         id: "position",
         label: initialContent.controls.positionLabel,
-        orientation: "horizontal",
-        min: PANEL_LIMITS.distanceMeters.min,
-        max: PANEL_LIMITS.distanceMeters.max,
+        orientation: positionOrientation,
+        min: panelLimits.distanceMeters.min,
+        max: panelLimits.distanceMeters.max,
         value: positionDistance,
+        ...(layoutName === "android" ? {
+          trackLengthDp: positionOrientation === "horizontal"
+            ? positionTrackSize.widthDp
+            : positionTrackSize.heightDp,
+        } : {}),
+        minimumGroupScale: panelLimits.scale.min,
         onChange: (next) => {
-          distanceMeters = clampPanelGroupDistance(next);
+          distanceMeters = clampPanelGroupDistance(next, panelLimits);
           if (initialViewerPosition && initialForward) {
             const worldPosition = calculatePanelGroupPosition(
               initialViewerPosition,
@@ -2640,16 +2784,24 @@ export class ScreenSceneRenderer {
       group.add(positionSlider.object3d);
 
       const scaleGeometry = geometryFor(layout.controls.scaleSliderTrack);
+      const scaleOrientation = layout.controls.scaleSliderOrientation ?? "vertical";
+      const scaleTrackSize = dimensionsDpFor(layout.controls.scaleSliderTrack);
       const scaleSlider = createSpatialSlider({
         id: "scale",
         label: initialContent.controls.scaleLabel,
-        orientation: "vertical",
-        min: PANEL_LIMITS.scale.min,
-        max: PANEL_LIMITS.scale.max,
-        value: PANEL_LIMITS.scale.default,
+        orientation: scaleOrientation,
+        min: panelLimits.scale.min,
+        max: panelLimits.scale.max,
+        value: panelLimits.scale.default,
+        ...(layoutName === "android" ? {
+          trackLengthDp: scaleOrientation === "horizontal"
+            ? scaleTrackSize.widthDp
+            : scaleTrackSize.heightDp,
+        } : {}),
+        minimumGroupScale: panelLimits.scale.min,
         onChange: (next) => {
-          scale = clampPanelGroupScale(next);
-          applyPanelGroupScale(group, scale);
+          scale = clampPanelGroupScale(next, panelLimits);
+          applyPanelGroupScale(group, scale, panelLimits);
           this.panelGroupSliderValues = { positionMeters: distanceMeters, scale };
           this.render();
         },
@@ -2753,7 +2905,7 @@ export class ScreenSceneRenderer {
           0,
         );
         for (const target of stepper.pointerTargets) {
-          target.object3d.scale.setScalar(1 / PANEL_LIMITS.scale.min);
+          target.object3d.scale.setScalar(1 / panelLimits.scale.min);
         }
         group.add(stepper.object3d);
         primitives.push(stepper);
@@ -2763,6 +2915,8 @@ export class ScreenSceneRenderer {
       applyContent(initialContent);
       parent.add(group);
       this.spatialPanelGroup = group;
+      this.activeSpatialLayout = layoutName;
+      this.activeSpatialSurfaceLayout = layout;
       this.panelGroupSliderValues = { positionMeters: positionDistance, scale };
     } catch (error) {
       for (const row of propertyRows) row.dispose();
@@ -2781,6 +2935,8 @@ export class ScreenSceneRenderer {
       this.modelStagePose = null;
       this.modelStageBindingLimit = null;
       this.modelPanelCenter = null;
+      this.activeSpatialLayout = null;
+      this.activeSpatialSurfaceLayout = null;
       this.hoveredAtomSubparts.clear();
       this.selectedAtomSubpart = null;
       this.subpartHighlightMesh.visible = false;
@@ -2821,7 +2977,7 @@ export class ScreenSceneRenderer {
       group.quaternion.copy(
         parent.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(worldOrientation),
       );
-      applyPanelGroupScale(group, scale);
+      applyPanelGroupScale(group, scale, panelLimits);
       group.visible = true;
       this.render();
     };
@@ -2881,6 +3037,8 @@ export class ScreenSceneRenderer {
           this.pendingSpatialDockReposition = null;
         }
         if (this.spatialPanelGroup === group) this.spatialPanelGroup = null;
+        this.activeSpatialLayout = null;
+        this.activeSpatialSurfaceLayout = null;
         this.panelGroupSliderValues = null;
         panelHost.dispose();
         this.arPlacementRoot.add(this.atomRoot);

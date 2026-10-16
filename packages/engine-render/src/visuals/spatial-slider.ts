@@ -17,6 +17,8 @@ export interface SpatialSliderOptions {
   readonly min: number;
   readonly max: number;
   readonly value: number;
+  readonly trackLengthDp?: number;
+  readonly minimumGroupScale?: number;
   readonly disabled?: boolean;
   readonly onChange?: (value: number) => void;
 }
@@ -67,12 +69,14 @@ export function createSpatialSlider(options: SpatialSliderOptions): SpatialSlide
   if (!options.id || !options.label ||
     !Number.isFinite(options.min) || !Number.isFinite(options.max) ||
     !Number.isFinite(options.value) || options.min >= options.max ||
+    (options.trackLengthDp !== undefined &&
+      (!Number.isFinite(options.trackLengthDp) || options.trackLengthDp <= 0)) ||
     options.value < options.min || options.value > options.max) {
     throw new RangeError("Slider requires a label and a value within finite, increasing bounds.");
   }
 
   const { orientation } = options;
-  const lengthDp = xrTokens.sizesDp.sliderTrack.length;
+  const lengthDp = options.trackLengthDp ?? xrTokens.sizesDp.sliderTrack.length;
   const thicknessDp = xrTokens.sizesDp.sliderTrack.thickness;
   const thumbLongDp = xrTokens.sizesDp.sliderThumb.width;
   const thumbShortDp = xrTokens.sizesDp.sliderThumb.height;
@@ -102,6 +106,7 @@ export function createSpatialSlider(options: SpatialSliderOptions): SpatialSlide
     orientation,
     lengthDp,
     thicknessDp,
+    options.minimumGroupScale ?? PANEL_LIMITS.scale.min,
   );
   const hitArea = new THREE.Mesh(
     new THREE.PlaneGeometry(

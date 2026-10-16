@@ -9,6 +9,7 @@ import {
 import {
   calculateSpatialDockLayout,
   calculateSpatialDockPlacement,
+  calculateSpatialLayoutLookAngles,
   calculatePanelGroupPlacement,
   calculatePanelGroupPosition,
   applyPanelGroupScale,
@@ -18,6 +19,7 @@ import {
   panelHorizontalAngleDegrees,
   pixelsPerMeterAtDepth,
   profileSettings,
+  selectSpatialLayoutName,
   selectSpatialPresentationProfile,
   shouldEnableSpatialPanelPointerEvents,
   toggleSpatialDockSelection,
@@ -26,7 +28,7 @@ import {
 } from "../src/visuals/spatial-placement.js";
 import { hitTest, layoutPanel, layoutPanelPages, wrapPanelText } from "../src/visuals/panel-layout.js";
 import { spatialTokens } from "../src/spatial-tokens.js";
-import { PANEL_LIMITS, xrTokens } from "../src/xr-tokens.js";
+import { ANDROID_PANEL_LIMITS, PANEL_LIMITS, xrTokens } from "../src/xr-tokens.js";
 import {
   canCreateSpatialPanels,
   shouldShowSpatialSettingsFallback,
@@ -234,6 +236,11 @@ describe("spatial dock layout", () => {
     expect(selectSpatialPresentationProfile("camera")).toBe("handheld");
     expect(selectSpatialPresentationProfile("immersive-ar", "world-space")).toBe("headset");
     expect(selectSpatialPresentationProfile("immersive-vr")).toBe("headset");
+    expect(selectSpatialPresentationProfile("immersive-vr", "screen-space")).toBe("handheld");
+    expect(selectSpatialPresentationProfile("immersive-vr", "world-space")).toBe("headset");
+    expect(selectSpatialLayoutName("handheld", true)).toBe("android");
+    expect(selectSpatialLayoutName("headset", true)).toBe("headset");
+    expect(selectSpatialLayoutName("handheld", false)).toBe("headset");
     expect(profileSettings("handheld").distanceMeters).toBeCloseTo(0.7);
     expect(profileSettings("headset").distanceMeters).toBeCloseTo(1);
     expect(profileSettings("headset").downAngleRadians).toBeCloseTo(15 * Math.PI / 180);
@@ -307,6 +314,47 @@ describe("spatial dock layout", () => {
     expect(alignedUp.y).toBeCloseTo(1);
     expect(alignedUp.z).toBeCloseTo(0);
     expect(nearest.orientation).toEqual(farthest.orientation);
+  });
+
+  it("clamps Android scale and position without rotating the group", () => {
+    const group = new THREE.Group();
+    group.position.set(0.2, 1.4, -1.25);
+    group.quaternion.setFromEuler(new THREE.Euler(0, 0.7, 0));
+    const rotationBefore = group.quaternion.clone();
+    expect(clampPanelGroupScale(0.1, ANDROID_PANEL_LIMITS))
+      .toBe(ANDROID_PANEL_LIMITS.scale.min);
+    expect(clampPanelGroupScale(1.5, ANDROID_PANEL_LIMITS))
+      .toBe(ANDROID_PANEL_LIMITS.scale.max);
+    expect(clampPanelGroupDistance(0, ANDROID_PANEL_LIMITS))
+      .toBe(ANDROID_PANEL_LIMITS.distanceMeters.min);
+    expect(clampPanelGroupDistance(4, ANDROID_PANEL_LIMITS))
+      .toBe(ANDROID_PANEL_LIMITS.distanceMeters.max);
+    applyPanelGroupScale(group, 0.1, ANDROID_PANEL_LIMITS);
+    expect(group.scale.toArray()).toEqual([
+      ANDROID_PANEL_LIMITS.scale.min,
+      ANDROID_PANEL_LIMITS.scale.min,
+      ANDROID_PANEL_LIMITS.scale.min,
+    ]);
+    expect(group.quaternion.toArray()).toEqual(rotationBefore.toArray());
+  });
+
+  it("reports per-edge look rotation beyond the projected view", () => {
+    const angles = calculateSpatialLayoutLookAngles(
+      {
+        shell: { x: 0, y: 0, width: 1, height: 1 },
+        modelPanel: { x: 0.4, y: 0.4, width: 0.2, height: 0.2 },
+      },
+      1,
+      1,
+      1,
+      4,
+      4,
+    );
+    expect(angles.leftDegrees).toBeCloseTo(12.53, 1);
+    expect(angles.rightDegrees).toBeCloseTo(12.53, 1);
+    expect(angles.upDegrees).toBeCloseTo(12.53, 1);
+    expect(angles.downDegrees).toBeCloseTo(12.53, 1);
+    expect(angles.fitsInView).toBe(false);
   });
 
   it("moves only along the original ray and clamps both position and scale ranges", () => {

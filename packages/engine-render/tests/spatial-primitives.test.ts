@@ -279,6 +279,7 @@ describe("shared spatial primitives", () => {
       "Text",
       "Button",
       "Slider",
+      "SpatialPanelGroup",
       "Stepper",
       "ProgressBar",
       "PropertyRow",

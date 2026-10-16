@@ -280,6 +280,10 @@ export const xrTokens = Object.freeze({
 
 export const GLASS = xrTokens.glass;
 export const PANEL_LIMITS = xrTokens.panelLimits;
+export const ANDROID_PANEL_LIMITS = Object.freeze({
+  scale: { min: 0.4, default: 0.65, max: 1 },
+  distanceMeters: { min: 1.1, default: 1.25, max: 1.8 },
+});
 export const MODEL_LIMITS = xrTokens.modelLimits;
 export const MODEL_STAGE = xrTokens.modelStage;
 

@@ -114,16 +114,23 @@ the first tab tap.
 
 Camera-view placement is sampled from viewer heading and gaze at initial
 placement/reset, about 0.7 m ahead in the lower viewport. It is independent of
-the atom's surface placement. Immersive AR/VR uses the approved PNG-derived
-backing shell and four panels. The model panel contains narration and caption
-controls over a placeholder model area; the particle panel shows live particle
-counts and atom properties; mission and hints panels show current lesson
-content and hint text. Panel actions use the existing module commands.
-Screen-mode UI is unchanged. Exact component visuals remain subject to the kit
-reference.
+the atom's surface placement. World-space/headset XR keeps the desktop/headset
+reference layout. Handheld Android immersive AR/VR selects the measured
+`reference-layout-android.ts`: top-row controls, Hints/model/Particles panels,
+Mission beneath Hints and model, and one horizontal Scale/Position slider pair.
+It uses the existing shell glass variant behind the item union plus the
+24 px shell-padding token; the PNG shows no shell edge. The model stage,
+particles, properties, mission and hints reuse their existing builders and
+actions. The Android reference has no MMAXR/Atom Builder header or Hint, Check,
+and Free play buttons, so no positions are assigned to those controls.
+Screen-mode and Camera-view UI are unchanged. Exact component visuals remain
+subject to the kit reference.
 
-The camera-view dock remains separate from these immersive panels. The
-immersive model remains a placeholder until model interaction is implemented.
+The camera-view dock remains separate from these immersive panels. Android
+immersive AR/VR uses the shared `ModelStage` inside the central model panel and
+the existing shared pointer host. XR `transient-pointer` selects reach that
+host as taps; they do not provide continuous drag or multi-touch gestures.
+No second input system is introduced.
 
 ## TODO(kit) register
 

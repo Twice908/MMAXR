@@ -29,6 +29,7 @@ import {
   type SpatialPanelEdgeHint,
   type SpatialPanelSession,
   type SpatialSurfaceLayout,
+  type SpatialSurfaceLayouts,
 } from "@mma/engine-render";
 import {
   NarrationPlayer,
@@ -48,6 +49,7 @@ import carbon14Items from "../assessments/m3-carbon-14.json";
 import chlorideItems from "../assessments/m4-chloride-ion.json";
 import rawManifest from "../module.json";
 import { atomBuilderDesktopReference } from "./reference-layout.js";
+import { atomBuilderAndroidReference } from "./reference-layout-android.js";
 import {
   createAtomBuilderLearningReducer,
   createAtomBuilderLearningState,
@@ -114,7 +116,7 @@ const assessmentItems: readonly AssessmentItem[] = [
   ...chlorideItems,
 ].map((item) => assessmentItemSchema.parse(item));
 const assessmentsById = new Map(assessmentItems.map((item) => [item.id, item]));
-const atomBuilderSpatialSurfaceLayout: SpatialSurfaceLayout = {
+const atomBuilderHeadsetSurfaceLayout: SpatialSurfaceLayout = {
   shell: atomBuilderDesktopReference.shell.normalizedToShellWidth,
   regions: referenceContentRegions(),
   panels: [
@@ -149,6 +151,44 @@ const atomBuilderSpatialSurfaceLayout: SpatialSurfaceLayout = {
     resetViewButton: referenceRegionRect("resetViewButton"),
     resetAtomButton: referenceRegionRect("resetAtomButton"),
   },
+};
+const atomBuilderAndroidRegions = Object.fromEntries(
+  atomBuilderAndroidReference.regions.flatMap((region) =>
+    region.rect
+      ? [[region.id, region.rect.normalizedToShellWidth]]
+      : [],
+  ),
+);
+const androidRegionRect = (id: string): NonNullable<
+  (typeof atomBuilderAndroidReference.regions)[number]["rect"]
+>["normalizedToShellWidth"] => {
+  const region = atomBuilderAndroidReference.regions.find((candidate) => candidate.id === id);
+  if (!region?.rect) {
+    throw new Error(`Android reference layout is missing the measured ${id} rectangle.`);
+  }
+  return region.rect.normalizedToShellWidth;
+};
+const atomBuilderAndroidSurfaceLayout: SpatialSurfaceLayout = {
+  shell: atomBuilderAndroidReference.shell.normalizedToShellWidth,
+  regions: atomBuilderAndroidRegions,
+  panels: Object.entries(atomBuilderAndroidReference.panels).map(([key, rect]) => ({
+    id: `${key}-panel`,
+    variant: key === "model" || key === "particles" ? "panel" : "card",
+    rect: rect.normalizedToShellWidth,
+  })),
+  controls: {
+    futureLogoSlot: androidRegionRect("futureLogoSlot"),
+    positionSliderTrack: androidRegionRect("positionSliderTrack"),
+    scaleSliderTrack: androidRegionRect("scaleSliderTrack"),
+    resetViewButton: androidRegionRect("resetViewButton"),
+    resetAtomButton: androidRegionRect("resetAtomButton"),
+    positionSliderOrientation: "horizontal",
+    scaleSliderOrientation: "horizontal",
+  },
+};
+const atomBuilderSpatialLayouts: SpatialSurfaceLayouts = {
+  headset: atomBuilderHeadsetSurfaceLayout,
+  android: atomBuilderAndroidSurfaceLayout,
 };
 const atomBuilderSpatialPanelLabels = referenceSpatialPanelLabels();
 
@@ -378,7 +418,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
           (inputId) => routeSpatialPanelAction(inputId),
           mode === "ar" ? root : undefined,
           mode === "ar" ? onInput : undefined,
-          atomBuilderSpatialSurfaceLayout,
+          atomBuilderSpatialLayouts,
         ),
         failSpatialPresentation,
       );

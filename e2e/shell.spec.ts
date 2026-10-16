@@ -978,6 +978,24 @@ test("mocked AR keeps the atom world-fixed and presents the lesson in spatial pa
   await expect(panel).toBeHidden();
 });
 
+test("mocked Android AR selects the phone layout in portrait and landscape viewports", async ({ page }) => {
+  await installMockXr(page);
+  for (const viewport of [{ width: 412, height: 915 }, { width: 915, height: 412 }]) {
+    await page.setViewportSize(viewport);
+    await page.goto("http://127.0.0.1:5174?xrdebug=1");
+    await page.getByRole("button", { name: "Enter AR" }).click();
+    await page.getByRole("dialog", { name: "View the atom in AR?" })
+      .getByRole("button", { name: "Start AR" }).click();
+
+    const diagnostics = page.locator(".ar-diagnostics");
+    await expect(diagnostics).toContainText("Active panel layout: android");
+    await expect(diagnostics).toContainText("Layout fits at minimum scale: yes");
+    await expect(page.getByRole("button", { name: "Exit AR" })).toBeVisible();
+    await page.getByRole("button", { name: "Exit AR" }).click();
+    await expect(page.getByRole("button", { name: "Enter AR" })).toBeVisible();
+  }
+});
+
 test("mocked AR shows one local comfort break reminder after ten minutes", async ({ page }) => {
   await page.clock.install();
   await installMockXr(page);

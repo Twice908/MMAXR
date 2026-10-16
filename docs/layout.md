@@ -124,13 +124,26 @@ view-only and does not change learning state directly.
 ## Handheld, headset, and orientation
 
 The camera dock is upright and yaw-aligned to the viewer (no pitch or roll).
-Immersive AR/VR instead uses the PNG-derived shell and four panels at the
-approved default panel size and distance. The model area remains a placeholder;
-narration/caption controls, live particles and properties, mission progress,
-and the current hint use existing module sources and actions. Android AR uses
-the same measured layout as VR. Camera view continues to use local video and
-screen input. Ordinary desktop and Android screen mode retain their existing
-layout.
+Immersive Android AR/VR selects `reference-layout-android.ts` when the XR
+session profile is handheld (`screen-space` VR or handheld AR); the model panel
+is centered on the first valid viewer pose. The group is placed once, yaw-only,
+and remains fixed as the phone's XR viewer pose changes. Its shell uses the
+existing shell glass variant behind the union of reference items, with the
+existing 24 px shell-padding token; the reference has no visible shell edge.
+Scale and Position are horizontal sliders below Mission.
+The Android limits are scale min/default/max `0.4/0.65/1` and distance
+`1.1/1.25/1.8 m`; minimum-scale fit is checked against both phone orientations.
+At scale `0.4`, distance `1.25 m`, and an assumed 60-degree vertical FOV, 16 dp
+body text projects to about 3.9 px in portrait and 1.8 px in landscape, too
+small for comfortable reading. Verify the actual phone projection before
+revising the trade-off. The reference has a Captions toggle but no caption text
+region, so no caption placement is inferred.
+
+World-space/headset sessions continue to use the desktop/headset reference data
+and the existing headset `PANEL_LIMITS`. The Android reference intentionally
+omits the MMAXR/Atom Builder header and the Hint, Check, and Free play buttons;
+no positions are inferred for them. Camera view continues to use its existing
+local-video dock and screen input; it does not select the Android layout.
 
 ## Do and do not
 

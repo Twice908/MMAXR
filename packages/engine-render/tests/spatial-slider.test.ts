@@ -5,7 +5,8 @@ import {
   spatialSliderHitAreaSizeDp,
   spatialSliderValueFromFraction,
 } from "../src/visuals/spatial-slider.js";
-import { dpToMeters, PANEL_LIMITS, xrTokens } from "../src/xr-tokens.js";
+import { horizonTokens } from "../src/horizon-tokens.js";
+import { ANDROID_PANEL_LIMITS, dpToMeters, PANEL_LIMITS, xrTokens } from "../src/xr-tokens.js";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -38,6 +39,62 @@ describe("spatial slider math", () => {
     expect(horizontal.heightDp * PANEL_LIMITS.scale.min).toBeGreaterThanOrEqual(minimumEffectiveTarget);
     expect(vertical.heightDp).toBe(track.length);
     expect(vertical.widthDp * PANEL_LIMITS.scale.min).toBeGreaterThanOrEqual(minimumEffectiveTarget);
+  });
+
+  it("keeps the Android horizontal slider targets at least 48 dp at minimum scale", () => {
+    const context = {
+      font: "",
+      fillStyle: "",
+      textAlign: "left" as CanvasTextAlign,
+      textBaseline: "alphabetic" as CanvasTextBaseline,
+      measureText: (text: string) => ({ width: text.length * 8 }),
+      clearRect: vi.fn(),
+      fillText: vi.fn(),
+    };
+    vi.stubGlobal("document", {
+      createElement: () => ({
+        width: 1,
+        height: 1,
+        getContext: () => context,
+      }),
+    });
+    const track = xrTokens.sizesDp.sliderTrack;
+    const measuredTrackLengthDp = (384 / 1312 * xrTokens.shellWidthMeters)
+      / horizonTokens.metresPerDp;
+    const hitArea = spatialSliderHitAreaSizeDp(
+      "horizontal",
+      measuredTrackLengthDp,
+      track.thickness,
+      ANDROID_PANEL_LIMITS.scale.min,
+    );
+    expect(hitArea.widthDp * ANDROID_PANEL_LIMITS.scale.min).toBeGreaterThanOrEqual(48);
+    expect(hitArea.heightDp * ANDROID_PANEL_LIMITS.scale.min).toBeGreaterThanOrEqual(48);
+    const slider = createSpatialSlider({
+      id: "android-scale",
+      label: "Scale",
+      orientation: "horizontal",
+      min: ANDROID_PANEL_LIMITS.scale.min,
+      max: ANDROID_PANEL_LIMITS.scale.max,
+      value: ANDROID_PANEL_LIMITS.scale.default,
+      trackLengthDp: measuredTrackLengthDp,
+      minimumGroupScale: ANDROID_PANEL_LIMITS.scale.min,
+    });
+    if (!(slider.target.object3d instanceof THREE.Mesh) ||
+      !(slider.target.object3d.geometry instanceof THREE.PlaneGeometry)) {
+      throw new Error("Android slider hit geometry is missing.");
+    }
+    expect(slider.target.object3d.geometry.parameters.width)
+      .toBeCloseTo(dpToMeters(hitArea.widthDp));
+    expect(slider.target.object3d.geometry.parameters.height)
+      .toBeCloseTo(dpToMeters(hitArea.heightDp));
+    const visualTrack = slider.object3d.children.find((child) =>
+      child.name === "spatial-slider-track-android-scale");
+    if (!(visualTrack instanceof THREE.Mesh) ||
+      !(visualTrack.geometry instanceof THREE.PlaneGeometry)) {
+      throw new Error("Android slider visual track is missing.");
+    }
+    expect(visualTrack.geometry.parameters.width).toBeCloseTo(dpToMeters(measuredTrackLengthDp));
+    slider.dispose();
   });
 
   it("renders light glass tracks, accent glass fill and thumb without changing hit bounds", () => {

@@ -189,7 +189,7 @@ describe("browser input isolation during XR", () => {
     const css = readFileSync(
       new URL("../../../modules/chem-atom-builder/src/atom-builder.css", import.meta.url),
       "utf8",
-    );
+    ).replace(/\r\n/g, "\n");
     const rule = css.match(/\.xr-vr-active \.ar-overlay-panel,[\s\S]*?\n\}/)?.[0];
     expect(rule).toBeDefined();
     expect(rule).toContain("display: none !important");
