@@ -26,9 +26,9 @@ import {
   screenZoomConfig,
   spatialLayout,
   type InputAction,
-  type SpatialAtomCaption,
   type SpatialPanelEdgeHint,
   type SpatialPanelSession,
+  type SpatialSurfaceLayout,
 } from "@mma/engine-render";
 import {
   NarrationPlayer,
@@ -47,6 +47,7 @@ import sodiumItems from "../assessments/m2-sodium-ion.json";
 import carbon14Items from "../assessments/m3-carbon-14.json";
 import chlorideItems from "../assessments/m4-chloride-ion.json";
 import rawManifest from "../module.json";
+import { atomBuilderDesktopReference } from "./reference-layout.js";
 import {
   createAtomBuilderLearningReducer,
   createAtomBuilderLearningState,
@@ -56,9 +57,7 @@ import {
 } from "./learning.js";
 import { layoutAtom } from "./layout.js";
 import {
-  buildAtomCaptionItems,
   buildSpatialPanelItems,
-  createAtomCaptionUpdater,
   readSpatialPanelSources,
   routeSpatialAction,
 } from "./spatial-panels.js";
@@ -114,6 +113,31 @@ const assessmentItems: readonly AssessmentItem[] = [
   ...chlorideItems,
 ].map((item) => assessmentItemSchema.parse(item));
 const assessmentsById = new Map(assessmentItems.map((item) => [item.id, item]));
+const atomBuilderSpatialSurfaceLayout: SpatialSurfaceLayout = {
+  shell: atomBuilderDesktopReference.shell.normalizedToShellWidth,
+  panels: [
+    {
+      id: "model-panel",
+      variant: "panel",
+      rect: atomBuilderDesktopReference.panels.model.normalizedToShellWidth,
+    },
+    {
+      id: "particles-panel",
+      variant: "panel",
+      rect: atomBuilderDesktopReference.panels.particles.normalizedToShellWidth,
+    },
+    {
+      id: "mission-panel",
+      variant: "card",
+      rect: atomBuilderDesktopReference.panels.mission.normalizedToShellWidth,
+    },
+    {
+      id: "hints-panel",
+      variant: "card",
+      rect: atomBuilderDesktopReference.panels.hints.normalizedToShellWidth,
+    },
+  ],
+};
 
 /** Mount-time options for the screen module. */
 export interface AtomBuilderOptions {
@@ -229,8 +253,6 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     ...(options.diagnostics === undefined ? {} : { diagnostics: options.diagnostics }),
   });
   let spatialSession: SpatialPanelSession | null = null;
-  let spatialCaption: SpatialAtomCaption | null = null;
-  let updateSpatialCaption: (source: ReturnType<typeof readSpatialPanelSources>) => boolean = () => false;
   let spatialHintRoot: HTMLElement | null = null;
   let spatialStyle: HTMLStyleElement | null = null;
   let spatialExpanded = false;
@@ -246,9 +268,6 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   const clearSpatialPresentation = (): void => {
     spatialSession?.dispose();
     spatialSession = null;
-    spatialCaption?.dispose();
-    spatialCaption = null;
-    updateSpatialCaption = () => false;
     spatialHintRoot?.remove();
     spatialHintRoot = null;
     spatialStyle?.remove();
@@ -304,17 +323,13 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
           (inputId) => routeSpatialPanelAction(inputId),
           mode === "ar" ? root : undefined,
           mode === "ar" ? onInput : undefined,
+          atomBuilderSpatialSurfaceLayout,
         ),
         failSpatialPresentation,
       );
       if (!session) return;
       spatialSession = session;
       session.setExpanded(spatialExpanded);
-      if (mode === "ar") {
-        spatialCaption = renderer.createAtomCaption(buildAtomCaptionItems(readSpatialPanelSources(root)));
-        updateSpatialCaption = createAtomCaptionUpdater((items) => spatialCaption?.update(items));
-        session.setActivePanelListener((key) => spatialCaption?.setVisible(key !== "elementInfo"));
-      }
       spatialStyle = document.createElement("style");
       spatialStyle.textContent = `
         .spatial-panels-active #lesson-panel,
@@ -603,7 +618,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   };
   refreshSpatialPanels = () => {
     try {
-      if (spatialSession || spatialCaption) {
+      if (spatialSession) {
         const source = readSpatialPanelSources(root);
         if (spatialSession) {
           spatialSession.update(buildSpatialPanelItems(
@@ -613,7 +628,6 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
             spatialArDragEnabled,
           ));
         }
-        updateSpatialCaption(source);
       }
     } catch (error) {
       failSpatialPresentation(error);

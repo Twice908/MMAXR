@@ -13,6 +13,41 @@ export interface SpatialDockProfile {
   readonly detailHeightFraction: number;
 }
 
+/** A rectangle expressed in the reference shell-width coordinate system. */
+export interface NormalizedSpatialSurfaceRect {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+/** Physical size and centered panel position derived from normalized reference data. */
+export interface SpatialSurfaceGeometry {
+  readonly xMeters: number;
+  readonly yMeters: number;
+  readonly widthMeters: number;
+  readonly heightMeters: number;
+}
+
+/** Convert top-left-origin shell-width fractions into centered, Y-up metres. */
+export function spatialSurfaceGeometry(
+  rect: NormalizedSpatialSurfaceRect,
+  shellWidthMeters: number,
+): SpatialSurfaceGeometry {
+  if (!Number.isFinite(shellWidthMeters) || shellWidthMeters <= 0 ||
+    !Number.isFinite(rect.x) || !Number.isFinite(rect.y) ||
+    !Number.isFinite(rect.width) || rect.width <= 0 ||
+    !Number.isFinite(rect.height) || rect.height <= 0) {
+    throw new RangeError("Spatial surface layout must use finite positive dimensions.");
+  }
+  return {
+    xMeters: (rect.x + rect.width / 2 - 0.5) * shellWidthMeters,
+    yMeters: (0.5 - rect.y - rect.height / 2) * shellWidthMeters,
+    widthMeters: rect.width * shellWidthMeters,
+    heightMeters: rect.height * shellWidthMeters,
+  };
+}
+
 /** Spatial layout centered around the atom's AR anchor at the origin. */
 export interface SpatialLayout {
   readonly arPlacement: Readonly<{

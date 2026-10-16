@@ -81,6 +81,7 @@ export {
   type SpatialPanelEdgeHint,
   type SpatialPanelItems,
   type SpatialPanelSession,
+  type SpatialSurfaceLayout,
   type SpatialAtomCaption,
   readXrViewerPose,
   type XrSceneDiagnostics,
@@ -88,8 +89,11 @@ export {
 } from "./screen-renderer.js";
 export {
   spatialLayout,
+  spatialSurfaceGeometry,
   validateSpatialDockProfile,
   validateSpatialLayout,
+  type NormalizedSpatialSurfaceRect,
+  type SpatialSurfaceGeometry,
   type SpatialDockProfile,
   type SpatialLayout,
 } from "./spatial-layout.js";
@@ -99,6 +103,27 @@ export {
   type GlassPanel,
   type GlassPanelState,
 } from "./visuals/glass-panel.js";
+export {
+  createGlassSurface,
+  disposeGlassSurface,
+  setGlassSurfaceState,
+  type GlassMaterial,
+  type GlassSurface,
+  type GlassSurfaceOptions,
+  type GlassSurfaceSize,
+  type GlassSurfaceState,
+} from "./visuals/glass-material.js";
+export {
+  GLASS,
+  MODEL_LIMITS,
+  PANEL_LIMITS,
+  xrTokens,
+  type GlassLayer,
+  type GlassSurfaceVariant,
+  type GlassTint,
+  type GlassVariantTokens,
+  type XrTokens,
+} from "./xr-tokens.js";
 export { mountGlassPanelGallery } from "./visuals/glass-panel-gallery.js";
 export {
   hitTest as hitTestPanel,

@@ -18,6 +18,9 @@ export default defineConfig(({ command, mode }) => {
 			__PIPER_BASE_PATH__: JSON.stringify(piperBasePath),
 		},
 		assetsInclude: ["**/*.wav.gz", "**/*.mp3"],
+		resolve: {
+			dedupe: ["three"],
+		},
 		optimizeDeps: {
 			include: ["piper-tts-web", "wasm-media-encoders"],
 		},

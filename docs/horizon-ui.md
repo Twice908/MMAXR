@@ -95,9 +95,9 @@ Do not change existing UI behavior as part of adopting these tokens. The table
 maps concepts only; exact visual replacement and interaction details require
 the kit reference.
 
-## Built spatial dock
+## Existing camera-view dock and immersive surfaces
 
-The AR/camera/headset dock now has equal-width Mission, Particles, Element, and
+The camera-view dock has equal-width Mission, Particles, Element, and
 Sound button tabs, all visible within 92% of the viewport. Settings is present
 only when DOM overlay is unavailable. The selected tab uses the primary-button
 role; unselected tabs use secondary. Each button provides default, hover,
@@ -112,19 +112,16 @@ remain available during free play. The one-source tooltip copy is
 “Tap a tab to open it. Open Particles to build the atom.” and disappears on
 the first tab tap.
 
-Placement is sampled from viewer heading and gaze at initial placement/reset,
-about 0.7 m ahead in the lower viewport. It is independent of the atom's
-surface placement; headsets retain the 1 m / 15-degree arc. Screen-mode UI is
-unchanged. Exact component visuals remain subject to the kit reference.
+Camera-view placement is sampled from viewer heading and gaze at initial
+placement/reset, about 0.7 m ahead in the lower viewport. It is independent of
+the atom's surface placement. Immersive AR/VR uses the approved PNG-derived
+backing shell and four empty panels instead; no content is placed in them yet.
+Screen-mode UI is unchanged. Exact component visuals remain subject to the kit
+reference.
 
-In handheld AR, an atom-attached Card shows the current DOM-derived atom
-summary below the atom and is hidden while the Element detail is selected.
-Particles uses labeled, color-dotted rows with a 48 dp draggable token area and
-secondary +/- controls; Element uses two columns for all DOM properties.
-Particle tokens use the kit's hover and pressed states and the shared
-grab/move/release ray path for touch, controllers, and hands. The caption's
-exact size and visual treatment remain `TODO(kit)` because those component
-specifications are absent.
+The old AR atom-attached caption and populated spatial dock are not shown in
+this empty-surface phase. Their content remains available in the DOM fallback
+and camera-view dock pending later panel-content work.
 
 ## TODO(kit) register
 
