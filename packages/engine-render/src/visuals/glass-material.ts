@@ -13,6 +13,7 @@ export interface GlassSurfaceSize {
 export interface GlassSurfaceState {
   readonly hover?: boolean;
   readonly pressed?: boolean;
+  readonly dragging?: boolean;
   readonly selected?: boolean;
   readonly disabled?: boolean;
 }
@@ -45,6 +46,7 @@ const fragmentShader = /* glsl */ `
   uniform float noiseAmount;
   uniform float hover;
   uniform float pressed;
+  uniform float dragging;
   uniform float selected;
   uniform float disabled;
   uniform float reduced;
@@ -52,6 +54,8 @@ const fragmentShader = /* glsl */ `
   uniform float hoverRim;
   uniform float pressedBrightness;
   uniform float pressedRim;
+  uniform float draggingBrightness;
+  uniform float draggingRim;
   uniform float selectedBrightness;
   uniform float selectedRim;
   uniform float disabledBrightness;
@@ -87,12 +91,13 @@ const fragmentShader = /* glsl */ `
     float brightness = 1.0 +
       hover * hoverBrightness +
       pressed * pressedBrightness +
+      dragging * draggingBrightness +
       selected * selectedBrightness +
       disabled * disabledBrightness;
     float rimScale = max(
       0.0,
       1.0 + hover * hoverRim + pressed * pressedRim +
-        selected * selectedRim + disabled * disabledRim
+        dragging * draggingRim + selected * selectedRim + disabled * disabledRim
     );
     float noise = stableNoise(gl_FragCoord.xy) * noiseAmount * (1.0 - reduced);
     vec3 surfaceColor = max(vec3(0.0), tint.rgb * brightness + vec3(noise));
@@ -120,6 +125,8 @@ const glassLayers: Readonly<Record<GlassSurfaceVariant, GlassLayer>> = {
   card: "panel",
   control: "control",
   pill: "control",
+  sliderTrack: "control",
+  sliderThumb: "control",
 };
 
 const materials = new Map<GlassSurfaceVariant, GlassMaterial>();
@@ -160,6 +167,7 @@ function createMaterial(variant: GlassSurfaceVariant): GlassMaterial {
       noiseAmount: { value: glass.noiseAmount },
       hover: { value: 0 },
       pressed: { value: 0 },
+      dragging: { value: 0 },
       selected: { value: 0 },
       disabled: { value: 0 },
       reduced: { value: 0 },
@@ -167,6 +175,8 @@ function createMaterial(variant: GlassSurfaceVariant): GlassMaterial {
       hoverRim: { value: glass.states.hoverRim },
       pressedBrightness: { value: glass.states.pressedBrightness },
       pressedRim: { value: glass.states.pressedRim },
+      draggingBrightness: { value: glass.states.draggingBrightness },
+      draggingRim: { value: glass.states.draggingRim },
       selectedBrightness: { value: glass.states.selectedBrightness },
       selectedRim: { value: glass.states.selectedRim },
       disabledBrightness: { value: glass.states.disabledBrightness },
@@ -203,6 +213,7 @@ export function updateGlassSurfaceUniforms(surface: GlassSurface): void {
   uniforms.rimWidth!.value = variantTokens.rimWidthM;
   uniforms.hover!.value = Number(state.hover ?? false);
   uniforms.pressed!.value = Number(state.pressed ?? false);
+  uniforms.dragging!.value = Number(state.dragging ?? false);
   uniforms.selected!.value = Number(state.selected ?? false);
   uniforms.disabled!.value = Number(state.disabled ?? false);
   uniforms.reduced!.value = Number(reducedGlass.get(surface) ?? false);

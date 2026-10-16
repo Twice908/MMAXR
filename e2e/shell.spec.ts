@@ -978,6 +978,24 @@ test("mocked AR keeps the atom world-fixed and presents the lesson in spatial pa
   await expect(panel).toBeHidden();
 });
 
+test("mocked Android AR selects the phone layout in portrait and landscape viewports", async ({ page }) => {
+  await installMockXr(page);
+  for (const viewport of [{ width: 412, height: 915 }, { width: 915, height: 412 }]) {
+    await page.setViewportSize(viewport);
+    await page.goto("http://127.0.0.1:5174?xrdebug=1");
+    await page.getByRole("button", { name: "Enter AR" }).click();
+    await page.getByRole("dialog", { name: "View the atom in AR?" })
+      .getByRole("button", { name: "Start AR" }).click();
+
+    const diagnostics = page.locator(".ar-diagnostics");
+    await expect(diagnostics).toContainText("Active panel layout: android");
+    await expect(diagnostics).toContainText("Layout fits at minimum scale: yes");
+    await expect(page.getByRole("button", { name: "Exit AR" })).toBeVisible();
+    await page.getByRole("button", { name: "Exit AR" }).click();
+    await expect(page.getByRole("button", { name: "Enter AR" })).toBeVisible();
+  }
+});
+
 test("mocked AR shows one local comfort break reminder after ten minutes", async ({ page }) => {
   await page.clock.install();
   await installMockXr(page);
@@ -1143,6 +1161,7 @@ test("desktop camera view uses a live mirrored video behind the atom and stops e
     .getByRole("button", { name: "Start" }).click();
   const video = page.locator("#atom-scene video.camera-view-video");
   await expect(video).toBeVisible();
+  await expect(page.locator(".camera-view-panel")).toBeVisible();
   await expect.poll(() => video.evaluate((element) => (element as HTMLVideoElement).videoWidth))
     .toBeGreaterThan(0);
   await expect(page.getByRole("button", { name: "Exit camera view" })).toBeVisible();
@@ -1198,6 +1217,80 @@ test("desktop camera view uses a live mirrored video behind the atom and stops e
     progress: document.querySelector("#mission-progress")?.textContent,
   }))).toEqual(before);
 });
+
+for (const viewport of [
+  { width: 412, height: 915, name: "portrait" },
+  { width: 915, height: 412, name: "landscape" },
+]) {
+  test(`Android Camera uses the measured panel group in ${viewport.name}`, async ({ page }) => {
+    const pageErrors: string[] = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "userAgent", {
+        configurable: true,
+        value: "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/124.0.0.0 Mobile Safari/537.36",
+      });
+      const orientationConstructor = (window as Window & {
+        DeviceOrientationEvent?: { requestPermission?: () => Promise<string> };
+      }).DeviceOrientationEvent;
+      if (orientationConstructor) {
+        Object.defineProperty(orientationConstructor, "requestPermission", {
+          configurable: true,
+          value: async () => "granted",
+        });
+      } else {
+        Object.defineProperty(window, "DeviceOrientationEvent", {
+          configurable: true,
+          value: Object.assign(function DeviceOrientationEventMock() {}, {
+            requestPermission: async () => "granted",
+          }),
+        });
+      }
+    });
+    await page.goto("http://127.0.0.1:5174/?xrdebug=1");
+    await page.getByRole("button", { name: "Camera view" }).click();
+    await page.getByRole("dialog", { name: "Start camera view?" })
+      .getByRole("button", { name: "Start" }).click();
+    await expect(page.locator("#atom-scene video.camera-view-video")).toBeVisible();
+    await expect(page.locator("#app")).toHaveClass(/android-camera-panels-active/);
+    await expect(page.locator(".camera-view-panel")).toBeVisible();
+    await expect(page.locator(".camera-view-panel .lesson-panel")).toBeHidden();
+    await page.locator(".camera-view-panel-heading button").click({ force: true });
+    await expect(page.locator("#app")).toHaveClass(/android-camera-legacy-dock-open/);
+    await expect(page.locator(".camera-view-panel .lesson-panel")).toBeVisible();
+    await page.locator(".camera-view-panel-heading button").click({ force: true });
+    await expect(page.locator(".camera-view-panel .lesson-panel")).toBeHidden();
+
+    const report = page.locator("#xr-debug-report");
+    await expect(report).toContainText("Active panel layout: android");
+    await expect(report).toContainText("Camera layout fits at minimum scale (portrait/landscape): yes / yes");
+    await expect(report).toContainText("Panel group world position:");
+    await expect(report).toContainText("Camera look limits yaw/pitch:");
+
+    const dispatchOrientation = async (alpha: number): Promise<void> => {
+      await page.evaluate((value) => {
+        const event = Object.assign(new Event("deviceorientation"), {
+          alpha: value,
+          beta: 0,
+          gamma: 0,
+        });
+        window.dispatchEvent(event);
+      }, alpha);
+    };
+    await dispatchOrientation(0);
+    await dispatchOrientation(45);
+    await expect(report).toContainText(/Camera look yaw\/pitch: -?\d+\.\d+ \/ 0\.0 deg/);
+    await page.locator(".reset-view").evaluate((element) =>
+      (element as HTMLButtonElement).click(),
+    );
+    await expect(report).toContainText("Camera look yaw/pitch: 0.0 / 0.0 deg");
+
+    await page.getByRole("button", { name: "Exit camera view" }).click();
+    await expect(page.locator("#app")).not.toHaveClass(/android-camera-panels-active/);
+    expect(pageErrors).toEqual([]);
+  });
+}
 
 for (const [name, reason, message] of [
   ["NotAllowedError", "permission_denied", "Camera access was not allowed"],

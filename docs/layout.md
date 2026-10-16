@@ -12,8 +12,9 @@ Shared immersive glass and XR design values live in
 `packages/engine-render/src/xr-tokens.ts`.
 The supplied desktop/headset Atom Builder reference geometry is recorded as
 data in `modules/chem-atom-builder/src/reference-layout.ts`; immersive AR/VR
-uses that data for an empty shell and four empty glass panels. Camera view
-retains its existing spatial dock.
+uses that data for its shell, content regions, and four populated glass
+panels. Android Camera view uses the same Android panel group over its local
+video feed; desktop Camera view retains the existing spatial dock.
 
 Before changing AR/VR/MR/XR UI, read [docs/horizon-ui.md](./horizon-ui.md)
 and use its Meta Horizon OS UI Set components and verified tokens. Do not
@@ -111,7 +112,7 @@ where `projectionY` is the vertical projection-matrix scale (equivalently,
 `1 / tan(verticalFov / 2)`). The dock is placed once from the viewer's gaze and heading, about 0.7 m ahead
 and in the lower portion of the visible area; it is not continuously attached
 to the viewer or atom anchor. Reset view re-places it from the current gaze.
-This dock remains for camera view only.
+This dock remains for non-Android Camera view only.
 Targets are at least 48 dp; primary controls with hand tracking are at least
 60 dp. Panel text follows the kit scale with a 16 CSS px handheld body-text
 floor. A 10%-top/14%-bottom safe band reserves space for overlay controls.
@@ -123,11 +124,39 @@ view-only and does not change learning state directly.
 
 ## Handheld, headset, and orientation
 
-The camera dock is upright and yaw-aligned to the viewer (no pitch or roll).
-Immersive AR/VR instead uses the PNG-derived shell and four empty panels at
-the approved default panel size and distance. Camera view continues to use
-local video and screen input. Ordinary desktop and Android screen mode retain
-their existing layout.
+The non-Android camera dock is upright and yaw-aligned to the viewer (no pitch or roll).
+Immersive Android AR/VR selects `reference-layout-android.ts` when the XR
+session profile is handheld (`screen-space` VR or handheld AR); the model panel
+is centered on the first valid viewer pose. The group is placed once, yaw-only,
+and remains fixed as the phone's XR viewer pose changes. Its shell uses the
+existing shell glass variant behind the union of reference items, with the
+existing 24 px shell-padding token; the reference has no visible shell edge.
+Scale and Position are horizontal sliders below Mission.
+The Android limits are scale min/default/max `0.4/0.65/1` and distance
+`1.1/1.25/1.8 m`; minimum-scale fit is checked against both phone orientations.
+At scale `0.4`, distance `1.25 m`, and an assumed 60-degree vertical FOV, 16 dp
+body text projects to about 3.9 px in portrait and 1.8 px in landscape, too
+small for comfortable reading. Verify the actual phone projection before
+revising the trade-off. The reference has a Captions toggle but no caption text
+region, so no caption placement is inferred.
+
+World-space/headset sessions continue to use the desktop/headset reference data
+and the existing headset `PANEL_LIMITS`. The Android reference intentionally omits the MMAXR/Atom Builder header. The
+owner-added Hint, Check, and Free play pills sit below the slider pair, are
+marked as absent from the PNG, and use the existing desktop action-pill
+dimensions and styles. The shell extends below the source image to contain that
+row; its glass remains the existing shell variant with the 24 px outer-padding
+token. Camera view selects this layout only when the browser User-Agent
+identifies Android. Its group is fixed and upright; DeviceOrientation supplies
+look-around relative to the initial pose, and one-finger drag on empty canvas is
+the fallback when motion access is denied or unavailable. Reset View recenters
+the model stage and camera look-around. The legacy Camera dock is hidden only
+while this group is active; its collapsed header toggle remains available and
+can expand the original DOM controls. Hint, Check, Free play, particle,
+narration, reset, and caption actions are represented in the group. The legacy
+panel expand/collapse toggle has no counterpart in the PNG and stays in its
+existing header as a fallback. Settings and Camera exit remain outside the
+dock. The desktop Camera dock and all headset behavior remain unchanged.
 
 ## Do and do not
 

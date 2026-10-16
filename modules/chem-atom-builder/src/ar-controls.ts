@@ -63,6 +63,15 @@ function formatPose(pose: XrSceneDiagnostics["latestFramePose"]): string {
   })`;
 }
 
+function formatRotation(
+  rotation: XrSceneDiagnostics["panelGroupWorldRotation"],
+): string {
+  if (!rotation) return "unavailable";
+  return `(${[rotation.x, rotation.y, rotation.z, rotation.w]
+    .map((value) => value.toFixed(3))
+    .join(", ")})`;
+}
+
 /** Build a PII-free, copyable XR support and session report. */
 export function buildXrDiagnosticsText(data: XrDiagnosticsData): string {
   const scene = data.scene;
@@ -96,7 +105,38 @@ export function buildXrDiagnosticsText(data: XrDiagnosticsData): string {
     `Atom root world scale: ${formatPosition(scene.atomWorldScale)}`,
     `Atom visibility (atom -> scene): ${atomVisibilityChain || "unavailable"}`,
     `XR camera-to-atom distance: ${scene.xrCameraToAtomDistanceMeters === null ? "unavailable" : `${scene.xrCameraToAtomDistanceMeters.toFixed(3)} m`}`,
-    `Dock/panel group world position: ${formatPosition(scene.panelGroupWorldPosition)}`,
+    `Panel group world position: ${formatPosition(scene.panelGroupWorldPosition)}`,
+    `Panel group world scale: ${scene.panelGroupWorldScale ? formatPosition(scene.panelGroupWorldScale) : "unavailable"}`,
+    `Panel group distance from viewer: ${scene.panelGroupDistanceMeters == null ? "unavailable" : `${scene.panelGroupDistanceMeters.toFixed(3)} m`}`,
+    `Position slider value: ${scene.panelGroupSliderValues?.positionMeters.toFixed(3) ?? "unavailable"} m`,
+    `Scale slider value: ${scene.panelGroupSliderValues?.scale.toFixed(3) ?? "unavailable"}`,
+    `Active panel layout: ${scene.activeSpatialLayout ?? "unavailable"}`,
+    `Panel limits: ${scene.spatialLayoutLimits
+      ? `scale min/default/max ${scene.spatialLayoutLimits.scale.min}/${scene.spatialLayoutLimits.scale.default}/${scene.spatialLayoutLimits.scale.max}, distance ${scene.spatialLayoutLimits.distanceMeters.min}/${scene.spatialLayoutLimits.distanceMeters.default}/${scene.spatialLayoutLimits.distanceMeters.max} m`
+      : "unavailable"}`,
+    `Required look angles L/R/U/D: ${scene.spatialLayoutLookAngles
+      ? `${scene.spatialLayoutLookAngles.leftDegrees.toFixed(1)} / ${scene.spatialLayoutLookAngles.rightDegrees.toFixed(1)} / ${scene.spatialLayoutLookAngles.upDegrees.toFixed(1)} / ${scene.spatialLayoutLookAngles.downDegrees.toFixed(1)} deg`
+      : "unavailable"}`,
+    `Camera look yaw/pitch: ${scene.cameraLookAngles
+      ? `${scene.cameraLookAngles.yawDegrees.toFixed(1)} / ${scene.cameraLookAngles.pitchDegrees.toFixed(1)} deg`
+      : "inactive"}`,
+    `Camera look limits yaw/pitch: ${scene.cameraLookLimits
+      ? `${scene.cameraLookLimits.yawDegrees.toFixed(1)} / ${scene.cameraLookLimits.pitchDegrees.toFixed(1)} deg`
+      : "inactive"}`,
+    `Layout fits at minimum scale: ${scene.spatialLayoutFitsAtMinimumScale == null
+      ? "unavailable"
+      : scene.spatialLayoutFitsAtMinimumScale ? "yes" : "no"}`,
+    `Camera layout fits at minimum scale (portrait/landscape): ${scene.cameraFitsAtMinimumScale
+      ? `${scene.cameraFitsAtMinimumScale.portrait ? "yes" : "no"} / ${scene.cameraFitsAtMinimumScale.landscape ? "yes" : "no"}`
+      : "inactive"}`,
+    `Panel group world rotation (x, y, z, w): ${formatRotation(scene.panelGroupWorldRotation)}`,
+    `Atom position relative to model-panel centre: ${formatPosition(scene.modelStage?.relativeToModelPanelCenter ?? null)}`,
+    `Model stage position: ${formatPosition(scene.modelStage?.position ?? null)}`,
+    `Model stage rotation (x, y, z, w): ${formatRotation(scene.modelStage?.rotation ?? null)}`,
+    `Model stage zoom: ${scene.modelStage?.zoom.toFixed(3) ?? "unavailable"}`,
+    `Model nearest-surface distance: ${scene.modelStage?.nearestSurfaceDistanceMeters == null ? "unavailable" : `${scene.modelStage.nearestSurfaceDistanceMeters.toFixed(3)} m`}`,
+    `Model stage binding limit: ${scene.modelStage?.bindingLimit ?? "none"}`,
+    `fits inside model area: ${scene.modelStage ? scene.modelStage.fitsInsideModelArea ? "yes" : "no" : "unavailable"}`,
     `Atom in viewer space: ${atomViewerSpace}`,
     `Atom position inside view frustum: ${scene.atomInsideViewFrustum === null ? "unknown" : scene.atomInsideViewFrustum ? "yes" : "no"}`,
     `renderer.xr.isPresenting: ${scene.rendererPresenting ? "yes" : "no"}`,
@@ -372,6 +412,23 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
     root.dispatchEvent(new Event("mma:xr-diagnostics-update"));
     return report;
   };
+  const onSpatialPresentationDiagnostics = (event: Event): void => {
+    const detail = (event as CustomEvent<{
+      active?: boolean;
+      androidLayout?: boolean;
+    }>).detail;
+    if (!diagnostics) return;
+    if (detail?.active && detail.androidLayout) {
+      if (diagnosticsRefresh === null) {
+        diagnosticsRefresh = globalThis.setInterval(() => {
+          if (!disposed) updateDiagnostics();
+        }, 500);
+      }
+    } else if (!spatialActive && diagnosticsRefresh !== null) {
+      globalThis.clearInterval(diagnosticsRefresh);
+      diagnosticsRefresh = null;
+    }
+  };
   const onInputSourcesChange = (): void => {
     latestSessionInfo = controller.sessionInfo;
     updateDiagnostics();
@@ -551,6 +608,7 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
     });
   };
   root.addEventListener("mma:xr-runtime-error", onSpatialRuntimeError);
+  root.addEventListener("mma:spatial-presentation", onSpatialPresentationDiagnostics);
 
   if (diagnostics) {
     updateDiagnostics();
@@ -684,6 +742,7 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
   return async () => {
     disposed = true;
     root.removeEventListener("mma:xr-runtime-error", onSpatialRuntimeError);
+    root.removeEventListener("mma:spatial-presentation", onSpatialPresentationDiagnostics);
     if (statusDismissTimeout !== null) globalThis.clearTimeout(statusDismissTimeout);
     statusDismissTimeout = null;
     root.removeEventListener("click", onAction);

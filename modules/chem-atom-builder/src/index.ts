@@ -29,6 +29,7 @@ import {
   type SpatialPanelEdgeHint,
   type SpatialPanelSession,
   type SpatialSurfaceLayout,
+  type SpatialSurfaceLayouts,
 } from "@mma/engine-render";
 import {
   NarrationPlayer,
@@ -48,6 +49,7 @@ import carbon14Items from "../assessments/m3-carbon-14.json";
 import chlorideItems from "../assessments/m4-chloride-ion.json";
 import rawManifest from "../module.json";
 import { atomBuilderDesktopReference } from "./reference-layout.js";
+import { atomBuilderAndroidReference } from "./reference-layout-android.js";
 import {
   createAtomBuilderLearningReducer,
   createAtomBuilderLearningState,
@@ -60,6 +62,7 @@ import {
   buildSpatialPanelItems,
   readSpatialPanelSources,
   routeSpatialAction,
+  type SpatialPanelGroupLabels,
 } from "./spatial-panels.js";
 import {
   isSpatialPresentationMode,
@@ -113,8 +116,9 @@ const assessmentItems: readonly AssessmentItem[] = [
   ...chlorideItems,
 ].map((item) => assessmentItemSchema.parse(item));
 const assessmentsById = new Map(assessmentItems.map((item) => [item.id, item]));
-const atomBuilderSpatialSurfaceLayout: SpatialSurfaceLayout = {
+const atomBuilderHeadsetSurfaceLayout: SpatialSurfaceLayout = {
   shell: atomBuilderDesktopReference.shell.normalizedToShellWidth,
+  regions: referenceContentRegions(),
   panels: [
     {
       id: "model-panel",
@@ -137,7 +141,96 @@ const atomBuilderSpatialSurfaceLayout: SpatialSurfaceLayout = {
       rect: atomBuilderDesktopReference.panels.hints.normalizedToShellWidth,
     },
   ],
+  controls: {
+    hintButton: referenceRegionRect("hintButton"),
+    checkButton: referenceRegionRect("checkButton"),
+    freePlayButton: referenceRegionRect("freePlayButton"),
+    futureLogoSlot: referenceRegionRect("futureLogoSlot"),
+    positionSliderTrack: referenceRegionRect("positionSliderTrack"),
+    scaleSliderTrack: referenceRegionRect("scaleSliderTrack"),
+    resetViewButton: referenceRegionRect("resetViewButton"),
+    resetAtomButton: referenceRegionRect("resetAtomButton"),
+  },
 };
+const atomBuilderAndroidRegions = Object.fromEntries(
+  atomBuilderAndroidReference.regions.flatMap((region) =>
+    region.rect
+      ? [[region.id, region.rect.normalizedToShellWidth]]
+      : [],
+  ),
+);
+const androidRegionRect = (id: string): NonNullable<
+  (typeof atomBuilderAndroidReference.regions)[number]["rect"]
+>["normalizedToShellWidth"] => {
+  const region = atomBuilderAndroidReference.regions.find((candidate) => candidate.id === id);
+  if (!region?.rect) {
+    throw new Error(`Android reference layout is missing the measured ${id} rectangle.`);
+  }
+  return region.rect.normalizedToShellWidth;
+};
+const atomBuilderAndroidSurfaceLayout: SpatialSurfaceLayout = {
+  shell: atomBuilderAndroidReference.shell.normalizedToShellWidth,
+  regions: atomBuilderAndroidRegions,
+  panels: Object.entries(atomBuilderAndroidReference.panels).map(([key, rect]) => ({
+    id: `${key}-panel`,
+    variant: key === "model" || key === "particles" ? "panel" : "card",
+    rect: rect.normalizedToShellWidth,
+  })),
+  controls: {
+    hintButton: androidRegionRect("hintButton"),
+    checkButton: androidRegionRect("checkButton"),
+    freePlayButton: androidRegionRect("freePlayButton"),
+    futureLogoSlot: androidRegionRect("futureLogoSlot"),
+    positionSliderTrack: androidRegionRect("positionSliderTrack"),
+    scaleSliderTrack: androidRegionRect("scaleSliderTrack"),
+    resetViewButton: androidRegionRect("resetViewButton"),
+    resetAtomButton: androidRegionRect("resetAtomButton"),
+    positionSliderOrientation: "horizontal",
+    scaleSliderOrientation: "horizontal",
+  },
+};
+const atomBuilderSpatialLayouts: SpatialSurfaceLayouts = {
+  headset: atomBuilderHeadsetSurfaceLayout,
+  android: atomBuilderAndroidSurfaceLayout,
+};
+const atomBuilderSpatialPanelLabels = referenceSpatialPanelLabels();
+
+function referenceContentRegions(): SpatialSurfaceLayout["regions"] {
+  const regions: Record<string, SpatialSurfaceLayout["shell"]> = {
+    brand: atomBuilderDesktopReference.header.brand.rect.normalizedToShellWidth,
+    moduleTitle: atomBuilderDesktopReference.header.moduleTitle.rect.normalizedToShellWidth,
+  };
+  for (const region of atomBuilderDesktopReference.regions) {
+    if (region.rect) regions[region.id] = region.rect.normalizedToShellWidth;
+  }
+  return regions;
+}
+
+function referenceSpatialPanelLabels(): SpatialPanelGroupLabels {
+  const labelFor = (id: string): string => {
+    const label = atomBuilderDesktopReference.regions.find((region) => region.id === id)?.label;
+    if (!label) {
+      throw new Error(`Atom Builder reference layout is missing the ${id} label.`);
+    }
+    return label;
+  };
+  return {
+    hints: labelFor("hintsLabel"),
+    position: labelFor("positionSliderLabel"),
+    scale: labelFor("scaleSliderLabel"),
+    particleInstruction: "Drag and Drop",
+  };
+}
+
+function referenceRegionRect(id: string): NonNullable<
+  (typeof atomBuilderDesktopReference.regions)[number]["rect"]
+>["normalizedToShellWidth"] {
+  const region = atomBuilderDesktopReference.regions.find((candidate) => candidate.id === id);
+  if (!region?.rect) {
+    throw new Error(`Atom Builder reference layout is missing the measured ${id} rectangle.`);
+  }
+  return region.rect.normalizedToShellWidth;
+}
 
 /** Mount-time options for the screen module. */
 export interface AtomBuilderOptions {
@@ -275,6 +368,8 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     spatialArControlsVisible = false;
     spatialArDragEnabled = false;
     spatialExitLabel = "Exit AR";
+    root.classList.remove("android-camera-panels-active");
+    root.classList.remove("android-camera-legacy-dock-open");
     setSpatialPanelsDomHidden(root, false);
     root.classList.remove("spatial-dom-settings-open");
   };
@@ -289,7 +384,9 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     mode: "ar" | "camera",
     expanded?: boolean,
     overlayGranted?: boolean,
+    androidCameraView = false,
   ): void => {
+    const useAndroidCameraPanels = mode === "camera" && androidCameraView;
     spatialArControlsVisible = mode === "ar" && overlayGranted === false;
     spatialArDragEnabled = mode === "ar";
     spatialExpanded = expanded ?? (spatialSession ? spatialExpanded : false);
@@ -316,6 +413,11 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
         !spatialArControlsVisible,
         spatialExitLabel,
         spatialArDragEnabled,
+        {
+          brand: atomBuilderDesktopReference.header.brand.text,
+          title: atomBuilderDesktopReference.header.moduleTitle.text,
+        },
+        atomBuilderSpatialPanelLabels,
       );
       const session = tryCreateSpatialPanels(
         () => renderer.createSpatialPanelSession(
@@ -323,7 +425,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
           (inputId) => routeSpatialPanelAction(inputId),
           mode === "ar" ? root : undefined,
           mode === "ar" ? onInput : undefined,
-          atomBuilderSpatialSurfaceLayout,
+          mode === "ar" || useAndroidCameraPanels ? atomBuilderSpatialLayouts : undefined,
         ),
         failSpatialPresentation,
       );
@@ -332,13 +434,13 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
       session.setExpanded(spatialExpanded);
       spatialStyle = document.createElement("style");
       spatialStyle.textContent = `
-        .spatial-panels-active #lesson-panel,
-        .spatial-panels-active .narration-hud,
-        .spatial-panels-active #assessment-card,
-        .spatial-panels-active .lesson-summary,
-        .spatial-panels-active .free-play-status,
-        .spatial-panels-active .particle-rail,
-        .spatial-panels-active .atom-inspector,
+        .spatial-panels-active:not(.android-camera-legacy-dock-open) #lesson-panel,
+        .spatial-panels-active:not(.android-camera-legacy-dock-open) .narration-hud,
+        .spatial-panels-active:not(.android-camera-legacy-dock-open) #assessment-card,
+        .spatial-panels-active:not(.android-camera-legacy-dock-open) .lesson-summary,
+        .spatial-panels-active:not(.android-camera-legacy-dock-open) .free-play-status,
+        .spatial-panels-active:not(.android-camera-legacy-dock-open) .particle-rail,
+        .spatial-panels-active:not(.android-camera-legacy-dock-open) .atom-inspector,
         .spatial-panels-active .camera-view-panel-heading #mission-title,
         .spatial-panels-active #ar-panel-mission-title { display: none !important; }
         .spatial-edge-hints {
@@ -379,6 +481,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
         session.setHintListener((hints) => renderSpatialHints(hintRoot, hints));
       }
       setSpatialPanelsDomHidden(root, true);
+      root.classList.toggle("android-camera-panels-active", useAndroidCameraPanels);
       refreshSpatialPanels();
     } catch (error) {
       failSpatialPresentation(error);
@@ -626,6 +729,11 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
             !spatialArControlsVisible,
             spatialExitLabel,
             spatialArDragEnabled,
+            {
+              brand: atomBuilderDesktopReference.header.brand.text,
+              title: atomBuilderDesktopReference.header.moduleTitle.text,
+            },
+            atomBuilderSpatialPanelLabels,
           ));
         }
       }
@@ -762,10 +870,51 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     runCommand(command);
   };
   const onSpatialPresentation = (event: Event): void => {
-    const detail = (event as CustomEvent<{ active?: boolean; expanded?: boolean }>).detail;
+    const detail = (event as CustomEvent<{
+      active?: boolean;
+      expanded?: boolean;
+      androidLayout?: boolean;
+      orientation?: {
+        alpha: number;
+        beta: number;
+        gamma: number;
+        screenAngleDegrees: number;
+      } | null;
+    }>).detail;
     if (typeof detail?.active !== "boolean") return;
-    setSpatialPresentation(detail.active, "camera", detail.expanded ?? spatialExpanded);
+    setSpatialPresentation(
+      detail.active,
+      "camera",
+      detail.expanded ?? spatialExpanded,
+      undefined,
+      detail.androidLayout === true,
+    );
+    if (detail.androidLayout && detail.orientation) {
+      renderer.updateCameraViewOrientation(detail.orientation);
+    }
   };
+  const onCameraLookOrientation = (event: Event): void => {
+    const detail = (event as CustomEvent<{
+      alpha?: number;
+      beta?: number;
+      gamma?: number;
+      screenAngleDegrees?: number;
+    }>).detail;
+    if (
+      typeof detail?.alpha === "number" &&
+      typeof detail.beta === "number" &&
+      typeof detail.gamma === "number" &&
+      typeof detail.screenAngleDegrees === "number"
+    ) {
+      renderer.updateCameraViewOrientation({
+        alpha: detail.alpha,
+        beta: detail.beta,
+        gamma: detail.gamma,
+        screenAngleDegrees: detail.screenAngleDegrees,
+      });
+    }
+  };
+  const onCameraLookOrientationChange = (): void => renderer.rebaseCameraViewOrientation();
 
   const onInput = (action: InputAction): void => {
     if (spatialParticleDrag.handle(action)) return;
@@ -781,6 +930,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
         break;
       }
       case "move": {
+        if (spatialSession && root.classList.contains("ar-active")) break;
         if (
           root.classList.contains("ar-active")
           && payload.source === "xr-controller"
@@ -804,6 +954,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
         renderer.endDrag();
         break;
       case "rotate":
+        if (spatialSession && root.classList.contains("ar-active")) break;
         if (typeof payload.deltaX === "number" && typeof payload.deltaY === "number") {
           if (
             root.classList.contains("ar-active")
@@ -816,6 +967,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
         }
         break;
       case "scale":
+        if (spatialSession && root.classList.contains("ar-active")) break;
         if (typeof payload.delta === "number") {
           if (
             root.classList.contains("ar-active")
@@ -869,11 +1021,13 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   xrInputAdapter = new XrSessionInputAdapter({
     dispatch: onInput,
     pick: (ray) => renderer.pickRay(ray.origin, ray.direction),
-    handlePanelRay: (ray, phase, sourceId) =>
-      spatialSession?.handleRay(ray, phase, sourceId) ?? false,
+    handlePanelRay: (ray, phase, sourceId, source, gestureMode, zoomDelta) =>
+      spatialSession?.handleRay(ray, phase, sourceId, source, gestureMode, zoomDelta) ?? false,
   });
   root.addEventListener("click", onCommandClick);
   root.addEventListener("mma:spatial-presentation", onSpatialPresentation);
+  root.addEventListener("mma:camera-look-orientation", onCameraLookOrientation);
+  root.addEventListener("mma:camera-look-orientation-change", onCameraLookOrientationChange);
   root.addEventListener("mma:xr-diagnostics-update", refreshSpatialPanels);
   renderState(store.getState());
   store.events.emit("module_started", {
@@ -894,6 +1048,8 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     root.removeEventListener("mma:local-telemetry", onLocalTelemetry);
     root.removeEventListener("click", onCommandClick);
     root.removeEventListener("mma:spatial-presentation", onSpatialPresentation);
+    root.removeEventListener("mma:camera-look-orientation", onCameraLookOrientation);
+    root.removeEventListener("mma:camera-look-orientation-change", onCameraLookOrientationChange);
     root.removeEventListener("mma:xr-diagnostics-update", refreshSpatialPanels);
     clearSpatialPresentation();
     narrationPlayer.dispose();

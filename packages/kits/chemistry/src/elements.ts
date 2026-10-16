@@ -5,6 +5,9 @@ export interface Element {
   readonly name: string;
 }
 
+/** Highest atomic number supported by this kit. */
+export const MAX_SUPPORTED_ATOMIC_NUMBER = 20;
+
 const elements: readonly Element[] = [
   { atomicNumber: 1, symbol: "H", name: "Hydrogen" },
   { atomicNumber: 2, symbol: "He", name: "Helium" },

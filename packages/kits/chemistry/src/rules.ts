@@ -4,6 +4,7 @@ import {
   validateElectronPlacement,
   validateElectronRemoval,
 } from "./electron-shells.js";
+import { MAX_SUPPORTED_ATOMIC_NUMBER } from "./elements.js";
 
 /** Serializable atom state consumed by chemistry rules. */
 export interface ChemistryState {
@@ -94,7 +95,7 @@ export const chemistryReducer: Reducer<ChemistryState, ChemistryAction> = (
         return reject(state, "Protons and neutrons belong in the nucleus, not on an electron shell.");
       }
       if (action.payload.particle === "proton") {
-        if (state.protons >= 20) {
+        if (state.protons >= MAX_SUPPORTED_ATOMIC_NUMBER) {
           return reject(state, "This kit supports elements 1 to 20.");
         }
         return { ...state, protons: state.protons + 1, validationMessages: [] };
@@ -103,7 +104,7 @@ export const chemistryReducer: Reducer<ChemistryState, ChemistryAction> = (
     }
     case "particle/add": {
       if (action.payload.particle === "proton") {
-        if (state.protons >= 20) {
+        if (state.protons >= MAX_SUPPORTED_ATOMIC_NUMBER) {
           return reject(state, "This kit supports elements 1 to 20.");
         }
         return { ...state, protons: state.protons + 1, validationMessages: [] };

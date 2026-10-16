@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { spatialLayout } from "../spatial-layout.js";
 import { spatialTokens } from "../spatial-tokens.js";
+import { xrTokens } from "../xr-tokens.js";
 import {
   hitTest,
   glassPanelButtonState,
@@ -169,13 +170,13 @@ export function createGlassPanel(options: CreateGlassPanelOptions): GlassPanel {
       padPanel: `${Math.min(options.contentPaddingPx ?? 6, 6)}px`,
       gapControl: "3px",
     };
-    context.font = `${spatialLayout.minTextSizePx}px "Avenir Next", "Trebuchet MS", sans-serif`;
+    context.font = `${xrTokens.typography.minimumSizeDp}px ${xrTokens.typography.fontFamily}`;
     const pages = layoutPanelPages(
       drawnItems,
       { width: canvas.width, height: canvas.height },
       collapsed ? compactTokens : panelTokens,
       (text, fontSizePx) => {
-        context.font = `${fontSizePx}px "Avenir Next", "Trebuchet MS", sans-serif`;
+        context.font = `${fontSizePx}px ${xrTokens.typography.fontFamily}`;
         return context.measureText(text).width;
       },
     ).pages;
@@ -404,7 +405,7 @@ function drawItems(
       context.stroke();
     }
 
-    context.font = `${rect.selected || rect.kind === "heading" ? 700 : 500} ${rect.fontSizePx}px "Avenir Next", "Trebuchet MS", sans-serif`;
+    context.font = `${rect.selected || rect.kind === "heading" ? "bold" : "normal"} ${rect.fontSizePx}px ${xrTokens.typography.fontFamily}`;
     context.letterSpacing = "0px";
     context.textBaseline = "middle";
     context.textAlign = rect.textAlign === "center" ? "center" : "left";

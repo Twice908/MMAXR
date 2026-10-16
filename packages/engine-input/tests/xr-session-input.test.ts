@@ -1,12 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 import { XrSessionInputAdapter } from "../src/xr-session-input.js";
 
-function makeSource(targetRayMode: XRInputSource["targetRayMode"] = "tracked-pointer"): XRInputSource {
+function makeSource(
+  targetRayMode: XRInputSource["targetRayMode"] = "tracked-pointer",
+  hand: XRHand | null = null,
+): XRInputSource {
   return {
     targetRayMode,
     targetRaySpace: {} as XRSpace,
     handedness: "none",
-    hand: null,
+    hand,
     gamepad: null,
   } as XRInputSource;
 }
@@ -109,16 +112,51 @@ describe("XR session input adapter", () => {
   it("consumes a panel hover before invoking the atom picker", async () => {
     const source = makeSource();
     const picker = vi.fn(() => ({ target: "shell:1" }));
+    const handlePanelRay = vi.fn(() => true);
     const adapter = new XrSessionInputAdapter({
       dispatch: vi.fn(),
       pick: picker,
-      handlePanelRay: vi.fn(() => true),
+      handlePanelRay,
     });
     await adapter.setSession(makeSession([source]));
 
     adapter.update(makeFrame());
 
     expect(picker).not.toHaveBeenCalled();
+    expect(handlePanelRay).toHaveBeenCalledWith(
+      expect.any(Object),
+      "move",
+      "xr-source-1",
+      "controller",
+      "rotate",
+      undefined,
+    );
+    adapter.dispose();
+  });
+
+  it("identifies hand rays as hand pointers", async () => {
+    const source = makeSource(
+      "tracked-pointer",
+      { get: () => null } as unknown as XRHand,
+    );
+    const handlePanelRay = vi.fn(() => true);
+    const adapter = new XrSessionInputAdapter({
+      dispatch: vi.fn(),
+      pick: vi.fn(() => null),
+      handlePanelRay,
+    });
+    await adapter.setSession(makeSession([source]));
+
+    adapter.update(makeFrame());
+
+    expect(handlePanelRay).toHaveBeenCalledWith(
+      expect.any(Object),
+      "move",
+      "xr-source-1",
+      "hand",
+      "rotate",
+      undefined,
+    );
     adapter.dispose();
   });
 
@@ -142,6 +180,104 @@ describe("XR session input adapter", () => {
     adapter.update(frame);
 
     expect(pose).toHaveBeenCalledWith(source.targetRaySpace, expect.anything());
+    adapter.dispose();
+  });
+
+  it("routes a controller grip drag as a pan gesture and releases it", async () => {
+    const gripSpace = {} as XRSpace;
+    const buttons = [{ pressed: false, value: 0 }, { pressed: true, value: 1 }];
+    const source = Object.assign(makeSource(), {
+      gripSpace,
+      gamepad: { buttons, axes: [] },
+    }) as XRInputSource;
+    const handlePanelRay = vi.fn(() => true);
+    const adapter = new XrSessionInputAdapter({
+      dispatch: vi.fn(),
+      pick: vi.fn(() => null),
+      handlePanelRay,
+    });
+    await adapter.setSession(makeSession([source]));
+    const frame = {
+      predictedDisplayTime: 16,
+      getPose: () => ({
+        transform: {
+          position: { x: 0, y: 0, z: 0 },
+          orientation: { x: 0, y: 0, z: 0, w: 1 },
+        },
+      }),
+    } as unknown as XRFrame;
+
+    adapter.update(frame);
+    buttons[1]!.pressed = false;
+    adapter.update(frame);
+
+    expect(handlePanelRay).toHaveBeenCalledWith(
+      expect.any(Object),
+      "down",
+      "xr-source-1",
+      "controller",
+      "pan",
+    );
+    expect(handlePanelRay).toHaveBeenCalledWith(
+      expect.any(Object),
+      "move",
+      "xr-source-1",
+      "controller",
+      "pan",
+      undefined,
+    );
+    expect(handlePanelRay).toHaveBeenCalledWith(
+      expect.any(Object),
+      "up",
+      "xr-source-1",
+      "controller",
+      "pan",
+    );
+    adapter.dispose();
+  });
+
+  it("sends two-controller grip separation changes as one shared zoom delta", async () => {
+    const gripSpaces = [{}, {}] as XRSpace[];
+    const buttons = [[{ pressed: false, value: 0 }, { pressed: true, value: 1 }],
+      [{ pressed: false, value: 0 }, { pressed: true, value: 1 }]];
+    const sources = gripSpaces.map((gripSpace, index) => Object.assign(makeSource(), {
+      gripSpace,
+      gamepad: { buttons: buttons[index], axes: [] },
+    })) as XRInputSource[];
+    const positions = [-0.25, 0.25];
+    const handlePanelRay = vi.fn(() => true);
+    const adapter = new XrSessionInputAdapter({
+      dispatch: vi.fn(),
+      pick: vi.fn(() => null),
+      handlePanelRay,
+    });
+    await adapter.setSession(makeSession(sources));
+    const frame = (): XRFrame => ({
+      predictedDisplayTime: 16,
+      getPose: (space: XRSpace) => {
+        const index = gripSpaces.indexOf(space);
+        return {
+          transform: {
+            position: { x: index < 0 ? 0 : positions[index]!, y: 0, z: 0 },
+            orientation: { x: 0, y: 0, z: 0, w: 1 },
+          },
+        };
+      },
+    } as unknown as XRFrame);
+
+    adapter.update(frame());
+    positions[0] = -0.4;
+    positions[1] = 0.4;
+    adapter.update(frame());
+
+    expect(handlePanelRay).toHaveBeenCalledWith(
+      expect.any(Object),
+      "move",
+      "xr-source-1",
+      "controller",
+      "pan",
+      expect.closeTo(0.3),
+    );
     adapter.dispose();
   });
 });

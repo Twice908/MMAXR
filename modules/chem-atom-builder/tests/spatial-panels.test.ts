@@ -13,7 +13,7 @@ const source: SpatialPanelsSource = {
     step: "step source",
     title: "title source",
     goal: "goal source",
-    progress: "progress source",
+    progress: "Progress 1/4",
     hintFeedback: "hint feedback source",
     missionFeedback: "mission feedback source",
     hintLabel: "hint label source",
@@ -94,6 +94,7 @@ const source: SpatialPanelsSource = {
     muteAction: "mute",
     replayLabel: "replay source",
     replayAction: "replay",
+    replayDisabled: false,
     captionsLabel: "captions source",
     captionsAction: "captions",
     speedControlId: "narration-speed",
@@ -171,6 +172,112 @@ describe("spatial panel data and routing", () => {
       "narration-speed:1": true,
       "narration-speed:1.25": false,
     });
+  });
+
+  it("builds live headset panel data and preserves particle and mission limits", () => {
+    const labels = {
+      hints: "hints label source",
+      position: "position label source",
+      scale: "scale label source",
+    };
+    const first = buildSpatialPanelItems(source, true, "Exit AR", true, {
+      brand: "MMAXR",
+      title: "Atom Builder",
+    }, labels).bento;
+    expect(first.header).toEqual({ brand: "MMAXR", title: "Atom Builder" });
+    expect(first.hints.label).toBe("hints label source");
+    expect(first.particleInstruction).toBe("Drag and Drop");
+    expect(first.controls).toEqual({
+      positionLabel: "position label source",
+      scaleLabel: "scale label source",
+    });
+    expect(first.particles.map(({ value, min, max }) => ({ value, min, max }))).toEqual([
+      { value: 6, min: 1, max: 20 },
+      { value: 6, min: 0, max: undefined },
+      { value: 6, min: 0, max: 20 },
+    ]);
+    expect(first.element.properties).toEqual(source.element.properties);
+    expect(first.element.number).toBe("Element 06");
+    expect(first.model).toMatchObject({
+      captionsLabel: "Captions On",
+      narrationLabel: "Narration On",
+      enableLabel: "Enable sound",
+      replayLabel: "Replay",
+    });
+    expect(first.mission).toMatchObject({
+      step: "step source",
+      title: "title source",
+      body: "goal source",
+      progressValue: 1,
+      progressMax: 4,
+      hintAction: "lesson:hint",
+      checkAction: "lesson:check",
+      hintDisabled: false,
+      checkDisabled: false,
+    });
+    expect(first.model).toMatchObject({
+      caption: "caption source",
+      captionsEnabled: true,
+      captionsAction: "captions",
+      narrationEnabled: false,
+      narrationAction: "mute",
+      replayAction: "replay",
+    });
+
+    const updated = buildSpatialPanelItems({
+      ...source,
+      mission: {
+        ...source.mission,
+        progress: "Progress 2/4",
+        hintFeedback: "clue: updated hint",
+        hintDisabled: true,
+        checkDisabled: true,
+      },
+      particles: source.particles.map((particle) => ({
+        ...particle,
+        count: particle.label === "Proton" ? "7" : particle.count,
+      })),
+      element: {
+        ...source.element,
+        properties: source.element.properties.map((property) => ({
+          ...property,
+          value: property.label === "Atomic number Z" ? "7" : property.value,
+        })),
+      },
+      narration: {
+        ...source.narration,
+        captionsEnabled: false,
+        muted: true,
+        caption: "",
+        speedOptions: source.narration.speedOptions.map((option) => ({
+          ...option,
+          selected: option.value === "1.25",
+        })),
+      },
+    }).bento;
+    expect(updated.particles[0]?.value).toBe(7);
+    expect(updated.element.properties[0]?.value).toBe("7");
+    expect(updated.mission).toMatchObject({
+      progressValue: 2,
+      hint: "clue: updated hint",
+      hintDisabled: true,
+      checkDisabled: true,
+    });
+    expect(updated.model).toMatchObject({
+      captionsEnabled: false,
+      narrationEnabled: false,
+      captionsLabel: "Captions Off",
+      narrationLabel: "Narration Off",
+      caption: "",
+    });
+    expect(updated.model.speedOptions.find((option) => option.selected)?.value).toBe("1.25");
+
+    const narrationReady = buildSpatialPanelItems({
+      ...source,
+      narration: { ...source.narration, enableHidden: true },
+    }).bento;
+    expect(narrationReady.model.enableVisible).toBe(false);
+    expect(narrationReady.model.narrationLabel).toBe("Narration On");
   });
 
   it("adds reachable AR controls only when the DOM overlay is unavailable", () => {

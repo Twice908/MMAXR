@@ -6,7 +6,24 @@ import {
   spatialSurfaceGeometry,
   type NormalizedSpatialSurfaceRect,
 } from "./spatial-layout.js";
-import { PANEL_LIMITS, xrTokens } from "./xr-tokens.js";
+import {
+  dpToMeters,
+  MODEL_STAGE,
+  ANDROID_CAMERA_FOV_DEGREES,
+  ANDROID_PANEL_LIMITS,
+  LOOK_LIMITS,
+  PANEL_LIMITS,
+  xrTokens,
+} from "./xr-tokens.js";
+import {
+  cameraDragLookDelta,
+  calculateCameraLookLimits,
+  deviceOrientationQuaternion,
+  relativeDeviceLookAngles,
+  softClampCameraAngle,
+  type CameraLookLimits,
+  type DeviceOrientationSample,
+} from "./visuals/camera-look-around.js";
 import {
   createGlassSurface,
   disposeGlassSurface,
@@ -18,13 +35,50 @@ import {
   calculateSpatialDockLayout,
   SPATIAL_DOCK_HINT,
   calculateSpatialDockPlacement,
+  calculatePanelGroupPlacement,
+  calculatePanelGroupPosition,
+  applyPanelGroupScale,
+  calculateSpatialLayoutLookAngles,
+  clampPanelGroupDistance,
+  clampPanelGroupScale,
+  selectSpatialLayoutName,
   selectSpatialPresentationProfile,
   shouldEnableSpatialPanelPointerEvents,
   toggleSpatialDockSelection,
   type SpatialPresentationProfile,
+  type PanelGroupLimits,
   type SpatialPanelKey,
 } from "./visuals/spatial-placement.js";
 import { createSpatialPanelHost } from "./visuals/spatial-panel-host.js";
+import type {
+  SpatialPointerEvent,
+  SpatialPointerTarget,
+} from "./visuals/spatial-pointer.js";
+import {
+  calculateModelStageLayout,
+  modelFitsStageArea,
+  nearestModelSurfaceDistance,
+  panModelStage,
+  resetModelStagePose,
+  rotateModelStage,
+  zoomModelStage,
+  type ModelStageBindingLimit,
+  type ModelStageLayout,
+  type ModelStagePose,
+} from "./visuals/model-stage.js";
+import {
+  createSpatialProgressBar,
+  createSpatialPropertyRow,
+  createSpatialStepper,
+  createSpatialText,
+  createSpatialButton,
+  type SpatialButton,
+  type SpatialProgressBar,
+  type SpatialPrimitive,
+  type SpatialStepper,
+  type SpatialText,
+} from "./visuals/spatial-primitives.js";
+import { createSpatialSlider, type SpatialSlider } from "./visuals/spatial-slider.js";
 import { selectSnapTarget } from "./snap-target.js";
 import { screenZoomConfig } from "./zoom-controls.js";
 import {
@@ -97,10 +151,79 @@ export interface SpatialPanelItems {
   readonly particles: readonly GlassPanelItem[];
   readonly elementInfo: readonly GlassPanelItem[];
   readonly narration: readonly GlassPanelItem[];
+  readonly bento: SpatialPanelGroupContent;
   readonly arControls?: readonly GlassPanelItem[];
   readonly xrDiagnostics?: readonly GlassPanelItem[];
   readonly settings: readonly GlassPanelItem[];
   readonly settingsToggles: Readonly<Record<string, boolean>>;
+}
+
+/** Typed live content rendered inside the measured immersive panel group. */
+export interface SpatialPanelGroupContent {
+  readonly header?: Readonly<{ brand: string; title: string }>;
+  readonly model: Readonly<{
+    readonly caption: string;
+    readonly captionsLabel: string;
+    readonly captionsAction: string;
+    readonly captionsEnabled: boolean;
+    readonly speedOptions: readonly Readonly<{
+      value: string;
+      label: string;
+      selected: boolean;
+    }>[];
+    readonly narrationLabel: string;
+    readonly narrationAction: string;
+    readonly narrationEnabled: boolean;
+    readonly enableLabel: string;
+    readonly enableAction: string;
+    readonly enableVisible: boolean;
+    readonly enableDisabled: boolean;
+    readonly replayLabel: string;
+    readonly replayAction: string;
+    readonly replayDisabled: boolean;
+  }>;
+  readonly particles: readonly Readonly<{
+    label: string;
+    value: number;
+    color: string;
+    addAction: string;
+    removeAction: string;
+    min: number;
+    max?: number;
+  }>[];
+  readonly particleHeading: string;
+  readonly particleInstruction: string;
+  readonly element: Readonly<{
+    symbol: string;
+    name: string;
+    number: string;
+    properties: readonly Readonly<{ label: string; value: string }>[];
+  }>;
+  readonly mission: Readonly<{
+    view: "lesson" | "summary" | "free-play";
+    step: string;
+    title: string;
+    body: string;
+    hint: string;
+    progressValue: number;
+    progressMax: number;
+    hintAction: string;
+    hintLabel: string;
+    hintDisabled: boolean;
+    checkAction: string;
+    checkLabel: string;
+    checkDisabled: boolean;
+    freePlayAction: string;
+    freePlayLabel: string;
+    summaryTitle: string;
+    summaryDetails: string;
+    freePlayText: string;
+    resetAction: string;
+    resetLabel: string;
+  }>;
+  readonly hints: Readonly<{ label: string; text: string }>;
+  readonly resetViewLabel: string;
+  readonly controls: Readonly<{ positionLabel: string; scaleLabel: string }>;
 }
 
 export interface SpatialPanelSession {
@@ -111,7 +234,14 @@ export interface SpatialPanelSession {
   reposition(): void;
   /** Suspend browser pointer interception while an immersive session owns input. */
   setPointerEventsEnabled(enabled: boolean): void;
-  handleRay(ray: THREE.Ray, phase: "move" | "down" | "up" | "cancel", sourceId?: string): boolean;
+  handleRay(
+    ray: THREE.Ray,
+    phase: "move" | "down" | "up" | "cancel",
+    sourceId?: string,
+    source?: "controller" | "hand",
+    gestureMode?: "rotate" | "pan",
+    zoomDelta?: number,
+  ): boolean;
   setHintListener(listener: ((hints: readonly SpatialPanelEdgeHint[]) => void) | null): void;
   focusPanel(key: SpatialPanelEdgeHint["key"]): void;
   dispose(): void;
@@ -119,11 +249,29 @@ export interface SpatialPanelSession {
 
 export interface SpatialSurfaceLayout {
   readonly shell: NormalizedSpatialSurfaceRect;
+  readonly regions: Readonly<Record<string, NormalizedSpatialSurfaceRect>>;
   readonly panels: readonly Readonly<{
     id: string;
     variant: "panel" | "card";
     rect: NormalizedSpatialSurfaceRect;
   }>[];
+  readonly controls: Readonly<{
+    readonly hintButton?: NormalizedSpatialSurfaceRect;
+    readonly checkButton?: NormalizedSpatialSurfaceRect;
+    readonly freePlayButton?: NormalizedSpatialSurfaceRect;
+    readonly futureLogoSlot: NormalizedSpatialSurfaceRect;
+    readonly positionSliderTrack: NormalizedSpatialSurfaceRect;
+    readonly scaleSliderTrack: NormalizedSpatialSurfaceRect;
+    readonly resetViewButton: NormalizedSpatialSurfaceRect;
+    readonly resetAtomButton: NormalizedSpatialSurfaceRect;
+    readonly positionSliderOrientation?: "horizontal" | "vertical";
+    readonly scaleSliderOrientation?: "horizontal" | "vertical";
+  }>;
+}
+
+export interface SpatialSurfaceLayouts {
+  readonly headset: SpatialSurfaceLayout;
+  readonly android: SpatialSurfaceLayout;
 }
 
 export interface SpatialAtomCaption {
@@ -168,9 +316,10 @@ function readSpatialDockSafeRect(
 export function setScreenRendererTransparentBackground(
   host: HTMLElement,
   transparent: boolean,
+  androidCameraLayout = false,
 ): void {
   host.dispatchEvent(new CustomEvent(SCREEN_BACKGROUND_MODE_EVENT, {
-    detail: transparent,
+    detail: androidCameraLayout ? { transparent, androidCameraLayout } : transparent,
   }));
 }
 
@@ -238,6 +387,25 @@ export interface XrSceneDiagnostics {
   readonly atomVisibilityChain: readonly Readonly<{ name: string; visible: boolean }>[];
   readonly xrCameraToAtomDistanceMeters: number | null;
   readonly panelGroupWorldPosition: Position3 | null;
+  readonly panelGroupWorldScale?: Position3 | null;
+  readonly panelGroupWorldRotation?: Readonly<{ x: number; y: number; z: number; w: number }> | null;
+  readonly panelGroupDistanceMeters?: number | null;
+  readonly panelGroupSliderValues?: Readonly<{ positionMeters: number; scale: number }> | null;
+  readonly cameraLookAngles?: Readonly<{ yawDegrees: number; pitchDegrees: number }> | null;
+  readonly cameraLookLimits?: Readonly<{ yawDegrees: number; pitchDegrees: number }> | null;
+  readonly cameraFitsAtMinimumScale?: Readonly<{ portrait: boolean; landscape: boolean }> | null;
+  readonly activeSpatialLayout?: "headset" | "android" | null;
+  readonly spatialLayoutLimits?: Readonly<{
+    scale: Readonly<{ min: number; default: number; max: number }>;
+    distanceMeters: Readonly<{ min: number; default: number; max: number }>;
+  }> | null;
+  readonly spatialLayoutLookAngles?: Readonly<{
+    leftDegrees: number;
+    rightDegrees: number;
+    upDegrees: number;
+    downDegrees: number;
+  }> | null;
+  readonly spatialLayoutFitsAtMinimumScale?: boolean | null;
   readonly atomViewerSpace: Readonly<{
     distanceMeters: number;
     direction: Position3;
@@ -249,6 +417,15 @@ export interface XrSceneDiagnostics {
   readonly viewCount: number | null;
   readonly environmentPresent: boolean;
   readonly sceneIssues: readonly string[];
+  readonly modelStage?: Readonly<{
+    readonly position: Position3;
+    readonly rotation: Readonly<{ x: number; y: number; z: number; w: number }>;
+    readonly zoom: number;
+    readonly nearestSurfaceDistanceMeters: number | null;
+    readonly bindingLimit: ModelStageBindingLimit;
+    readonly relativeToModelPanelCenter: Position3;
+    readonly fitsInsideModelArea: boolean;
+  }> | null;
 }
 
 /** Read the viewer pose from the same reference space used by the XR renderer. */
@@ -504,6 +681,27 @@ export class ScreenSceneRenderer {
   }[] = [];
   private readonly interactiveMeshes: THREE.Object3D[] = [];
   private readonly nucleusPickMesh: THREE.Mesh;
+  private readonly subpartHighlightGeometry = new THREE.SphereGeometry(1, 16, 12);
+  private readonly subpartHighlightMaterial = new THREE.MeshBasicMaterial({
+    color: 0x83e5b4,
+    transparent: true,
+    opacity: 0.9,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    wireframe: true,
+  });
+  private readonly subpartHighlightMesh = new THREE.Mesh(
+    this.subpartHighlightGeometry,
+    this.subpartHighlightMaterial,
+  );
+  private readonly hoveredAtomSubparts = new Map<string, {
+    readonly object: THREE.Object3D;
+    readonly instanceId: number | null;
+  }>();
+  private selectedAtomSubpart: {
+    readonly object: THREE.Object3D;
+    readonly instanceId: number | null;
+  } | null = null;
   private readonly atomDropOutline: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
   private readonly dragGhost: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
   private readonly dragGhostOutline: THREE.LineSegments<THREE.EdgesGeometry, THREE.LineBasicMaterial>;
@@ -523,6 +721,12 @@ export class ScreenSceneRenderer {
   private dragParticle: string | null = null;
   private arActive = false;
   private cameraViewActive = false;
+  private androidCameraLayoutActive = false;
+  private cameraLookYaw = 0;
+  private cameraLookPitch = 0;
+  private cameraLookLimits: CameraLookLimits | null = null;
+  private cameraOrientationBaseline: THREE.Quaternion | null = null;
+  private cameraDragPosition: Readonly<{ x: number; y: number }> | null = null;
   private currentFrame: ScreenSceneFrame | null = null;
   private activeXRSession: XRSession | null = null;
   private activeXRMode: "immersive-ar" | "immersive-vr" | null = null;
@@ -531,9 +735,17 @@ export class ScreenSceneRenderer {
   private firstFramePoseWasNull: boolean | null = null;
   private firstNonNullViewerPose: ArViewerPose | null = null;
   private latestFramePose: ArViewerPose | null = null;
+  private panelGroupSliderValues: { positionMeters: number; scale: number } | null = null;
   private latestViewCount: number | null = null;
   private framesRendered = 0;
   private spatialPanelGroup: THREE.Group | null = null;
+  private activeSpatialLayout: "headset" | "android" | null = null;
+  private activeSpatialSurfaceLayout: SpatialSurfaceLayout | null = null;
+  private modelStage: THREE.Group | null = null;
+  private modelStageLayout: ModelStageLayout | null = null;
+  private modelStagePose: ModelStagePose | null = null;
+  private modelStageBindingLimit: ModelStageBindingLimit = null;
+  private modelPanelCenter: Position3 | null = null;
   private pendingSpatialDockReposition: ((pose: ArViewerPose) => void) | null = null;
   private atomCaptionPanel: GlassPanel | null = null;
   private atomCaptionAnchor: THREE.Group | null = null;
@@ -609,6 +821,10 @@ export class ScreenSceneRenderer {
     this.nucleusPickMesh = new THREE.Mesh(new THREE.SphereGeometry(1), pickMaterial);
     this.nucleusPickMesh.userData.interactionTarget = "nucleus";
     this.atomRoot.add(this.nucleusPickMesh);
+    this.subpartHighlightMesh.name = "atom-subpart-highlight";
+    this.subpartHighlightMesh.visible = false;
+    this.subpartHighlightMesh.renderOrder = 31;
+    this.atomRoot.add(this.subpartHighlightMesh);
     this.interactiveMeshes.push(this.nucleusPickMesh);
     this.atomDropOutline = new THREE.Mesh(
       new THREE.SphereGeometry(1, 24, 16),
@@ -663,6 +879,10 @@ export class ScreenSceneRenderer {
   /** Replace view geometry from a serialized state-derived scene frame. */
   update(frame: ScreenSceneFrame): void {
     this.currentFrame = frame;
+    this.hoveredAtomSubparts.clear();
+    this.selectedAtomSubpart = null;
+    this.subpartHighlightMesh.visible = false;
+    this.subpartHighlightMesh.geometry = this.subpartHighlightGeometry;
     this.clearSphereMeshes();
     this.clearRingMeshes();
     this.nucleusRadius = Math.max(frame.nucleusRadius, 0.2);
@@ -727,10 +947,21 @@ export class ScreenSceneRenderer {
         });
       }
     }
+    if (this.modelStage) {
+      this.atomRoot.traverse((object) => {
+        if (object instanceof THREE.Mesh) {
+          object.renderOrder = object === this.subpartHighlightMesh ? 31 : 30;
+        }
+      });
+    }
     if (this.arActive) {
-      this.atomRoot.scale.setScalar(
-        arContentScale(frame) * this.arViewTransform.scaleFactor,
-      );
+      if (this.modelStageLayout) {
+        this.atomRoot.scale.setScalar(this.modelStageLayout.fitRadius / this.atomBoundingRadius);
+      } else {
+        this.atomRoot.scale.setScalar(
+          arContentScale(frame) * this.arViewTransform.scaleFactor,
+        );
+      }
     }
     this.positionSlotMarkers();
     this.updateAtomCaptionPlacement();
@@ -1000,8 +1231,88 @@ export class ScreenSceneRenderer {
         .getWorldPosition(new THREE.Vector3())
         .distanceTo(atomWorld);
     }
-    const panelWorld = this.spatialPanelGroup?.getWorldPosition(new THREE.Vector3()) ?? null;
+    const panelGroup = this.spatialPanelGroup;
+    panelGroup?.updateWorldMatrix(true, false);
+    const panelWorld = panelGroup?.getWorldPosition(new THREE.Vector3()) ?? null;
+    const panelWorldScale = panelGroup?.getWorldScale(new THREE.Vector3()) ?? null;
+    const panelWorldRotation = panelGroup?.getWorldQuaternion(new THREE.Quaternion()) ?? null;
     const viewerPose = this.latestFramePose;
+    let panelGroupDistanceMeters: number | null = null;
+    if (panelWorld) {
+      const viewerPosition = viewerPose
+        ? new THREE.Vector3(viewerPose.position.x, viewerPose.position.y, viewerPose.position.z)
+        : this.androidCameraLayoutActive
+          ? this.camera.getWorldPosition(new THREE.Vector3())
+          : this.renderer.xr.isPresenting
+            ? this.renderer.xr.getCamera().getWorldPosition(new THREE.Vector3())
+            : null;
+      if (viewerPosition) panelGroupDistanceMeters = viewerPosition.distanceTo(panelWorld);
+    }
+    const spatialLayoutLimits = this.activeSpatialLayout === "android"
+      ? ANDROID_PANEL_LIMITS
+      : this.activeSpatialLayout === "headset"
+        ? PANEL_LIMITS
+        : null;
+    const activeModelPanel = this.activeSpatialSurfaceLayout?.panels.find(
+      ({ id }) => id === "model-panel",
+    );
+    const xrCamera = this.renderer.xr.getCamera();
+    const projectionCamera = this.androidCameraLayoutActive
+      ? this.camera
+      : xrCamera instanceof THREE.ArrayCamera
+        ? xrCamera.cameras[0] ?? xrCamera
+        : xrCamera;
+    const projectionX = projectionCamera.projectionMatrix.elements[0]!;
+    const projectionY = projectionCamera.projectionMatrix.elements[5]!;
+    const spatialLayoutLookAngles = this.activeSpatialSurfaceLayout && activeModelPanel &&
+      spatialLayoutLimits && projectionX > 0 && projectionY > 0
+      ? calculateSpatialLayoutLookAngles(
+          {
+            shell: this.activeSpatialSurfaceLayout.shell,
+            modelPanel: activeModelPanel.rect,
+          },
+          xrTokens.shellWidthMeters,
+          this.panelGroupSliderValues?.positionMeters ?? spatialLayoutLimits.distanceMeters.default,
+          this.panelGroupSliderValues?.scale ?? spatialLayoutLimits.scale.default,
+          projectionX,
+          projectionY,
+        )
+      : null;
+    const spatialLayoutMinimumScaleFit = this.activeSpatialSurfaceLayout && activeModelPanel &&
+      spatialLayoutLimits && projectionX > 0 && projectionY > 0
+      ? calculateSpatialLayoutLookAngles(
+          {
+            shell: this.activeSpatialSurfaceLayout.shell,
+            modelPanel: activeModelPanel.rect,
+          },
+          xrTokens.shellWidthMeters,
+          spatialLayoutLimits.distanceMeters.default,
+          spatialLayoutLimits.scale.min,
+          projectionX,
+          projectionY,
+        ).fitsInView
+      : null;
+    const cameraFitsAtMinimumScale = this.androidCameraLayoutActive &&
+      this.activeSpatialSurfaceLayout && activeModelPanel
+      ? (() => {
+          const projectionY = 1 / Math.tan(
+            THREE.MathUtils.degToRad(ANDROID_CAMERA_FOV_DEGREES) / 2,
+          );
+          const fits = (aspect: number): boolean =>
+            calculateSpatialLayoutLookAngles(
+              {
+                shell: this.activeSpatialSurfaceLayout!.shell,
+                modelPanel: activeModelPanel.rect,
+              },
+              xrTokens.shellWidthMeters,
+              ANDROID_PANEL_LIMITS.distanceMeters.default,
+              ANDROID_PANEL_LIMITS.scale.min,
+              projectionY / aspect,
+              projectionY,
+            ).fitsInView;
+          return { portrait: fits(412 / 915), landscape: fits(915 / 412) };
+        })()
+      : null;
     let atomViewerSpace: XrSceneDiagnostics["atomViewerSpace"] = null;
     let atomInsideViewFrustum: boolean | null = null;
     if (viewerPose) {
@@ -1059,6 +1370,40 @@ export class ScreenSceneRenderer {
       if (issues.length > 0) sceneIssues.push(`${name}: ${issues.join(", ")}`);
     });
     const baseLayer = this.activeXRSession?.renderState.baseLayer;
+    const modelStageDiagnostics = this.modelStage && this.modelStageLayout &&
+      this.modelStagePose && this.modelPanelCenter
+      ? (() => {
+          this.modelStage.updateWorldMatrix(true, false);
+          const stageWorldPosition = this.modelStage.getWorldPosition(new THREE.Vector3());
+          const viewerPosition = this.renderer.xr.getCamera()
+            .getWorldPosition(new THREE.Vector3());
+          const groupScale = this.modelStage.parent?.scale.x ?? 1;
+          const nearestSurfaceDistanceMeters = nearestModelSurfaceDistance(
+            viewerPosition.distanceTo(stageWorldPosition),
+            this.modelStageLayout!.fitRadius,
+            groupScale,
+            this.modelStagePose!.zoom,
+          );
+          return {
+            position: { ...this.modelStagePose!.position },
+            rotation: { ...this.modelStagePose!.rotation },
+            zoom: this.modelStagePose!.zoom,
+            nearestSurfaceDistanceMeters,
+            bindingLimit: this.modelStageBindingLimit,
+            relativeToModelPanelCenter: {
+              x: this.modelStagePose!.position.x - this.modelPanelCenter!.x,
+              y: this.modelStagePose!.position.y - this.modelPanelCenter!.y,
+              z: this.modelStagePose!.position.z - this.modelPanelCenter!.z,
+            },
+            fitsInsideModelArea: modelFitsStageArea(
+              this.modelStageLayout!,
+              groupScale,
+              this.modelStagePose!.zoom,
+              this.modelStagePose!.position,
+            ),
+          };
+        })()
+      : null;
     return {
       sessionMode: this.activeXRMode,
       referenceSpaceType: this.activeXRReferenceSpaceType,
@@ -1073,6 +1418,43 @@ export class ScreenSceneRenderer {
       panelGroupWorldPosition: panelWorld
         ? { x: panelWorld.x, y: panelWorld.y, z: panelWorld.z }
         : null,
+      panelGroupWorldScale: panelWorldScale
+        ? { x: panelWorldScale.x, y: panelWorldScale.y, z: panelWorldScale.z }
+        : null,
+      panelGroupWorldRotation: panelWorldRotation
+        ? {
+          x: panelWorldRotation.x,
+          y: panelWorldRotation.y,
+          z: panelWorldRotation.z,
+          w: panelWorldRotation.w,
+        }
+        : null,
+      panelGroupDistanceMeters,
+      panelGroupSliderValues: this.panelGroupSliderValues,
+      cameraLookAngles: this.androidCameraLayoutActive
+        ? {
+            yawDegrees: THREE.MathUtils.radToDeg(this.cameraLookYaw),
+            pitchDegrees: THREE.MathUtils.radToDeg(this.cameraLookPitch),
+          }
+        : null,
+      cameraLookLimits: this.cameraLookLimits
+        ? {
+            yawDegrees: THREE.MathUtils.radToDeg(this.cameraLookLimits.yawRadians),
+            pitchDegrees: THREE.MathUtils.radToDeg(this.cameraLookLimits.pitchRadians),
+          }
+        : null,
+      cameraFitsAtMinimumScale,
+      activeSpatialLayout: this.activeSpatialLayout,
+      spatialLayoutLimits,
+      spatialLayoutLookAngles: spatialLayoutLookAngles
+        ? {
+            leftDegrees: spatialLayoutLookAngles.leftDegrees,
+            rightDegrees: spatialLayoutLookAngles.rightDegrees,
+            upDegrees: spatialLayoutLookAngles.upDegrees,
+            downDegrees: spatialLayoutLookAngles.downDegrees,
+          }
+        : null,
+      spatialLayoutFitsAtMinimumScale: spatialLayoutMinimumScaleFit,
       atomViewerSpace,
       atomInsideViewFrustum,
       rendererPresenting: this.renderer.xr.isPresenting,
@@ -1083,6 +1465,7 @@ export class ScreenSceneRenderer {
       viewCount: this.latestViewCount,
       environmentPresent: this.vrEnvironment?.root.parent === this.scene,
       sceneIssues,
+      modelStage: modelStageDiagnostics,
     };
   }
 
@@ -1212,12 +1595,40 @@ export class ScreenSceneRenderer {
     this.updateCamera();
   }
 
-  /** Restore the initial camera position without changing atom state. */
+  /** Restore the screen camera or immersive ModelStage view without changing atom state. */
   resetView(): void {
+    if (this.androidCameraLayoutActive) this.resetCameraViewLookAround();
+    if (this.resetModelStageView()) return;
     this.yaw = 0;
     this.pitch = 0;
     this.distance = screenZoomConfig.defaultDistance;
     this.updateCamera();
+  }
+
+  /** Update the Android Camera view from a device orientation relative to its initial pose. */
+  updateCameraViewOrientation(sample: DeviceOrientationSample): void {
+    if (!this.androidCameraLayoutActive) return;
+    const orientation = deviceOrientationQuaternion(sample);
+    if (!this.cameraOrientationBaseline) {
+      this.cameraOrientationBaseline = orientation;
+      return;
+    }
+    const look = relativeDeviceLookAngles(this.cameraOrientationBaseline, orientation);
+    this.setCameraLookAngles(look.yawRadians, look.pitchRadians);
+  }
+
+  /** Rebase the device orientation after a screen rotation without moving the view. */
+  rebaseCameraViewOrientation(): void {
+    this.cameraOrientationBaseline = null;
+  }
+
+  /** Recenter Camera view look-around and the ModelStage through Reset View. */
+  resetCameraViewLookAround(): void {
+    this.cameraLookYaw = 0;
+    this.cameraLookPitch = 0;
+    this.cameraOrientationBaseline = null;
+    this.cameraDragPosition = null;
+    this.applyCameraLookToCamera();
   }
 
   /** Rotate the atom view in AR without changing its fixed world anchor. */
@@ -1259,8 +1670,9 @@ export class ScreenSceneRenderer {
     this.render();
   }
 
-  /** Restore the initial AR placement, scale, and rotation. */
+  /** Restore the initial AR placement, or the immersive ModelStage view when active. */
   resetArView(): void {
+    if (this.resetModelStageView()) return;
     this.arViewTransform = DEFAULT_AR_VIEW_TRANSFORM;
     this.atomRoot.rotation.set(0, 0, 0);
     if (this.initialArPlacement) {
@@ -1289,13 +1701,27 @@ export class ScreenSceneRenderer {
     onPanelAction: (inputId: string) => void,
     arPointerTarget?: HTMLElement,
     onSpatialInput?: (action: InputAction) => void,
-    emptySurfaceLayout?: SpatialSurfaceLayout,
+    emptySurfaceLayout?: SpatialSurfaceLayout | SpatialSurfaceLayouts,
   ): SpatialPanelSession {
     if (!canCreateSpatialPanels(this.arActive, this.cameraViewActive)) {
       throw new Error("Spatial panels require an active AR or camera-view presentation.");
     }
-    if (this.arActive && emptySurfaceLayout) {
-      return this.createEmptySpatialSurfaceSession(emptySurfaceLayout);
+    if (emptySurfaceLayout && (
+      this.arActive ||
+      (this.cameraViewActive && this.androidCameraLayoutActive)
+    )) {
+      const layoutName = selectSpatialLayoutName(this.spatialPresentationProfile, this.arActive || this.androidCameraLayoutActive);
+      const layout = "android" in emptySurfaceLayout
+        ? emptySurfaceLayout[layoutName]
+        : emptySurfaceLayout;
+      return this.createSpatialBentoSession(
+        items,
+        layout,
+        layoutName,
+        onPanelAction,
+        arPointerTarget ?? this.canvas,
+        onSpatialInput,
+      );
     }
     const viewerCamera: THREE.Camera = this.arActive
       ? this.renderer.xr.getCamera()
@@ -1610,7 +2036,8 @@ export class ScreenSceneRenderer {
             ));
           }
         },
-        handleRay: (ray, phase, sourceId) => panelHost.handleRay(ray, phase, sourceId),
+        handleRay: (ray, phase, sourceId, source, gestureMode, zoomDelta) =>
+          panelHost.handleRay(ray, phase, sourceId, source, gestureMode, zoomDelta),
         setHintListener: () => undefined,
         focusPanel: (key) => {
           if (keys.includes(key as SpatialPanelKey)) {
@@ -1643,6 +2070,1109 @@ export class ScreenSceneRenderer {
       group.removeFromParent();
       throw error;
     }
+  }
+
+  private createSpatialBentoSession(
+    initialItems: SpatialPanelItems,
+    layout: SpatialSurfaceLayout,
+    layoutName: "headset" | "android",
+    onPanelAction: (inputId: string) => void,
+    pointerTarget: HTMLElement,
+    onSpatialInput?: (action: InputAction) => void,
+  ): SpatialPanelSession {
+    const viewerCamera = this.cameraViewActive
+      ? this.camera
+      : this.renderer.xr.getCamera();
+    const camera = viewerCamera instanceof THREE.ArrayCamera
+      ? viewerCamera.cameras[0] ?? viewerCamera
+      : viewerCamera;
+    const panelLimits: PanelGroupLimits = layoutName === "android"
+      ? ANDROID_PANEL_LIMITS
+      : PANEL_LIMITS;
+    const group = new THREE.Group();
+    group.name = "atom-builder-panel-group";
+    applyPanelGroupScale(group, panelLimits.scale.default, panelLimits);
+    group.visible = false;
+    const parent = this.scene;
+    const surfaces: GlassSurface[] = [];
+    const primitives: SpatialPrimitive[] = [];
+    const propertyRows: SpatialPrimitive[] = [];
+    const sliders: SpatialSlider[] = [];
+    const pointerTargets: SpatialPointerTarget[] = [];
+    const buttons = new Map<string, SpatialButton>();
+    const steppers = new Map<string, SpatialStepper>();
+    const particleValues = new Map<string, number>();
+    const particleMeshes: THREE.Mesh<THREE.SphereGeometry, THREE.MeshPhongMaterial>[] = [];
+    const propertyRegionIds = [
+      "propertyRowAtomicNumber",
+      "propertyRowMassNumber",
+      "propertyRowCharge",
+      "propertyRowElectronicConfiguration",
+      "propertyRowOuterShell",
+    ] as const;
+    const positionDistance = panelLimits.distanceMeters.default;
+    let distanceMeters = positionDistance;
+    let scale = panelLimits.scale.default;
+    let currentItems = initialItems;
+    let initialViewerPosition: THREE.Vector3 | null = null;
+    let initialForward: THREE.Vector3 | null = null;
+    const heightOffset = layoutName === "android"
+      ? 0
+      : xrTokens.placement.heightOffsetMeters;
+    let swatchGeometry: THREE.SphereGeometry | null = null;
+    let progressBar: SpatialProgressBar | null = null;
+    let brandText: SpatialText | null = null;
+    let moduleTitleText: SpatialText | null = null;
+    let brandPlate: GlassSurface | null = null;
+    let moduleTitlePlate: GlassSurface | null = null;
+    let captionText: SpatialText | null = null;
+    let captionSurface: GlassSurface | null = null;
+    let elementSymbolText: SpatialText | null = null;
+    let elementNameText: SpatialText | null = null;
+    let elementNumberText: SpatialText | null = null;
+    let missionStepText: SpatialText | null = null;
+    let missionTitleText: SpatialText | null = null;
+    let missionBodyText: SpatialText | null = null;
+    let missionHintText: SpatialText | null = null;
+    let hintsLabelText: SpatialText | null = null;
+    let hintsBodyText: SpatialText | null = null;
+
+    const modelPanel = layout.panels.find(({ id }) => id === "model-panel");
+    if (!modelPanel) throw new Error("Atom Builder reference layout is missing the model panel.");
+    const unshiftedModelGeometry = spatialSurfaceGeometry(
+      modelPanel.rect,
+      xrTokens.shellWidthMeters,
+    );
+    const layoutOriginOffset = layoutName === "android"
+      ? { x: unshiftedModelGeometry.xMeters, y: unshiftedModelGeometry.yMeters }
+      : { x: 0, y: 0 };
+    const geometryFor = (rect: NormalizedSpatialSurfaceRect) => {
+      const geometry = spatialSurfaceGeometry(rect, xrTokens.shellWidthMeters);
+      return {
+        ...geometry,
+        xMeters: geometry.xMeters - layoutOriginOffset.x,
+        yMeters: geometry.yMeters - layoutOriginOffset.y,
+      };
+    };
+    const regionFor = (id: string): NormalizedSpatialSurfaceRect => {
+      const rect = layout.regions[id];
+      if (!rect) {
+        throw new Error(`Atom Builder reference layout is missing the ${id} content region.`);
+      }
+      return rect;
+    };
+    const rawStageLayout = calculateModelStageLayout(
+      regionFor("modelArea"),
+      ["captionTextArea", "captionsOn", "speedChip1x", "narrationOn", "replay"]
+        .flatMap((id) => {
+          const region = layout.regions[id];
+          if (!region) return [];
+          const panelRect = modelPanel.rect;
+          const isInsideModelPanel =
+            region.x >= panelRect.x &&
+            region.y >= panelRect.y &&
+            region.x + region.width <= panelRect.x + panelRect.width &&
+            region.y + region.height <= panelRect.y + panelRect.height;
+          return isInsideModelPanel ? [region] : [];
+        }),
+      xrTokens.shellWidthMeters,
+      this.atomBoundingRadius,
+    );
+    const stageLayout = layoutName === "android"
+      ? {
+          ...rawStageLayout,
+          safeRect: {
+            ...rawStageLayout.safeRect,
+            x: rawStageLayout.safeRect.x - layoutOriginOffset.x / xrTokens.shellWidthMeters,
+            y: rawStageLayout.safeRect.y + layoutOriginOffset.y / xrTokens.shellWidthMeters,
+          },
+          home: {
+            ...rawStageLayout.home,
+            x: rawStageLayout.home.x - layoutOriginOffset.x,
+            y: rawStageLayout.home.y - layoutOriginOffset.y,
+          },
+        }
+      : rawStageLayout;
+    const modelPanelGeometry = geometryFor(modelPanel.rect);
+    const stage = new THREE.Group();
+    stage.name = "atom-builder-model-stage";
+    const stagePose = resetModelStagePose(stageLayout.home);
+    stage.position.set(stagePose.position.x, stagePose.position.y, stagePose.position.z);
+    stage.quaternion.set(
+      stagePose.rotation.x,
+      stagePose.rotation.y,
+      stagePose.rotation.z,
+      stagePose.rotation.w,
+    );
+    stage.scale.setScalar(stagePose.zoom);
+    const stageLighting = new THREE.Group();
+    stageLighting.name = "atom-builder-model-stage-lighting";
+    const stageHemisphere = new THREE.HemisphereLight(0xffffff, 0x475059, 1.15);
+    const stageKey = new THREE.DirectionalLight(0xffffff, 1.8);
+    stageKey.position.set(-0.8, 1.2, 1.6);
+    stageLighting.add(stageHemisphere, stageKey);
+    stage.add(stageLighting);
+    group.add(stage);
+    stage.add(this.atomRoot);
+    this.atomRoot.position.set(0, 0, 0);
+    this.atomRoot.rotation.set(0, 0, 0);
+    this.atomRoot.scale.setScalar(stageLayout.fitScale);
+    this.modelStage = stage;
+    this.modelStageLayout = stageLayout;
+    this.modelStagePose = stagePose;
+    this.modelStageBindingLimit = null;
+    this.modelPanelCenter = {
+      x: modelPanelGeometry.xMeters,
+      y: modelPanelGeometry.yMeters,
+      z: 0,
+    };
+    const stageInputPlane = new THREE.Mesh(
+      new THREE.PlaneGeometry(
+        geometryFor(stageLayout.safeRect).widthMeters,
+        geometryFor(stageLayout.safeRect).heightMeters,
+      ),
+      new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        colorWrite: false,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0,
+      }),
+    );
+    stageInputPlane.name = "atom-builder-model-stage-input";
+    stageInputPlane.position.z = MODEL_STAGE.inputPlaneDepthMeters;
+    stageInputPlane.renderOrder = 29;
+    let modelStagePointerEvent: NonNullable<SpatialPointerTarget["onPointerEvent"]> = () => undefined;
+    const stagePointerTarget: SpatialPointerTarget = {
+      id: "model-stage",
+      object3d: stageInputPlane,
+      disabled: false,
+      onPointerEvent: (event) => modelStagePointerEvent(event),
+      setState: () => undefined,
+    };
+    stage.add(stageInputPlane);
+    pointerTargets.push(stagePointerTarget);
+    const modelStageScale = (): number => group.scale.x;
+    const viewerDistance = (): number => {
+      const xrViewerCamera = this.renderer.xr.getCamera();
+      xrViewerCamera.updateMatrixWorld(true);
+      return xrViewerCamera.getWorldPosition(new THREE.Vector3())
+        .distanceTo(stage.getWorldPosition(new THREE.Vector3()));
+    };
+    const applyStagePose = (
+      pose: ModelStagePose,
+      bindingLimit: ModelStageBindingLimit,
+    ): void => {
+      stage.position.set(pose.position.x, pose.position.y, pose.position.z);
+      stage.quaternion.set(
+        pose.rotation.x,
+        pose.rotation.y,
+        pose.rotation.z,
+        pose.rotation.w,
+      );
+      stage.scale.setScalar(pose.zoom);
+      this.modelStagePose = pose;
+      this.modelStageBindingLimit = bindingLimit;
+      this.render();
+    };
+    const zoomStage = (delta: number): void => {
+      const pose = this.modelStagePose;
+      if (!pose) return;
+      const result = zoomModelStage(
+        pose,
+        delta,
+        viewerDistance(),
+        stageLayout.fitRadius,
+        modelStageScale(),
+      );
+      applyStagePose(result.pose, result.bindingLimit);
+    };
+    modelStagePointerEvent = (event) => {
+      if (event.type === "enter" || event.type === "leave") return;
+      if (event.type === "up") {
+        modelPointerPositions.delete(event.sourceId);
+        return;
+      }
+      if (event.type !== "down" && event.type !== "drag") return;
+      if (event.zoomDelta !== undefined) {
+        zoomStage(event.zoomDelta * MODEL_STAGE.zoomPerMeter);
+        return;
+      }
+      if (!event.point || !event.ray) return;
+      const worldPoint = new THREE.Vector3(
+        event.point.x,
+        event.point.y,
+        event.point.z,
+      );
+      const localPoint = stage.worldToLocal(worldPoint.clone());
+      const groupLocalPoint = group.worldToLocal(worldPoint);
+      const drag = modelPointerPositions.get(event.sourceId);
+      const requestedMode = event.gestureMode ??
+        (event.button === 2 || event.shiftKey ? "pan" : "rotate");
+      if (event.type === "down" || !drag) {
+        modelPointerPositions.set(event.sourceId, {
+          local: localPoint,
+          groupLocal: groupLocalPoint,
+          mode: requestedMode,
+          source: event.source,
+          clientX: event.clientX ?? 0,
+          clientY: event.clientY ?? 0,
+        });
+        return;
+      }
+      const delta = localPoint.clone().sub(drag.local);
+      const groupDelta = groupLocalPoint.clone().sub(drag.groupLocal);
+      drag.local.copy(localPoint);
+      drag.groupLocal.copy(groupLocalPoint);
+      const previousClient = { x: drag.clientX, y: drag.clientY };
+      drag.clientX = event.clientX ?? drag.clientX;
+      drag.clientY = event.clientY ?? drag.clientY;
+      const currentPose = this.modelStagePose;
+      if (!currentPose) return;
+      if (drag.source === "touch") {
+        const otherTouch = [...modelPointerPositions.entries()]
+          .find(([sourceId, pointer]) => sourceId !== event.sourceId && pointer.source === "touch");
+        if (otherTouch) {
+          const [, other] = otherTouch;
+          const beforeDistance = Math.hypot(
+            previousClient.x - other.clientX,
+            previousClient.y - other.clientY,
+          );
+          const afterDistance = Math.hypot(
+            drag.clientX - other.clientX,
+            drag.clientY - other.clientY,
+          );
+          const zoomDelta = beforeDistance > 0
+            ? (afterDistance / beforeDistance - 1) * currentPose.zoom
+            : 0;
+          const pan = panModelStage(currentPose, groupDelta.x / 2, groupDelta.y / 2);
+          const zoomed = zoomModelStage(
+            pan.pose,
+            zoomDelta,
+            viewerDistance(),
+            stageLayout.fitRadius,
+            modelStageScale(),
+          );
+          applyStagePose(zoomed.pose, zoomed.bindingLimit ?? pan.bindingLimit);
+          return;
+        }
+      }
+      if (drag.mode === "pan") {
+        const result = panModelStage(currentPose, groupDelta.x, groupDelta.y);
+        applyStagePose(result.pose, result.bindingLimit);
+      } else {
+        const rotation = rotateModelStage(
+          new THREE.Quaternion(
+            currentPose.rotation.x,
+            currentPose.rotation.y,
+            currentPose.rotation.z,
+            currentPose.rotation.w,
+          ),
+          delta.x,
+          delta.y,
+          MODEL_STAGE.gestureRadiansPerMeter,
+        );
+        applyStagePose({
+          ...currentPose,
+          rotation: {
+            x: rotation.x,
+            y: rotation.y,
+            z: rotation.z,
+            w: rotation.w,
+          },
+        }, null);
+      }
+    };
+    const modelPointerPositions = new Map<string, {
+      local: THREE.Vector3;
+      groupLocal: THREE.Vector3;
+      mode: "rotate" | "pan";
+      source: "controller" | "hand" | "mouse" | "touch" | "pen" | "xr";
+      clientX: number;
+      clientY: number;
+    }>();
+    const dimensionsDpFor = (rect: NormalizedSpatialSurfaceRect) => {
+      const geometry = geometryFor(rect);
+      return {
+        widthDp: geometry.widthMeters / horizonTokens.metresPerDp,
+        heightDp: geometry.heightMeters / horizonTokens.metresPerDp,
+      };
+    };
+    const placeTextInRegion = (
+      text: SpatialText,
+      rect: NormalizedSpatialSurfaceRect,
+      alignment: CanvasTextAlign,
+    ): void => {
+      const geometry = geometryFor(rect);
+      const widthM = dpToMeters(text.widthDp);
+      const x = alignment === "left"
+        ? geometry.xMeters - geometry.widthMeters / 2 + widthM / 2
+        : alignment === "right"
+          ? geometry.xMeters + geometry.widthMeters / 2 - widthM / 2
+          : geometry.xMeters;
+      text.object3d.position.set(x, geometry.yMeters, xrTokens.layers.label.zOffsetM);
+    };
+    const addText = (
+      id: string,
+      text: string,
+      style: "display" | "title" | "heading" | "body" | "label" | "caption",
+      regionId: string,
+      alignment: CanvasTextAlign = "left",
+    ): SpatialText => {
+      const rect = regionFor(regionId);
+      const textPrimitive = createSpatialText({
+        text,
+        style,
+        alignment,
+        maxWidthDp: dimensionsDpFor(rect).widthDp,
+        maxHeightDp: dimensionsDpFor(rect).heightDp,
+      });
+      textPrimitive.object3d.name = `atom-builder-${id}`;
+      placeTextInRegion(textPrimitive, rect, alignment);
+      group.add(textPrimitive.object3d);
+      primitives.push(textPrimitive);
+      return textPrimitive;
+    };
+    const addLabelPlate = (id: string, text: SpatialText): GlassSurface => {
+      const surface = createGlassSurface("pill", {
+        width: dpToMeters(
+          text.widthDp + xrTokens.paddingDp.control.horizontal * 2,
+        ),
+        height: dpToMeters(
+          text.heightDp + xrTokens.paddingDp.control.vertical * 2,
+        ),
+      });
+      surface.name = `atom-builder-${id}-label-plate`;
+      surface.position.set(
+        text.object3d.position.x,
+        text.object3d.position.y,
+        xrTokens.layers.control.zOffsetM,
+      );
+      group.add(surface);
+      surfaces.push(surface);
+      return surface;
+    };
+    const addSurface = (
+      id: string,
+      variant: "shell" | "panel" | "card",
+      rect: NormalizedSpatialSurfaceRect,
+    ): void => {
+      const geometry = geometryFor(rect);
+      const surface = createGlassSurface(variant, {
+        width: geometry.widthMeters,
+        height: geometry.heightMeters,
+      });
+      surface.name = `atom-builder-${id}`;
+      surface.position.set(geometry.xMeters, geometry.yMeters, 0);
+      group.add(surface);
+      surfaces.push(surface);
+    };
+    const addButton = (
+      id: string,
+      label: string,
+      inputId: string,
+      rect: NormalizedSpatialSurfaceRect,
+      options: Readonly<{
+        primaryTarget?: boolean;
+        toggle?: boolean;
+        selected?: boolean;
+        disabled?: boolean;
+        alternateLabels?: readonly string[];
+        variant?: "pill" | "chip";
+        onClick?: () => void;
+      }> = {},
+    ): SpatialButton => {
+      const geometry = geometryFor(rect);
+      const button = createSpatialButton({
+        id,
+        label,
+        variant: options.variant ?? "pill",
+        sizeDp: dimensionsDpFor(rect),
+        primaryTarget: options.primaryTarget ?? false,
+        ...(options.toggle === undefined ? {} : { toggle: options.toggle }),
+        ...(options.selected === undefined ? {} : { selected: options.selected }),
+        ...(options.disabled === undefined ? {} : { disabled: options.disabled }),
+        ...(options.alternateLabels === undefined ? {} : { alternateLabels: options.alternateLabels }),
+        textStyle: "body",
+        onClick: options.onClick ?? (() => onPanelAction(inputId)),
+      });
+      button.object3d.name = `atom-builder-${id}`;
+      button.object3d.position.set(geometry.xMeters, geometry.yMeters, 0);
+      button.target.object3d.scale.setScalar(1 / panelLimits.scale.min);
+      group.add(button.object3d);
+      primitives.push(button);
+      pointerTargets.push(...button.pointerTargets);
+      buttons.set(id, button);
+      return button;
+    };
+    const updatePropertyRows = (content: SpatialPanelGroupContent): void => {
+      for (const row of propertyRows.splice(0)) {
+        row.dispose();
+      }
+      if (content.element.properties.length !== propertyRegionIds.length) {
+        throw new Error("Atom Builder spatial panels require five element properties.");
+      }
+      content.element.properties.forEach((property, index) => {
+        const regionId = propertyRegionIds[index];
+        if (!regionId) {
+          throw new Error("Atom Builder property row has no reference region.");
+        }
+        const geometry = geometryFor(regionFor(regionId));
+        const row = createSpatialPropertyRow({
+          label: property.label,
+          value: property.value,
+          widthDp: geometry.widthMeters / horizonTokens.metresPerDp,
+          heightDp: geometry.heightMeters / horizonTokens.metresPerDp,
+        });
+        row.object3d.name = `atom-builder-${regionId}`;
+        row.object3d.position.set(geometry.xMeters, geometry.yMeters, 0);
+        group.add(row.object3d);
+        propertyRows.push(row);
+      });
+    };
+    const applyContent = (content: SpatialPanelGroupContent): void => {
+      if (brandText && content.header) {
+        brandText.setText(content.header.brand);
+        placeTextInRegion(brandText, regionFor("brand"), "left");
+      }
+      if (moduleTitleText && content.header) {
+        moduleTitleText.setText(content.header.title);
+        placeTextInRegion(moduleTitleText, regionFor("moduleTitle"), "right");
+      }
+      for (const [plate, text] of [
+        [brandPlate, brandText],
+        [moduleTitlePlate, moduleTitleText],
+      ] as const) {
+        if (!plate || !text) continue;
+        const width = dpToMeters(
+          text.widthDp + xrTokens.paddingDp.control.horizontal * 2,
+        );
+        const height = dpToMeters(
+          text.heightDp + xrTokens.paddingDp.control.vertical * 2,
+        );
+        const geometry = plate.geometry.parameters;
+        if (geometry.width !== width || geometry.height !== height) {
+          plate.geometry.dispose();
+          plate.geometry = new THREE.PlaneGeometry(width, height);
+        }
+        plate.position.set(
+          text.object3d.position.x,
+          text.object3d.position.y,
+          xrTokens.layers.control.zOffsetM,
+        );
+      }
+      captionText?.setText(content.model.caption);
+      if (captionText) {
+        captionText.object3d.visible = content.model.captionsEnabled;
+        placeTextInRegion(captionText, regionFor("captionTextArea"), "left");
+      }
+      if (captionSurface) {
+        captionSurface.visible = content.model.captionsEnabled;
+      }
+      const captionsButton = buttons.get("captions-toggle");
+      captionsButton?.setLabel(content.model.captionsLabel);
+      captionsButton?.setSelected(content.model.captionsEnabled);
+      const narrationButton = buttons.get("narration-toggle");
+      narrationButton?.setLabel(content.model.enableVisible
+        ? content.model.enableLabel
+        : content.model.narrationLabel);
+      narrationButton?.setSelected(content.model.narrationEnabled);
+      if (narrationButton) {
+        narrationButton.setDisabled(content.model.enableVisible && content.model.enableDisabled);
+      }
+      const selectedSpeed = content.model.speedOptions.find((option) => option.selected);
+      if (!selectedSpeed || content.model.speedOptions.length === 0) {
+        throw new Error("Spatial narration speed options must include one selected value.");
+      }
+      buttons.get("narration-speed")?.setLabel(selectedSpeed.label);
+      buttons.get("narration-speed")?.setSelected(true);
+      const replayButton = buttons.get("narration-replay");
+      replayButton?.setLabel(content.model.replayLabel);
+      replayButton?.setDisabled(content.model.replayDisabled);
+
+      const mission = content.mission;
+      const missionIsActive = mission.view === "lesson";
+      missionStepText?.setText(missionIsActive
+        ? mission.step
+        : mission.view === "free-play"
+          ? mission.freePlayText
+          : mission.summaryTitle);
+      if (missionStepText) {
+        placeTextInRegion(missionStepText, regionFor("missionLabel"), "left");
+      }
+      missionTitleText?.setText(missionIsActive
+        ? mission.title
+        : mission.view === "free-play"
+          ? mission.freePlayText
+          : mission.summaryTitle);
+      if (missionTitleText) {
+        placeTextInRegion(missionTitleText, regionFor("missionTitle"), "left");
+      }
+      missionBodyText?.setText(missionIsActive
+        ? mission.body
+        : mission.view === "summary"
+          ? mission.summaryDetails
+          : "");
+      if (missionBodyText) {
+        placeTextInRegion(missionBodyText, regionFor("missionBody"), "left");
+      }
+      missionHintText?.setText(mission.hint);
+      if (missionHintText) {
+        missionHintText.object3d.visible = mission.hint.length > 0;
+        placeTextInRegion(missionHintText, regionFor("missionHintLine"), "left");
+      }
+      if (progressBar) {
+        progressBar.object3d.visible = missionIsActive;
+        progressBar.setValue(mission.progressValue);
+      }
+      const hintButton = buttons.get("hint-button");
+      hintButton?.setLabel(mission.hintLabel);
+      hintButton?.setDisabled(!missionIsActive || mission.hintDisabled);
+      const checkButton = buttons.get("check-button");
+      checkButton?.setLabel(mission.checkLabel);
+      checkButton?.setDisabled(!missionIsActive || mission.checkDisabled);
+      const freePlayButton = buttons.get("free-play-button");
+      freePlayButton?.setLabel(mission.freePlayLabel);
+      freePlayButton?.setSelected(mission.view === "free-play");
+      buttons.get("reset-atom-button")?.setLabel(mission.resetLabel);
+      buttons.get("reset-view-button")?.setLabel(content.resetViewLabel);
+      hintsLabelText?.setText(content.hints.label);
+      hintsBodyText?.setText(content.hints.text);
+      if (hintsLabelText) placeTextInRegion(hintsLabelText, regionFor("hintsLabel"), "left");
+      if (hintsBodyText) {
+        hintsBodyText.object3d.visible = content.hints.text.length > 0;
+        placeTextInRegion(hintsBodyText, regionFor("hintsBody"), "left");
+      }
+      elementSymbolText?.setText(content.element.symbol);
+      elementNameText?.setText(content.element.name);
+      elementNumberText?.setText(content.element.number);
+      if (elementSymbolText) {
+        elementSymbolText.object3d.visible = content.element.symbol.trim().length > 0;
+        placeTextInRegion(elementSymbolText, regionFor("elementSymbol"), "center");
+      }
+      if (elementNameText) {
+        elementNameText.object3d.visible = content.element.name.trim().length > 0;
+        placeTextInRegion(elementNameText, regionFor("elementName"), "left");
+      }
+      if (elementNumberText) {
+        elementNumberText.object3d.visible = content.element.number.trim().length > 0;
+        placeTextInRegion(elementNumberText, regionFor("elementNumber"), "left");
+      }
+      updatePropertyRows(content);
+      for (const particle of content.particles) {
+        particleValues.set(particle.label, particle.value);
+        const stepper = steppers.get(particle.label);
+        stepper?.setValue(particle.value);
+      }
+    };
+
+    try {
+      addSurface("backing-shell", "shell", layout.shell);
+      for (const panel of layout.panels) addSurface(panel.id, panel.variant, panel.rect);
+      const logoGeometry = geometryFor(layout.controls.futureLogoSlot);
+      const logoSlot = createGlassSurface("card", {
+        width: logoGeometry.widthMeters,
+        height: logoGeometry.heightMeters,
+      });
+      logoSlot.name = "atom-builder-future-logo-slot";
+      logoSlot.position.set(logoGeometry.xMeters, logoGeometry.yMeters, 0);
+      group.add(logoSlot);
+      surfaces.push(logoSlot);
+
+      const initialContent = initialItems.bento;
+      brandText = initialContent.header && layout.regions.brand
+        ? addText("brand", initialContent.header.brand, "heading", "brand")
+        : null;
+      moduleTitleText = initialContent.header && layout.regions.moduleTitle
+        ? addText("module-title", initialContent.header.title, "title", "moduleTitle", "right")
+        : null;
+      brandPlate = brandText ? addLabelPlate("brand", brandText) : null;
+      moduleTitlePlate = moduleTitleText ? addLabelPlate("module-title", moduleTitleText) : null;
+      const captionTextArea = layout.regions.captionTextArea;
+      if (captionTextArea) {
+        captionSurface = createGlassSurface("card", {
+          width: geometryFor(captionTextArea).widthMeters,
+          height: geometryFor(captionTextArea).heightMeters,
+        });
+        captionSurface.name = "atom-builder-caption-surface";
+        const captionGeometry = geometryFor(captionTextArea);
+        captionSurface.position.set(
+          captionGeometry.xMeters,
+          captionGeometry.yMeters,
+          xrTokens.layers.panel.zOffsetM,
+        );
+        group.add(captionSurface);
+        surfaces.push(captionSurface);
+        captionText = addText("model-caption", initialContent.model.caption, "caption", "captionTextArea");
+      }
+      addText(
+        "particle-heading",
+        initialContent.particleInstruction,
+        "heading",
+        "particleTitle",
+      );
+      elementSymbolText = addText("element-symbol", "", "display", "elementSymbol", "center");
+      elementNameText = addText("element-name", "", "body", "elementName");
+      elementNumberText = addText("element-number", "", "caption", "elementNumber");
+      missionStepText = addText("mission-step", "", "label", "missionLabel");
+      missionTitleText = addText("mission-title", "", "heading", "missionTitle");
+      missionBodyText = addText("mission-body", "", "body", "missionBody");
+      missionHintText = addText("mission-hint", "", "caption", "missionHintLine");
+      hintsLabelText = addText("hints-label", "", "label", "hintsLabel");
+      hintsBodyText = addText("hints-body", "", "body", "hintsBody");
+      const progressGeometry = geometryFor(regionFor("missionProgressBar"));
+      progressBar = createSpatialProgressBar({
+        widthDp: progressGeometry.widthMeters / horizonTokens.metresPerDp,
+        heightDp: progressGeometry.heightMeters / horizonTokens.metresPerDp,
+        value: initialContent.mission.progressValue,
+        max: initialContent.mission.progressMax,
+      });
+      progressBar.object3d.name = "atom-builder-mission-progress";
+      progressBar.object3d.position.set(progressGeometry.xMeters, progressGeometry.yMeters, 0);
+      group.add(progressBar.object3d);
+      primitives.push(progressBar);
+
+      const hintButton = layout.controls.hintButton
+        ? addButton(
+            "hint-button",
+            initialContent.mission.hintLabel,
+            initialContent.mission.hintAction,
+            layout.controls.hintButton,
+          )
+        : null;
+      const checkButton = layout.controls.checkButton
+        ? addButton(
+            "check-button",
+            initialContent.mission.checkLabel,
+            initialContent.mission.checkAction,
+            layout.controls.checkButton,
+            { primaryTarget: true },
+          )
+        : null;
+      const freePlayButton = layout.controls.freePlayButton
+        ? addButton(
+            "free-play-button",
+            initialContent.mission.freePlayLabel,
+            initialContent.mission.freePlayAction,
+            layout.controls.freePlayButton,
+          )
+        : null;
+      addButton(
+        "reset-view-button",
+        initialContent.resetViewLabel,
+        "reset-view",
+        layout.controls.resetViewButton,
+      );
+      addButton(
+        "reset-atom-button",
+        initialContent.mission.resetLabel,
+        initialContent.mission.resetAction,
+        layout.controls.resetAtomButton,
+      );
+      hintButton?.setDisabled(initialContent.mission.view !== "lesson" || initialContent.mission.hintDisabled);
+      checkButton?.setDisabled(initialContent.mission.view !== "lesson" || initialContent.mission.checkDisabled);
+      freePlayButton?.setSelected(initialContent.mission.view === "free-play");
+
+      const captionButton = addButton(
+        "captions-toggle",
+        initialContent.model.captionsLabel,
+        initialContent.model.captionsAction,
+        regionFor("captionsOn"),
+        {
+          toggle: true,
+          selected: initialContent.model.captionsEnabled,
+          alternateLabels: ["Captions On", "Captions Off"],
+        },
+      );
+      const speedButton = addButton(
+        "narration-speed",
+        initialContent.model.speedOptions.find((option) => option.selected)?.label ?? "",
+        "",
+        regionFor("speedChip1x"),
+        {
+          variant: "chip",
+          selected: true,
+          alternateLabels: initialContent.model.speedOptions.map((option) => option.label),
+          onClick: () => {
+            const options = currentItems.bento.model.speedOptions;
+            const selectedIndex = options.findIndex((option) => option.selected);
+            const next = options[(selectedIndex + 1 + options.length) % options.length];
+            if (!next) throw new Error("Spatial narration speed option could not be selected.");
+            onPanelAction(`narration-speed:${next.value}`);
+          },
+        },
+      );
+      addButton(
+        "narration-toggle",
+        initialContent.model.enableVisible
+          ? initialContent.model.enableLabel
+          : initialContent.model.narrationLabel,
+        "",
+        regionFor("narrationOn"),
+        {
+          toggle: true,
+          selected: initialContent.model.narrationEnabled,
+          disabled: initialContent.model.enableVisible && initialContent.model.enableDisabled,
+          alternateLabels: ["Enable sound", "Narration On", "Narration Off"],
+          onClick: () => {
+            const model = currentItems.bento.model;
+            onPanelAction(model.enableVisible ? model.enableAction : model.narrationAction);
+          },
+        },
+      );
+      const replayButton = addButton(
+        "narration-replay",
+        initialContent.model.replayLabel,
+        initialContent.model.replayAction,
+        regionFor("replay"),
+        { disabled: initialContent.model.replayDisabled },
+      );
+      captionButton.setSelected(initialContent.model.captionsEnabled);
+      speedButton.setSelected(true);
+      replayButton.setDisabled(initialContent.model.replayDisabled);
+
+      const positionGeometry = geometryFor(layout.controls.positionSliderTrack);
+      const positionOrientation = layout.controls.positionSliderOrientation ?? "horizontal";
+      const positionTrackSize = dimensionsDpFor(layout.controls.positionSliderTrack);
+      const positionSlider = createSpatialSlider({
+        id: "position",
+        label: initialContent.controls.positionLabel,
+        orientation: positionOrientation,
+        min: panelLimits.distanceMeters.min,
+        max: panelLimits.distanceMeters.max,
+        value: positionDistance,
+        ...(layoutName === "android" ? {
+          trackLengthDp: positionOrientation === "horizontal"
+            ? positionTrackSize.widthDp
+            : positionTrackSize.heightDp,
+        } : {}),
+        minimumGroupScale: panelLimits.scale.min,
+        onChange: (next) => {
+          distanceMeters = clampPanelGroupDistance(next, panelLimits);
+          if (initialViewerPosition && initialForward) {
+            const worldPosition = calculatePanelGroupPosition(
+              initialViewerPosition,
+              initialForward,
+              distanceMeters,
+              heightOffset,
+            );
+            parent.updateWorldMatrix(true, false);
+            group.position.copy(parent.worldToLocal(new THREE.Vector3(
+              worldPosition.x,
+              worldPosition.y,
+              worldPosition.z,
+            )));
+          }
+          this.panelGroupSliderValues = { positionMeters: distanceMeters, scale };
+          this.refreshCameraLookLimits();
+          this.render();
+        },
+      });
+      positionSlider.object3d.position.set(positionGeometry.xMeters, positionGeometry.yMeters, 0);
+      sliders.push(positionSlider);
+      primitives.push(positionSlider);
+      pointerTargets.push(...positionSlider.pointerTargets);
+      group.add(positionSlider.object3d);
+
+      const scaleGeometry = geometryFor(layout.controls.scaleSliderTrack);
+      const scaleOrientation = layout.controls.scaleSliderOrientation ?? "vertical";
+      const scaleTrackSize = dimensionsDpFor(layout.controls.scaleSliderTrack);
+      const scaleSlider = createSpatialSlider({
+        id: "scale",
+        label: initialContent.controls.scaleLabel,
+        orientation: scaleOrientation,
+        min: panelLimits.scale.min,
+        max: panelLimits.scale.max,
+        value: panelLimits.scale.default,
+        ...(layoutName === "android" ? {
+          trackLengthDp: scaleOrientation === "horizontal"
+            ? scaleTrackSize.widthDp
+            : scaleTrackSize.heightDp,
+        } : {}),
+        minimumGroupScale: panelLimits.scale.min,
+        onChange: (next) => {
+          scale = clampPanelGroupScale(next, panelLimits);
+          applyPanelGroupScale(group, scale, panelLimits);
+          this.panelGroupSliderValues = { positionMeters: distanceMeters, scale };
+          this.refreshCameraLookLimits();
+          this.render();
+        },
+      });
+      scaleSlider.object3d.position.set(scaleGeometry.xMeters, scaleGeometry.yMeters, 0);
+      sliders.push(scaleSlider);
+      primitives.push(scaleSlider);
+      pointerTargets.push(...scaleSlider.pointerTargets);
+      group.add(scaleSlider.object3d);
+
+      const particlePanelCenter = geometryFor(layout.panels.find(
+        (panel) => panel.id === "particles-panel",
+      )?.rect ?? regionFor("particleTitle"));
+      const swatchLights = new THREE.Group();
+      swatchLights.name = "atom-builder-particle-swatch-lights";
+      swatchLights.position.set(
+        particlePanelCenter.xMeters,
+        particlePanelCenter.yMeters,
+        xrTokens.shellWidthMeters / 2,
+      );
+      const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x4a4040, 1);
+      hemisphereLight.name = "atom-builder-particle-hemisphere-light";
+      const keyLight = new THREE.DirectionalLight(0xffffff, 1);
+      keyLight.name = "atom-builder-particle-key-light";
+      keyLight.position.set(-xrTokens.shellWidthMeters / 2, xrTokens.shellWidthMeters / 2, 1);
+      swatchLights.add(hemisphereLight, keyLight);
+      group.add(swatchLights);
+      const sphereGeometry = new THREE.SphereGeometry(1, 16, 12);
+      swatchGeometry = sphereGeometry;
+      const particleRegionIds = ["proton", "neutron", "electron"] as const;
+      if (initialContent.particles.length !== particleRegionIds.length) {
+        throw new Error("Atom Builder spatial panels require three particle rows.");
+      }
+      initialContent.particles.forEach((particle, index) => {
+        const regionKey = particleRegionIds[index];
+        if (!regionKey) throw new Error("Spatial particle row has no reference region.");
+        const swatchRect = regionFor(`${regionKey}Swatch`);
+        const swatchGeometryData = geometryFor(swatchRect);
+        const radius = Math.min(swatchGeometryData.widthMeters, swatchGeometryData.heightMeters) / 2;
+        const material = new THREE.MeshPhongMaterial({
+          color: new THREE.Color(particle.color),
+          specular: xrTokens.colors.textPrimary,
+          shininess: 32,
+        });
+        const sphere = new THREE.Mesh(sphereGeometry, material);
+        sphere.name = `atom-builder-${regionKey}-swatch-sphere`;
+        sphere.scale.setScalar(radius);
+        sphere.position.set(
+          swatchGeometryData.xMeters,
+          swatchGeometryData.yMeters,
+          radius + xrTokens.layers.panel.zOffsetM,
+        );
+        group.add(sphere);
+        particleMeshes.push(sphere);
+        pointerTargets.push({
+          id: `particle:token:${regionKey}`,
+          object3d: sphere,
+          disabled: false,
+          setState: ({ hover = false, pressed = false, dragging = false }) => {
+            sphere.material.emissive.setHex(hover || pressed || dragging ? 0x433821 : 0x000000);
+          },
+        });
+        const labelGeometry = geometryFor(regionFor(`${regionKey}LabelAndCount`));
+        const row = geometryFor(regionFor(`${regionKey}Row`));
+        const labelLeftMeters = labelGeometry.xMeters - labelGeometry.widthMeters / 2;
+        const rightEdgeMeters = row.xMeters + row.widthMeters / 2 -
+          dpToMeters(xrTokens.gapsDp.inline);
+        const minusGeometry = geometryFor(regionFor(`${regionKey}Minus`));
+        const buttonSizeDp = Math.min(
+          minusGeometry.widthMeters,
+          minusGeometry.heightMeters,
+        ) / horizonTokens.metresPerDp;
+        const groupWidthDp =
+          (rightEdgeMeters - labelLeftMeters) / horizonTokens.metresPerDp;
+        const labelWidthDp = labelGeometry.widthMeters / horizonTokens.metresPerDp;
+        if (groupWidthDp <= 0 || labelWidthDp <= 0) {
+          throw new Error(`Particle label has no room in the ${regionKey} row.`);
+        }
+        particleValues.set(particle.label, particle.value);
+        const stepper = createSpatialStepper({
+          id: `${regionKey}-stepper`,
+          value: particle.value,
+          min: particle.min,
+          ...(particle.max === undefined ? {} : { max: particle.max }),
+          layout: "label-count-left",
+          label: particle.label,
+          labelWidthDp,
+          groupWidthDp,
+          buttonSizeDp,
+          onChange: (nextValue) => {
+            const currentValue = particleValues.get(particle.label) ?? particle.value;
+            particleValues.set(particle.label, nextValue);
+            onPanelAction(nextValue > currentValue ? particle.addAction : particle.removeAction);
+          },
+        });
+        const stepperWidthM = dpToMeters(stepper.widthDp);
+        stepper.object3d.name = `atom-builder-${regionKey}-stepper`;
+        stepper.object3d.position.set(
+          labelLeftMeters + stepperWidthM / 2,
+          row.yMeters,
+          0,
+        );
+        for (const target of stepper.pointerTargets) {
+          target.object3d.scale.setScalar(1 / panelLimits.scale.min);
+        }
+        group.add(stepper.object3d);
+        primitives.push(stepper);
+        pointerTargets.push(...stepper.pointerTargets);
+        steppers.set(particle.label, stepper);
+      });
+      applyContent(initialContent);
+      parent.add(group);
+      this.spatialPanelGroup = group;
+      this.activeSpatialLayout = layoutName;
+      this.activeSpatialSurfaceLayout = layout;
+      this.panelGroupSliderValues = { positionMeters: positionDistance, scale };
+      this.refreshCameraLookLimits();
+    } catch (error) {
+      for (const row of propertyRows) row.dispose();
+      for (const primitive of primitives) primitive.dispose();
+      for (const mesh of particleMeshes) mesh.material.dispose();
+      swatchGeometry?.dispose();
+      for (const surface of surfaces) disposeGlassSurface(surface);
+      stageInputPlane.geometry.dispose();
+      stageInputPlane.material.dispose();
+      this.arPlacementRoot.add(this.atomRoot);
+      this.atomRoot.position.set(0, 0, 0);
+      this.atomRoot.rotation.set(0, 0, 0);
+      if (this.currentFrame) this.atomRoot.scale.setScalar(arContentScale(this.currentFrame));
+      this.modelStage = null;
+      this.modelStageLayout = null;
+      this.modelStagePose = null;
+      this.modelStageBindingLimit = null;
+      this.modelPanelCenter = null;
+      this.activeSpatialLayout = null;
+      this.activeSpatialSurfaceLayout = null;
+      this.hoveredAtomSubparts.clear();
+      this.selectedAtomSubpart = null;
+      this.subpartHighlightMesh.visible = false;
+      this.subpartHighlightMesh.geometry = this.subpartHighlightGeometry;
+      group.removeFromParent();
+      throw error;
+    }
+
+    const placeFromViewerPose = (viewerPose: ArViewerPose): void => {
+      const placement = calculatePanelGroupPlacement(
+        viewerPose.position,
+        viewerPose.orientation,
+        distanceMeters,
+        heightOffset,
+      );
+      initialViewerPosition = new THREE.Vector3(
+        viewerPose.position.x,
+        viewerPose.position.y,
+        viewerPose.position.z,
+      );
+      initialForward = new THREE.Vector3(
+        placement.forward.x,
+        placement.forward.y,
+        placement.forward.z,
+      );
+      parent.updateWorldMatrix(true, false);
+      group.position.copy(parent.worldToLocal(new THREE.Vector3(
+        placement.position.x,
+        placement.position.y,
+        placement.position.z,
+      )));
+      const worldOrientation = new THREE.Quaternion(
+        placement.orientation.x,
+        placement.orientation.y,
+        placement.orientation.z,
+        placement.orientation.w,
+      );
+      group.quaternion.copy(
+        parent.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(worldOrientation),
+      );
+      applyPanelGroupScale(group, scale, panelLimits);
+      group.visible = true;
+      this.render();
+    };
+    const pendingPlacement = (viewerPose: ArViewerPose): void => placeFromViewerPose(viewerPose);
+    const initialViewerPose = this.firstNonNullViewerPose ?? this.latestFramePose;
+    if (initialViewerPose) {
+      placeFromViewerPose(initialViewerPose);
+    } else if (this.cameraViewActive && this.androidCameraLayoutActive) {
+      camera.updateMatrixWorld(true);
+      const cameraPosition = camera.getWorldPosition(new THREE.Vector3());
+      const cameraOrientation = camera.getWorldQuaternion(new THREE.Quaternion());
+      placeFromViewerPose({
+        position: { x: cameraPosition.x, y: cameraPosition.y, z: cameraPosition.z },
+        orientation: {
+          x: cameraOrientation.x,
+          y: cameraOrientation.y,
+          z: cameraOrientation.z,
+          w: cameraOrientation.w,
+        },
+      });
+    } else {
+      this.pendingSpatialDockReposition = pendingPlacement;
+    }
+
+    const panelHost = createSpatialPanelHost({
+      group,
+      camera,
+      pointerTarget,
+      panels: [],
+      pointerTargets,
+      onPanelAction,
+      onPointerEvent: (event) => {
+        this.updateModelSubpartHighlight(event);
+        if (event.type !== "move") this.render();
+      },
+      enablePointerEvents: true,
+      ...(onSpatialInput ? { onSpatialInput } : {}),
+      ...(this.cameraViewActive && this.androidCameraLayoutActive
+        ? { onBackgroundPointer: (event) => this.handleCameraBackgroundPointer(event) }
+        : {}),
+      onWheel: (_ray, deltaY) => {
+        const pose = this.modelStagePose;
+        if (!pose) return false;
+        zoomStage(-deltaY * MODEL_STAGE.zoomWheelSensitivity * pose.zoom);
+        return true;
+      },
+      shouldIgnorePointerTarget: (target) =>
+        target instanceof Element && target.closest(
+          "button, input, select, textarea, a, dialog, [data-ar-action], [data-camera-action]",
+        ) !== null,
+    });
+    let disposed = false;
+    return {
+      update: (nextItems) => {
+        if (disposed) return;
+        currentItems = nextItems;
+        applyContent(nextItems.bento);
+        this.render();
+      },
+      setExpanded: () => undefined,
+      setActivePanelListener: (listener) => listener?.(null),
+      reposition: () => undefined,
+      setPointerEventsEnabled: (enabled) =>
+        panelHost.setPointerEventsEnabled(enabled || this.arActive),
+      handleRay: (ray, phase, sourceId, source, gestureMode, zoomDelta) =>
+        panelHost.handleRay(ray, phase, sourceId, source, gestureMode, zoomDelta),
+      setHintListener: () => undefined,
+      focusPanel: () => undefined,
+      dispose: () => {
+        if (disposed) return;
+        disposed = true;
+        if (this.pendingSpatialDockReposition === pendingPlacement) {
+          this.pendingSpatialDockReposition = null;
+        }
+        if (this.spatialPanelGroup === group) this.spatialPanelGroup = null;
+        this.activeSpatialLayout = null;
+        this.activeSpatialSurfaceLayout = null;
+        this.panelGroupSliderValues = null;
+        panelHost.dispose();
+        this.arPlacementRoot.add(this.atomRoot);
+        this.atomRoot.position.set(0, 0, 0);
+        this.atomRoot.rotation.set(0, 0, 0);
+        if (this.currentFrame && this.arActive) {
+          this.atomRoot.scale.setScalar(arContentScale(this.currentFrame));
+        }
+        stageInputPlane.geometry.dispose();
+        stageInputPlane.material.dispose();
+        this.modelStage = null;
+        this.modelStageLayout = null;
+        this.modelStagePose = null;
+        this.modelStageBindingLimit = null;
+        this.modelPanelCenter = null;
+        for (const row of propertyRows) row.dispose();
+        for (const primitive of primitives) primitive.dispose();
+        for (const mesh of particleMeshes) mesh.material.dispose();
+        swatchGeometry?.dispose();
+        for (const surface of surfaces) disposeGlassSurface(surface);
+        group.removeFromParent();
+        this.render();
+      },
+    };
   }
 
   private createEmptySpatialSurfaceSession(layout: SpatialSurfaceLayout): SpatialPanelSession {
@@ -1766,6 +3296,8 @@ export class ScreenSceneRenderer {
     this.nucleonGeometry.dispose();
     this.nucleusPickMesh.geometry.dispose();
     (this.nucleusPickMesh.material as THREE.Material).dispose();
+    this.subpartHighlightGeometry.dispose();
+    this.subpartHighlightMaterial.dispose();
     this.atomDropOutline.geometry.dispose();
     this.atomDropOutline.material.dispose();
     this.dragGhost.geometry.dispose();
@@ -1795,6 +3327,7 @@ export class ScreenSceneRenderer {
       this.camera.aspect = width / height;
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(width, height, false);
+      if (this.androidCameraLayoutActive) this.refreshCameraLookLimits();
     }
     this.positionSlotMarkers();
     this.render();
@@ -1805,11 +3338,30 @@ export class ScreenSceneRenderer {
   };
 
   private readonly onBackgroundModeChange = (event: Event): void => {
-    const transparent = (event as CustomEvent<unknown>).detail;
-    if (typeof transparent !== "boolean" || this.arActive) {
+    const detail = (event as CustomEvent<unknown>).detail;
+    const transparent = typeof detail === "boolean"
+      ? detail
+      : typeof detail === "object" && detail !== null &&
+        "transparent" in detail && typeof detail.transparent === "boolean"
+        ? detail.transparent
+        : null;
+    if (transparent === null || this.arActive) {
       return;
     }
+    const androidCameraLayout = typeof detail === "object" && detail !== null &&
+      "androidCameraLayout" in detail && detail.androidCameraLayout === true;
     this.cameraViewActive = transparent;
+    this.androidCameraLayoutActive = transparent && androidCameraLayout;
+    this.camera.fov = this.androidCameraLayoutActive ? ANDROID_CAMERA_FOV_DEGREES : 42;
+    this.camera.updateProjectionMatrix();
+    if (!this.androidCameraLayoutActive) {
+      this.cameraLookLimits = null;
+      this.cameraLookYaw = 0;
+      this.cameraLookPitch = 0;
+      this.cameraOrientationBaseline = null;
+    } else {
+      this.applyCameraLookToCamera();
+    }
     this.scene.background = transparent ? null : this.screenBackground;
     this.renderer.setClearColor(0x000000, transparent ? 0 : 1);
     this.render();
@@ -2064,18 +3616,147 @@ export class ScreenSceneRenderer {
       horizontalDistance * Math.cos(this.yaw),
     );
     this.camera.lookAt(0, 0, 0);
+    this.applyCameraLookToCamera();
     this.positionSlotMarkers();
     this.render();
+  }
+
+  private refreshCameraLookLimits(): void {
+    const layout = this.activeSpatialSurfaceLayout;
+    const modelPanel = layout?.panels.find(({ id }) => id === "model-panel");
+    if (!this.androidCameraLayoutActive || !layout || !modelPanel) {
+      this.cameraLookLimits = null;
+      return;
+    }
+    this.cameraLookLimits = calculateCameraLookLimits(
+      layout,
+      modelPanel.rect,
+      xrTokens.shellWidthMeters,
+      this.panelGroupSliderValues?.positionMeters ?? ANDROID_PANEL_LIMITS.distanceMeters.default,
+      this.spatialPanelGroup?.scale.x ?? ANDROID_PANEL_LIMITS.scale.default,
+      ANDROID_CAMERA_FOV_DEGREES,
+      this.camera.aspect,
+      LOOK_LIMITS.marginDegrees,
+    );
+  }
+
+  private setCameraLookAngles(yawRadians: number, pitchRadians: number): void {
+    this.refreshCameraLookLimits();
+    const limits = this.cameraLookLimits;
+    if (!limits) return;
+    const targetYaw = softClampCameraAngle(yawRadians, limits.yawRadians);
+    const targetPitch = softClampCameraAngle(pitchRadians, limits.pitchRadians);
+    this.cameraLookYaw += (targetYaw - this.cameraLookYaw) * LOOK_LIMITS.smoothing;
+    this.cameraLookPitch += (targetPitch - this.cameraLookPitch) * LOOK_LIMITS.smoothing;
+    this.applyCameraLookToCamera();
+    this.render();
+  }
+
+  private handleCameraBackgroundPointer(event: Readonly<{
+    phase: "move" | "down" | "up" | "cancel";
+    pointerId: number;
+    clientX: number;
+    clientY: number;
+  }>): void {
+    if (event.phase === "down") {
+      this.cameraDragPosition = { x: event.clientX, y: event.clientY };
+      return;
+    }
+    if (event.phase === "move" && this.cameraDragPosition) {
+      const delta = cameraDragLookDelta(
+        event.clientX - this.cameraDragPosition.x,
+        event.clientY - this.cameraDragPosition.y,
+        LOOK_LIMITS.dragRadiansPerPixel,
+      );
+      this.cameraDragPosition = { x: event.clientX, y: event.clientY };
+      this.setCameraLookAngles(
+        this.cameraLookYaw + delta.yawRadians,
+        this.cameraLookPitch + delta.pitchRadians,
+      );
+      return;
+    }
+    this.cameraDragPosition = null;
+  }
+
+  private applyCameraLookToCamera(): void {
+    if (!this.androidCameraLayoutActive) return;
+    this.camera.rotation.order = "YXZ";
+    this.camera.rotation.set(this.cameraLookPitch, this.cameraLookYaw, 0, "YXZ");
+    this.camera.updateMatrixWorld(true);
   }
 
   private updateArAtomScale(): void {
     if (!this.arActive) {
       return;
     }
+    if (this.modelStageLayout) {
+      this.atomRoot.scale.setScalar(this.modelStageLayout.fitRadius / this.atomBoundingRadius);
+      return;
+    }
     this.atomRoot.scale.setScalar(
       (this.currentFrame ? arContentScale(this.currentFrame) : 0.675) *
         this.arViewTransform.scaleFactor,
     );
+  }
+
+  private resetModelStageView(): boolean {
+    if (!this.modelStage || !this.modelStageLayout) return false;
+    const pose = resetModelStagePose(this.modelStageLayout.home);
+    this.modelStage.position.set(pose.position.x, pose.position.y, pose.position.z);
+    this.modelStage.quaternion.set(
+      pose.rotation.x,
+      pose.rotation.y,
+      pose.rotation.z,
+      pose.rotation.w,
+    );
+    this.modelStage.scale.setScalar(pose.zoom);
+    this.modelStagePose = pose;
+    this.modelStageBindingLimit = null;
+    this.render();
+    return true;
+  }
+
+  private updateModelSubpartHighlight(event: SpatialPointerEvent): void {
+    if (!this.modelStage || event.targetId !== "model-stage") return;
+    if (event.type === "leave") {
+      this.hoveredAtomSubparts.delete(event.sourceId);
+    } else if (
+      (event.type === "enter" || event.type === "move" || event.type === "drag" ||
+        event.type === "click") && event.ray
+    ) {
+      this.raycaster.ray.copy(event.ray);
+      const hit = this.raycaster.intersectObjects(this.interactiveMeshes, false)
+        .find(({ object }) =>
+          object !== this.nucleusPickMesh &&
+          typeof object.userData.interactionTarget === "string",
+        );
+      const subpart = hit
+        ? { object: hit.object, instanceId: hit.instanceId ?? null }
+        : null;
+      if (event.type === "click") this.selectedAtomSubpart = subpart;
+      if (subpart) this.hoveredAtomSubparts.set(event.sourceId, subpart);
+      else this.hoveredAtomSubparts.delete(event.sourceId);
+    }
+    const target = [...this.hoveredAtomSubparts.values()].at(-1) ?? this.selectedAtomSubpart;
+    if (!target || !(target.object instanceof THREE.Mesh)) {
+      this.subpartHighlightMesh.visible = false;
+      return;
+    }
+    this.subpartHighlightMesh.geometry = target.object.geometry;
+    if (target.object instanceof THREE.InstancedMesh && target.instanceId !== null) {
+      const instanceTransform = new THREE.Matrix4();
+      target.object.getMatrixAt(target.instanceId, instanceTransform);
+      instanceTransform.decompose(
+        this.subpartHighlightMesh.position,
+        this.subpartHighlightMesh.quaternion,
+        this.subpartHighlightMesh.scale,
+      );
+    } else {
+      this.subpartHighlightMesh.position.copy(target.object.position);
+      this.subpartHighlightMesh.quaternion.copy(target.object.quaternion);
+      this.subpartHighlightMesh.scale.copy(target.object.scale);
+    }
+    this.subpartHighlightMesh.visible = true;
   }
 
   private projectedRingZones(bounds: DOMRect): ProjectedDropZone[] {

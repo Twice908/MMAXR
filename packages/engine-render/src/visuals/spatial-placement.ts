@@ -1,6 +1,20 @@
 import * as THREE from "three";
 import { horizonTokens } from "../horizon-tokens.js";
 import { spatialLayout, type SpatialDockProfile } from "../spatial-layout.js";
+import { PANEL_LIMITS, xrTokens } from "../xr-tokens.js";
+
+export interface PanelGroupLimits {
+  readonly scale: Readonly<{ min: number; default: number; max: number }>;
+  readonly distanceMeters: Readonly<{ min: number; default: number; max: number }>;
+}
+
+export interface SpatialLayoutLookAngles {
+  readonly leftDegrees: number;
+  readonly rightDegrees: number;
+  readonly upDegrees: number;
+  readonly downDegrees: number;
+  readonly fitsInView: boolean;
+}
 
 export type SpatialPanelKey = "mission" | "particles" | "elementInfo" | "narration" | "settings";
 export type SpatialDockTabKey = Exclude<SpatialPanelKey, "settings">;
@@ -19,6 +33,152 @@ export interface SpatialDockLayout {
   readonly detailWidthMeters: number;
   readonly detailHeightMeters: number;
   readonly tabHeightMeters: number;
+}
+
+export interface PanelGroupPlacement {
+  readonly position: Readonly<{ x: number; y: number; z: number }>;
+  readonly orientation: Readonly<{ x: number; y: number; z: number; w: number }>;
+  readonly forward: Readonly<{ x: number; y: number; z: number }>;
+}
+
+/** Compute a translated group origin along its captured viewer ray. */
+export function calculatePanelGroupPosition(
+  viewerPosition: Readonly<{ x: number; y: number; z: number }>,
+  forward: Readonly<{ x: number; y: number; z: number }>,
+  distanceMeters: number,
+  heightOffsetMeters = xrTokens.placement.heightOffsetMeters,
+): Readonly<{ x: number; y: number; z: number }> {
+  if (![viewerPosition.x, viewerPosition.y, viewerPosition.z,
+    forward.x, forward.y, forward.z, distanceMeters, heightOffsetMeters]
+    .every(Number.isFinite) || distanceMeters <= 0 ||
+    Math.hypot(forward.x, forward.y, forward.z) === 0) {
+    throw new RangeError("Panel group position requires a finite viewer ray and positive distance.");
+  }
+  const direction = new THREE.Vector3(forward.x, forward.y, forward.z).normalize();
+  const position = new THREE.Vector3(viewerPosition.x, viewerPosition.y, viewerPosition.z)
+    .addScaledVector(direction, distanceMeters)
+    .add(new THREE.Vector3(0, heightOffsetMeters, 0));
+  return { x: position.x, y: position.y, z: position.z };
+}
+
+/** Apply uniform scale without changing the captured group position or rotation. */
+export function applyPanelGroupScale(
+  group: THREE.Object3D,
+  scale: number,
+  limits: PanelGroupLimits = PANEL_LIMITS,
+): number {
+  const clamped = clampPanelGroupScale(scale, limits);
+  group.scale.setScalar(clamped);
+  return clamped;
+}
+
+/** Calculate a one-time world pose from the first valid viewer pose. */
+export function calculatePanelGroupPlacement(
+  viewerPosition: Readonly<{ x: number; y: number; z: number }>,
+  viewerOrientation: Readonly<{ x: number; y: number; z: number; w: number }>,
+  distanceMeters = PANEL_LIMITS.distanceMeters.default,
+  heightOffsetMeters = xrTokens.placement.heightOffsetMeters,
+): PanelGroupPlacement {
+  if (![viewerPosition.x, viewerPosition.y, viewerPosition.z, distanceMeters, heightOffsetMeters]
+    .every(Number.isFinite) ||
+    ![viewerOrientation.x, viewerOrientation.y, viewerOrientation.z, viewerOrientation.w]
+      .every(Number.isFinite) ||
+    distanceMeters <= 0) {
+    throw new RangeError("Panel group placement requires a finite viewer pose and positive distance.");
+  }
+  const orientation = new THREE.Quaternion(
+    viewerOrientation.x,
+    viewerOrientation.y,
+    viewerOrientation.z,
+    viewerOrientation.w,
+  ).normalize();
+  const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(orientation).normalize();
+  const position = calculatePanelGroupPosition(
+    viewerPosition,
+    { x: forward.x, y: forward.y, z: forward.z },
+    distanceMeters,
+    heightOffsetMeters,
+  );
+  const yaw = spatialDockOrientation(orientation);
+  return {
+    position,
+    orientation: { x: yaw.x, y: yaw.y, z: yaw.z, w: yaw.w },
+    forward: { x: forward.x, y: forward.y, z: forward.z },
+  };
+}
+
+/** Clamp the two shared PanelGroup control values to their approved token ranges. */
+export function clampPanelGroupDistance(
+  distanceMeters: number,
+  limits: PanelGroupLimits = PANEL_LIMITS,
+): number {
+  if (!Number.isFinite(distanceMeters)) throw new RangeError("Panel distance must be finite.");
+  return THREE.MathUtils.clamp(
+    distanceMeters,
+    limits.distanceMeters.min,
+    limits.distanceMeters.max,
+  );
+}
+
+export function clampPanelGroupScale(
+  scale: number,
+  limits: PanelGroupLimits = PANEL_LIMITS,
+): number {
+  if (!Number.isFinite(scale)) throw new RangeError("Panel scale must be finite.");
+  return THREE.MathUtils.clamp(scale, limits.scale.min, limits.scale.max);
+}
+
+/** Return the horizontal angular width of a centered panel at a given distance. */
+export function panelHorizontalAngleDegrees(widthMeters: number, distanceMeters: number): number {
+  if (![widthMeters, distanceMeters].every(Number.isFinite) || widthMeters <= 0 || distanceMeters <= 0) {
+    throw new RangeError("Panel width and distance must be finite and positive.");
+  }
+  return THREE.MathUtils.radToDeg(2 * Math.atan(widthMeters / (2 * distanceMeters)));
+}
+
+/** Measure the rotation needed to bring each shell edge into an XR view. */
+export function calculateSpatialLayoutLookAngles(
+  layout: Readonly<{
+    shell: Readonly<{ x: number; y: number; width: number; height: number }>;
+    modelPanel: Readonly<{ x: number; y: number; width: number; height: number }>;
+  }>,
+  shellWidthMeters: number,
+  distanceMeters: number,
+  scale: number,
+  projectionX: number,
+  projectionY: number,
+): SpatialLayoutLookAngles {
+  if (![shellWidthMeters, distanceMeters, scale, projectionX, projectionY]
+    .every(Number.isFinite) || shellWidthMeters <= 0 || distanceMeters <= 0 ||
+    scale <= 0 || projectionX <= 0 || projectionY <= 0) {
+    throw new RangeError("Layout framing requires positive finite geometry and projection values.");
+  }
+  const centerX = layout.modelPanel.x + layout.modelPanel.width / 2;
+  const centerY = layout.modelPanel.y + layout.modelPanel.height / 2;
+  const shellLeft = layout.shell.x;
+  const shellRight = layout.shell.x + layout.shell.width;
+  const shellTop = layout.shell.y;
+  const shellBottom = layout.shell.y + layout.shell.height;
+  const halfHorizontalFov = Math.atan(1 / projectionX);
+  const halfVerticalFov = Math.atan(1 / projectionY);
+  const horizontalDelta = (edge: number): number =>
+    Math.atan2(Math.abs(edge - centerX) * shellWidthMeters * scale, distanceMeters);
+  const verticalDelta = (edge: number): number =>
+    Math.atan2(Math.abs(edge - centerY) * shellWidthMeters * scale, distanceMeters);
+  const required = (angle: number, halfFov: number): number =>
+    THREE.MathUtils.radToDeg(Math.max(0, angle - halfFov));
+  const leftDegrees = required(horizontalDelta(shellLeft), halfHorizontalFov);
+  const rightDegrees = required(horizontalDelta(shellRight), halfHorizontalFov);
+  const upDegrees = required(verticalDelta(shellTop), halfVerticalFov);
+  const downDegrees = required(verticalDelta(shellBottom), halfVerticalFov);
+  return {
+    leftDegrees,
+    rightDegrees,
+    upDegrees,
+    downDegrees,
+    fitsInView: leftDegrees === 0 && rightDegrees === 0 &&
+      upDegrees === 0 && downDegrees === 0,
+  };
 }
 
 /** Toggle one detail card while preserving the single-open-card invariant. */
@@ -55,7 +215,16 @@ export function selectSpatialPresentationProfile(
   mode: "immersive-ar" | "immersive-vr" | "camera",
   interactionMode?: string,
 ): SpatialPresentationProfile {
+  if (interactionMode === "screen-space") return "handheld";
   return mode === "immersive-vr" || interactionMode === "world-space" ? "headset" : "handheld";
+}
+
+/** Select Android reference data only for handheld immersive sessions. */
+export function selectSpatialLayoutName(
+  profile: SpatialPresentationProfile,
+  immersiveSession: boolean,
+): "headset" | "android" {
+  return immersiveSession && profile === "handheld" ? "android" : "headset";
 }
 
 /** Keep touch pointer picking for handheld AR while controller rays own headset input. */

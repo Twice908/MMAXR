@@ -9,6 +9,7 @@ export {
   allElements,
   elementByAtomicNumber,
   elementBySymbol,
+  MAX_SUPPORTED_ATOMIC_NUMBER,
   type Element,
 } from "./elements.js";
 export {
@@ -18,6 +19,7 @@ export {
   shellCapacity,
   validateElectronPlacement,
   validateElectronRemoval,
+  MAX_SUPPORTED_ELECTRON_COUNT,
   type ElectronPlacementResult,
 } from "./electron-shells.js";
 export {
