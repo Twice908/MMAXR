@@ -10,6 +10,9 @@ export interface XrSessionInputOptions {
     ray: THREE.Ray,
     phase: "move" | "down" | "up" | "cancel",
     sourceId: string,
+    source: "controller" | "hand",
+    gestureMode?: "rotate" | "pan",
+    zoomDelta?: number,
   ) => boolean;
   readonly events?: InputEventBus;
 }
@@ -27,11 +30,15 @@ export class XrSessionInputAdapter implements InputAdapter {
   private readonly smoothRays = new Map<string, SmoothedRay>();
   private readonly panelPressed = new Set<string>();
   private readonly pinching = new Set<string>();
+  private readonly gripping = new Set<string>();
+  private readonly pinchCenters = new Map<string, THREE.Vector3>();
+  private readonly gripCenters = new Map<string, THREE.Vector3>();
   private session: XRSession | null = null;
   private referenceSpace: XRReferenceSpace | null = null;
   private animationFrame: number | null = null;
   private nextSourceId = 0;
-  private lastFrameTime: number | null = null;
+  private pairedGestureSeparation: number | null = null;
+  private pairedGestureType: "hands" | "controllers" | null = null;
   private disposed = false;
 
   constructor(private readonly options: XrSessionInputOptions) {
@@ -69,16 +76,36 @@ export class XrSessionInputAdapter implements InputAdapter {
     }
     const frame = frameOrDelta;
     this.ensureCurrentSources();
-    const elapsed = this.lastFrameTime === null
-      ? 0
-      : Math.min(0.05, Math.max(0, (frame.predictedDisplayTime - this.lastFrameTime) / 1000));
-    this.lastFrameTime = frame.predictedDisplayTime;
 
+    const frameSources: { source: XRInputSource; id: string; ray: THREE.Ray | null }[] = [];
     for (const source of this.session.inputSources) {
       const id = this.sourceIds.get(source);
       if (!id) continue;
       const ray = this.readRay(source, frame, id);
-      if (ray && !this.options.handlePanelRay(ray, "move", id)) {
+      if (source.hand) this.updateHandPinch(source, frame, id, ray);
+      else if (source.targetRayMode === "tracked-pointer") {
+        this.updateControllerGrip(source, frame, id, ray);
+      }
+      frameSources.push({ source, id, ray });
+    }
+    const pairedZoomDelta = this.readPairedGestureZoomDelta();
+    let pairedZoomDelivered = false;
+    for (const { source, id, ray } of frameSources) {
+      const isHand = source.hand !== null;
+      const gestureMode = !isHand && this.gripping.has(id) ? "pan" : "rotate";
+      const zoomDelta = pairedZoomDelta !== null && !pairedZoomDelivered &&
+        this.panelPressed.has(id)
+        ? pairedZoomDelta
+        : undefined;
+      if (zoomDelta !== undefined) pairedZoomDelivered = true;
+      if (ray && !this.options.handlePanelRay(
+        ray,
+        "move",
+        id,
+        isHand ? "hand" : "controller",
+        gestureMode,
+        zoomDelta,
+      )) {
         const target = this.options.pick({
           origin: ray.origin.clone(),
           direction: ray.direction.clone(),
@@ -94,8 +121,6 @@ export class XrSessionInputAdapter implements InputAdapter {
           });
         }
       }
-      if (source.hand) this.updateHandPinch(source, frame, id, ray);
-      else if (source.targetRayMode === "tracked-pointer") this.updateControllerGestures(source, elapsed);
     }
   }
 
@@ -125,8 +150,9 @@ export class XrSessionInputAdapter implements InputAdapter {
     const ray = this.readRay(inputSource, frame, id);
     if (!ray) return;
     if (inputSource.targetRayMode === "transient-pointer") {
-      const panelDown = this.options.handlePanelRay(ray, "down", id);
-      const panelUp = this.options.handlePanelRay(ray, "up", id);
+      const source = inputSource.hand ? "hand" : "controller";
+      const panelDown = this.options.handlePanelRay(ray, "down", id, source);
+      const panelUp = this.options.handlePanelRay(ray, "up", id, source);
       if (!panelDown && !panelUp) this.selectAtom(inputSource, ray);
       this.removeSource(inputSource);
     } else if (!this.panelPressed.has(id)) {
@@ -139,7 +165,11 @@ export class XrSessionInputAdapter implements InputAdapter {
     if (inputSource.targetRayMode === "transient-pointer" || inputSource.hand) return;
     const id = this.ensureSource(inputSource);
     const ray = this.readRay(inputSource, frame, id);
-    if (ray) this.options.handlePanelRay(ray, "up", id);
+    if (ray) {
+      this.options.handlePanelRay(ray, "up", id, "controller", "rotate");
+    } else {
+      this.options.handlePanelRay(new THREE.Ray(), "cancel", id, "controller", "rotate");
+    }
     this.panelPressed.delete(id);
   };
 
@@ -150,7 +180,7 @@ export class XrSessionInputAdapter implements InputAdapter {
   private beginSelect(source: XRInputSource, frame: XRFrame): void {
     const id = this.ensureSource(source);
     const ray = this.readRay(source, frame, id);
-    if (ray && this.options.handlePanelRay(ray, "down", id)) this.panelPressed.add(id);
+    if (ray && this.options.handlePanelRay(ray, "down", id, source.hand ? "hand" : "controller")) this.panelPressed.add(id);
   }
 
   private selectAtom(source: XRInputSource, ray: THREE.Ray): void {
@@ -214,50 +244,76 @@ export class XrSessionInputAdapter implements InputAdapter {
     const a = thumb.transform.position;
     const b = index.transform.position;
     const distance = Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+    this.pinchCenters.set(id, new THREE.Vector3(
+      (a.x + b.x) / 2,
+      (a.y + b.y) / 2,
+      (a.z + b.z) / 2,
+    ));
     if (distance < 0.025 && !this.pinching.has(id)) {
       this.pinching.add(id);
-      if (ray && this.options.handlePanelRay(ray, "down", id)) this.panelPressed.add(id);
+      if (ray && this.options.handlePanelRay(ray, "down", id, "hand")) this.panelPressed.add(id);
     } else if (distance > 0.04 && this.pinching.has(id)) {
       this.pinching.delete(id);
-      if (ray) this.options.handlePanelRay(ray, "up", id);
+      this.pinchCenters.delete(id);
+      if (ray) this.options.handlePanelRay(ray, "up", id, "hand", "rotate");
+      else this.options.handlePanelRay(new THREE.Ray(), "cancel", id, "hand", "rotate");
       if (!this.panelPressed.has(id) && ray) this.selectAtom(source, ray);
       this.panelPressed.delete(id);
     }
   }
 
-  private updateControllerGestures(source: XRInputSource, elapsed: number): void {
-    const axes = source.gamepad?.axes;
-    if (!axes || elapsed === 0) return;
-    const axisX = axes[0] ?? 0;
-    const axisY = axes[1] ?? 0;
-    const rotateX = Math.abs(axisX) > 0.15 ? axisX * elapsed * 2 : 0;
-    const rotateY = Math.abs(axisY) > 0.15 ? axisY * elapsed * 2 : 0;
-    const axisMoveX = axes[2] ?? 0;
-    const axisMoveY = axes[3] ?? 0;
-    const moveX = Math.abs(axisMoveX) > 0.15 ? axisMoveX * elapsed : 0;
-    const moveY = Math.abs(axisMoveY) > 0.15 ? axisMoveY * elapsed : 0;
-    const buttons = source.gamepad?.buttons;
-    const scale = buttons
-      ? ((buttons[5]?.value ?? 0) - (buttons[4]?.value ?? 0)) * elapsed
-      : 0;
-    if (rotateX || rotateY) {
-      this.dispatch.emit({
-        type: "rotate",
-        payload: { source: "xr-controller", deltaX: rotateX, deltaY: rotateY },
-      });
+  private updateControllerGrip(
+    source: XRInputSource,
+    frame: XRFrame,
+    id: string,
+    ray: THREE.Ray | null,
+  ): void {
+    if (!this.referenceSpace || !source.gripSpace) return;
+    const pose = frame.getPose(source.gripSpace, this.referenceSpace);
+    if (!pose) return;
+    const point = pose.transform.position;
+    this.gripCenters.set(id, new THREE.Vector3(point.x, point.y, point.z));
+    const isGripping = source.gamepad?.buttons[1]?.pressed ?? false;
+    if (isGripping && !this.gripping.has(id)) {
+      this.gripping.add(id);
+      if (ray && this.options.handlePanelRay(ray, "down", id, "controller", "pan")) {
+        this.panelPressed.add(id);
+      }
+    } else if (!isGripping && this.gripping.has(id)) {
+      this.gripping.delete(id);
+      if (ray) this.options.handlePanelRay(ray, "up", id, "controller", "pan");
+      else this.options.handlePanelRay(new THREE.Ray(), "cancel", id, "controller", "pan");
+      this.panelPressed.delete(id);
+      this.gripCenters.delete(id);
     }
-    if (moveX || moveY) {
-      this.dispatch.emit({
-        type: "move",
-        payload: { source: "xr-controller", deltaX: moveX, deltaY: moveY },
-      });
+  }
+
+  private readPairedGestureZoomDelta(): number | null {
+    const hands = [...this.pinchCenters]
+      .filter(([id]) => this.pinching.has(id))
+      .map(([, point]) => point);
+    const controllers = [...this.gripCenters]
+      .filter(([id]) => this.gripping.has(id))
+      .map(([, point]) => point);
+    const kind = hands.length >= 2
+      ? "hands"
+      : controllers.length >= 2
+        ? "controllers"
+        : null;
+    if (!kind) {
+      this.pairedGestureSeparation = null;
+      this.pairedGestureType = null;
+      return null;
     }
-    if (scale) {
-      this.dispatch.emit({
-        type: "scale",
-        payload: { source: "xr-controller", delta: scale },
-      });
+    const centers = kind === "hands" ? hands : controllers;
+    const separation = centers[0]!.distanceTo(centers[1]!);
+    const previous = this.pairedGestureSeparation;
+    this.pairedGestureSeparation = separation;
+    if (kind !== this.pairedGestureType) {
+      this.pairedGestureType = kind;
+      return 0;
     }
+    return previous === null ? 0 : separation - previous;
   }
 
   private ensureCurrentSources(): void {
@@ -289,11 +345,16 @@ export class XrSessionInputAdapter implements InputAdapter {
   private removeSource(source: XRInputSource): void {
     const id = this.sourceIds.get(source);
     if (!id) return;
-    this.options.handlePanelRay(new THREE.Ray(), "cancel", id);
+    this.options.handlePanelRay(new THREE.Ray(), "cancel", id, source.hand ? "hand" : "controller");
     this.sourceIds.delete(source);
     this.smoothRays.delete(id);
     this.panelPressed.delete(id);
     this.pinching.delete(id);
+    this.gripping.delete(id);
+    this.pinchCenters.delete(id);
+    this.gripCenters.delete(id);
+    this.pairedGestureSeparation = null;
+    this.pairedGestureType = null;
     this.events.emit("sourceRemoved", {
       source: source.hand ? "xr-hand" : "xr-controller",
       id,
@@ -321,6 +382,7 @@ export class XrSessionInputAdapter implements InputAdapter {
     this.session = null;
     this.referenceSpace = null;
     this.animationFrame = null;
-    this.lastFrameTime = null;
+    this.pairedGestureSeparation = null;
+    this.pairedGestureType = null;
   }
 }

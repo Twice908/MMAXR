@@ -2,6 +2,11 @@ import * as THREE from "three";
 import type { InputAction } from "@mma/engine-input";
 import type { GlassPanel, GlassPanelState } from "./glass-panel.js";
 import type { GlassPanelItem } from "./panel-layout.js";
+import type {
+  SpatialPointerEvent,
+  SpatialPointerSource,
+  SpatialPointerTarget,
+} from "./spatial-pointer.js";
 
 export type SpatialPanelPhase = "move" | "down" | "up" | "cancel";
 
@@ -19,18 +24,28 @@ export interface SpatialPanelHostOptions {
   readonly camera: THREE.Camera;
   readonly pointerTarget: HTMLElement;
   readonly panels: readonly SpatialPanelMount[];
+  readonly pointerTargets?: readonly SpatialPointerTarget[];
   readonly onPanelAction: (inputId: string) => void;
+  readonly onPointerEvent?: (event: SpatialPointerEvent) => void;
   readonly enablePointerEvents?: boolean;
   readonly onPanelSelection?: (selectionId: string) => void;
   readonly shouldIgnorePointerTarget?: (target: EventTarget | null) => boolean;
   /** Receive the shared action vocabulary for particle-token ray gestures. */
   readonly onSpatialInput?: (action: InputAction) => void;
+  readonly onWheel?: (ray: THREE.Ray, deltaY: number) => boolean;
 }
 
 interface PanelHit {
   readonly mount: SpatialPanelMount;
   readonly uv: THREE.Vector2;
   readonly inputId: string | null;
+  readonly distance: number;
+}
+
+interface PointerTargetHit {
+  readonly target: SpatialPointerTarget;
+  readonly point: THREE.Vector3;
+  readonly distance: number;
 }
 
 interface PressedPanel {
@@ -60,7 +75,14 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
   setExpanded(expanded: boolean): void;
   /** Enable or remove browser-pointer listeners without disabling XR ray input. */
   setPointerEventsEnabled(enabled: boolean): void;
-  handleRay(ray: THREE.Ray, phase: SpatialPanelPhase, sourceId?: string): boolean;
+  handleRay(
+    ray: THREE.Ray,
+    phase: SpatialPanelPhase,
+    sourceId?: string,
+    source?: SpatialPointerSource,
+    gestureMode?: "rotate" | "pan",
+    zoomDelta?: number,
+  ): boolean;
   dispose(): void;
 } {
   const {
@@ -68,18 +90,29 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
     camera,
     pointerTarget,
     panels,
+    pointerTargets = [],
     onPanelAction,
+    onPointerEvent,
     enablePointerEvents = true,
     onPanelSelection,
     shouldIgnorePointerTarget,
     onSpatialInput,
+    onWheel,
   } = options;
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
   const pressed = new Map<string, PressedPanel>();
   const capturedPointerIds = new Set<number>();
   const particleDrags = new Map<string, string>();
+  const hoveredTargets = new Map<string, SpatialPointerTarget>();
+  const hoveredTargetSources = new Map<string, SpatialPointerSource>();
+  const hoveredTargetCounts = new Map<SpatialPointerTarget, number>();
+  const pressedTargets = new Map<string, SpatialPointerTarget>();
+  const pressedTargetSources = new Map<string, SpatialPointerSource>();
   const collapsed = new Map<GlassPanel, boolean>();
+  const panelObjects = panels.map(({ panel }) => panel.object3d);
+  const pointerTargetObjects = pointerTargets.map(({ object3d }) => object3d);
+  const pointerTargetsById = new Map(pointerTargets.map((target) => [target.id, target]));
   let hovered: PanelHit | null = null;
   let disposed = false;
   let pointerEventsEnabled = false;
@@ -103,7 +136,7 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
   const panelForRay = (ray: THREE.Ray): PanelHit | null => {
     raycaster.ray.copy(ray);
     const intersections = raycaster.intersectObjects(
-      panels.map(({ panel }) => panel.object3d),
+      panelObjects,
       false,
     );
     const intersection = intersections.find((candidate) => candidate.uv !== undefined);
@@ -114,20 +147,232 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
       mount,
       uv: intersection.uv,
       inputId: mount.panel.hitTest(intersection.uv),
+      distance: intersection.distance,
     };
   };
 
-  const updateHover = (next: PanelHit | null): void => {
+  const targetForRay = (ray: THREE.Ray): PointerTargetHit | null => {
+    if (pointerTargets.length === 0) return null;
+    raycaster.ray.copy(ray);
+    const intersection = raycaster.intersectObjects(
+      pointerTargetObjects,
+      false,
+    )[0];
+    if (!intersection) return null;
+    const target = pointerTargets.find((candidate) => candidate.object3d === intersection.object);
+    return target
+      ? { target, point: intersection.point, distance: intersection.distance }
+      : null;
+  };
+
+  const dispatchPointerEvent = (
+    targetId: string,
+    type: SpatialPointerEvent["type"],
+    sourceId: string,
+    source: SpatialPointerSource,
+    value?: number,
+    cancelled?: boolean,
+    context?: Pick<SpatialPointerEvent,
+      "point" | "ray" | "button" | "shiftKey" | "clientX" | "clientY" | "gestureMode" | "zoomDelta">,
+  ): void => {
+    const event = {
+      type,
+      targetId,
+      sourceId,
+      source,
+      ...(value === undefined ? {} : { value }),
+      ...(cancelled === undefined ? {} : { cancelled }),
+      ...context,
+    } satisfies SpatialPointerEvent;
+    pointerTargetsById.get(targetId)?.onPointerEvent?.(event);
+    onPointerEvent?.(event);
+  };
+
+  const updateTargetHover = (
+    sourceId: string,
+    source: SpatialPointerSource,
+    next: SpatialPointerTarget | null,
+    context?: Pick<SpatialPointerEvent,
+      "point" | "ray" | "button" | "shiftKey" | "clientX" | "clientY" | "gestureMode" | "zoomDelta">,
+  ): void => {
+    const previous = hoveredTargets.get(sourceId) ?? null;
+    if (previous === next) return;
+    if (previous) {
+      dispatchPointerEvent(previous.id, "leave", sourceId, source, undefined, undefined, context);
+      const remainingHovers = (hoveredTargetCounts.get(previous) ?? 1) - 1;
+      if (remainingHovers <= 0) {
+        hoveredTargetCounts.delete(previous);
+        previous.setState({ hover: false });
+      } else {
+        hoveredTargetCounts.set(previous, remainingHovers);
+      }
+      hoveredTargets.delete(sourceId);
+      hoveredTargetSources.delete(sourceId);
+    }
+    if (next) {
+      hoveredTargets.set(sourceId, next);
+      hoveredTargetSources.set(sourceId, source);
+      hoveredTargetCounts.set(next, (hoveredTargetCounts.get(next) ?? 0) + 1);
+      next.setState({ hover: true });
+      dispatchPointerEvent(next.id, "enter", sourceId, source, undefined, undefined, context);
+    }
+  };
+
+  const routePointerTarget = (
+    hit: PointerTargetHit | null,
+    phase: SpatialPanelPhase,
+    sourceId: string,
+    source: SpatialPointerSource,
+    ray: THREE.Ray,
+    pointerEvent?: PointerEvent,
+    gestureMode?: "rotate" | "pan",
+    zoomDelta?: number,
+  ): boolean => {
+    const target = hit?.target ?? null;
+    const context = {
+      ...(hit ? { point: { x: hit.point.x, y: hit.point.y, z: hit.point.z } } : {}),
+      ray,
+      ...(pointerEvent ? {
+        button: pointerEvent.button,
+        shiftKey: pointerEvent.shiftKey,
+        clientX: pointerEvent.clientX,
+        clientY: pointerEvent.clientY,
+      } : {}),
+      ...(gestureMode ? { gestureMode } : {}),
+      ...(zoomDelta === undefined ? {} : { zoomDelta }),
+    } satisfies Pick<SpatialPointerEvent,
+      "point" | "ray" | "button" | "shiftKey" | "clientX" | "clientY" | "gestureMode" | "zoomDelta">;
+    updateTargetHover(sourceId, source, phase === "cancel" ? null : target, context);
+    const previous = pressedTargets.get(sourceId) ?? null;
+    if (phase === "move") {
+      if (previous) {
+        previous.setState({ dragging: true });
+        dispatchPointerEvent(
+          previous.id,
+          "drag",
+          sourceId,
+          source,
+          previous.getPointerValue?.(ray) ?? undefined,
+          undefined,
+          context,
+        );
+        const particle = particleDrags.get(sourceId);
+        if (particle) dispatchParticleDrag("move", particle, sourceId, ray);
+        return true;
+      }
+      if (target) {
+        dispatchPointerEvent(
+          target.id,
+          "move",
+          sourceId,
+          source,
+          target.getPointerValue?.(ray) ?? undefined,
+          undefined,
+          context,
+        );
+      }
+      return target !== null;
+    }
+    if (phase === "down") {
+      if (!target) return false;
+      if (target.disabled) return true;
+      pressedTargets.set(sourceId, target);
+      target.setState({ pressed: true });
+      const particle = particleForToken(target.id);
+      if (particle) {
+        particleDrags.set(sourceId, particle);
+        dispatchParticleDrag("down", particle, sourceId, ray);
+      }
+      dispatchPointerEvent(
+        target.id,
+        "down",
+        sourceId,
+        source,
+        target.getPointerValue?.(ray) ?? undefined,
+        undefined,
+        context,
+      );
+      pressedTargetSources.set(sourceId, source);
+      return true;
+    }
+    if (phase === "up") {
+      if (!previous) return target !== null;
+      previous.setState({ pressed: false, dragging: false });
+      dispatchPointerEvent(
+        previous.id,
+        "up",
+        sourceId,
+        source,
+        previous.getPointerValue?.(ray) ?? undefined,
+        undefined,
+        context,
+      );
+      pressedTargets.delete(sourceId);
+      pressedTargetSources.delete(sourceId);
+      const particle = particleDrags.get(sourceId);
+      if (particle) {
+        dispatchParticleDrag("up", particle, sourceId, ray);
+        particleDrags.delete(sourceId);
+      } else if (previous === target && !previous.disabled) {
+        dispatchPointerEvent(previous.id, "click", sourceId, source, undefined, undefined, context);
+      }
+      return true;
+    }
+    if (previous) {
+      previous.setState({ pressed: false, dragging: false });
+      dispatchPointerEvent(
+        previous.id,
+        "up",
+        sourceId,
+        source,
+        previous.getPointerValue?.(ray) ?? undefined,
+        true,
+        context,
+      );
+      const particle = particleDrags.get(sourceId);
+      if (particle) {
+        dispatchParticleDrag("cancel", particle, sourceId, ray);
+        particleDrags.delete(sourceId);
+      }
+      pressedTargets.delete(sourceId);
+      pressedTargetSources.delete(sourceId);
+      return true;
+    }
+    return target !== null;
+  };
+
+  const updateHover = (
+    next: PanelHit | null,
+    sourceId: string,
+    source: SpatialPointerSource,
+  ): void => {
     if (hovered?.mount === next?.mount && hovered?.inputId === next?.inputId) return;
+    if (hovered) {
+      dispatchPointerEvent(
+        hovered.inputId ?? hovered.mount.panel.object3d.name,
+        "leave",
+        sourceId,
+        source,
+      );
+    }
     hovered?.mount.panel.update({ hoveredInputId: null });
     hovered = next;
     hovered?.mount.panel.update({ hoveredInputId: hovered.inputId });
+    if (hovered) {
+      dispatchPointerEvent(
+        hovered.inputId ?? hovered.mount.panel.object3d.name,
+        "enter",
+        sourceId,
+        source,
+      );
+    }
   };
 
   const routeHit = (
     hit: PanelHit | null,
     phase: SpatialPanelPhase,
     sourceId: string,
+    source: SpatialPointerSource,
     atomPicker: () => void,
   ): boolean => {
     const consumed = consumeSpatialPanelHit(
@@ -137,7 +382,13 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
       atomPicker,
     );
     if (!hit) {
-      if (phase === "move") updateHover(null);
+      if (phase === "move") {
+        updateHover(null, sourceId, source);
+        const activePress = pressed.get(sourceId);
+        if (activePress?.inputId) {
+          dispatchPointerEvent(activePress.inputId, "drag", sourceId, source);
+        }
+      }
       if (phase === "cancel" || phase === "up") clearPressed(sourceId);
       const draggingParticle = particleDrags.get(sourceId);
       if (draggingParticle) {
@@ -149,7 +400,11 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
     }
 
     if (phase === "move") {
-      updateHover(hit);
+      updateHover(hit, sourceId, source);
+      const activePress = pressed.get(sourceId);
+      if (activePress?.inputId) {
+        dispatchPointerEvent(activePress.inputId, "drag", sourceId, source);
+      }
       const draggingParticle = particleDrags.get(sourceId);
       if (draggingParticle) {
         dispatchParticleDrag("move", draggingParticle, sourceId, raycaster.ray);
@@ -163,6 +418,7 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
         headerHit: hit.uv.y >= 0.78,
       });
       if (hit.inputId) hit.mount.panel.update({ pressedInputId: hit.inputId });
+      if (hit.inputId) dispatchPointerEvent(hit.inputId, "down", sourceId, source);
       const particle = particleForToken(hit.inputId);
       if (particle) {
         particleDrags.set(sourceId, particle);
@@ -180,7 +436,11 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
         previous.inputId !== null &&
         previous.inputId === hit.inputId
       ) {
+        dispatchPointerEvent(hit.inputId, "up", sourceId, source);
+        dispatchPointerEvent(hit.inputId, "click", sourceId, source);
         onPanelAction(hit.inputId);
+      } else if (previous?.inputId) {
+        dispatchPointerEvent(previous.inputId, "up", sourceId, source);
       } else if (
         previous?.mount === hit.mount &&
         previous.mount.selectionId &&
@@ -196,6 +456,8 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
         setPanelCollapsed(hit.mount, !collapsed.get(hit.mount.panel));
       }
     } else if (phase === "cancel") {
+      const activePress = pressed.get(sourceId);
+      if (activePress?.inputId) dispatchPointerEvent(activePress.inputId, "up", sourceId, source);
       clearPressed(sourceId);
       const draggingParticle = particleDrags.get(sourceId);
       if (draggingParticle) {
@@ -261,7 +523,7 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
     }
   };
 
-  const screenRay = (event: PointerEvent): THREE.Ray | null => {
+  const screenRay = (event: Pick<MouseEvent, "clientX" | "clientY">): THREE.Ray | null => {
     const bounds = pointerTarget.getBoundingClientRect();
     if (!bounds.width || !bounds.height) return null;
     pointer.set(
@@ -276,12 +538,37 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
     if (shouldIgnorePointerTarget?.(event.target)) return;
     const ray = screenRay(event);
     if (!ray) return;
-    const consumed = routeHit(
-      panelForRay(ray),
+    const sourceId = `pointer:${event.pointerId}`;
+    const source: SpatialPointerSource = event.pointerType === "touch"
+      ? "touch"
+      : event.pointerType === "pen"
+        ? "pen"
+        : "mouse";
+    const targetHit = targetForRay(ray);
+    const panelHit = panelForRay(ray);
+    const captured = pressedTargets.has(sourceId);
+    const targetWins = captured ||
+      (targetHit !== null && (!panelHit || targetHit.distance <= panelHit.distance));
+    const targetConsumed = routePointerTarget(
+      targetWins ? targetHit : null,
       phase,
-      `pointer:${event.pointerId}`,
-      () => undefined,
+      sourceId,
+      source,
+      ray,
+      event,
     );
+    if (targetConsumed) {
+      if (phase === "down" && "setPointerCapture" in pointerTarget) {
+        pointerTarget.setPointerCapture(event.pointerId);
+        capturedPointerIds.add(event.pointerId);
+      }
+      if (phase === "up" || phase === "cancel") releaseCapturedPointer(event.pointerId);
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      return;
+    }
+    const consumed = routeHit(panelHit, phase, sourceId, source, () => undefined);
     if (consumed) {
       if (phase === "down" && "setPointerCapture" in pointerTarget) {
         pointerTarget.setPointerCapture(event.pointerId);
@@ -302,13 +589,53 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
     consumePointerEvent(event, "cancel");
     releaseCapturedPointer(event.pointerId);
   };
+  const handleWheel = (event: WheelEvent): void => {
+    if (shouldIgnorePointerTarget?.(event.target)) return;
+    const ray = screenRay(event);
+    if (!ray) return;
+    const targetHit = targetForRay(ray);
+    const panelHit = panelForRay(ray);
+    if (
+      targetHit?.target.id === "model-stage" &&
+      (!panelHit || targetHit.distance <= panelHit.distance) &&
+      onWheel?.(ray, event.deltaY)
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+    }
+  };
+  const onContextMenu = (event: MouseEvent): void => {
+    const ray = screenRay(event);
+    if (ray && targetForRay(ray)?.target.id === "model-stage") event.preventDefault();
+  };
 
   const setPointerEventsEnabled = (enabled: boolean): void => {
     if (disposed || pointerEventsEnabled === enabled) return;
     pointerEventsEnabled = enabled;
     if (!enabled) {
       for (const pointerId of capturedPointerIds) {
-        clearPressed(`pointer:${pointerId}`);
+        const sourceId = `pointer:${pointerId}`;
+        clearPressed(sourceId);
+        const target = pressedTargets.get(sourceId);
+        if (target) {
+          target.setState({ pressed: false, dragging: false });
+          dispatchPointerEvent(
+            target.id,
+            "up",
+            sourceId,
+            pressedTargetSources.get(sourceId) ?? "mouse",
+            undefined,
+            true,
+          );
+          pressedTargets.delete(sourceId);
+          pressedTargetSources.delete(sourceId);
+        }
+        const particle = particleDrags.get(sourceId);
+        if (particle) {
+          dispatchParticleDrag("cancel", particle, sourceId, new THREE.Ray());
+          particleDrags.delete(sourceId);
+        }
         releaseCapturedPointer(pointerId);
       }
       for (const [sourceId, particle] of particleDrags) {
@@ -322,11 +649,15 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
       pointerTarget.addEventListener("pointerdown", onPointerDown, true);
       pointerTarget.addEventListener("pointerup", onPointerUp, true);
       pointerTarget.addEventListener("pointercancel", onPointerCancel, true);
+      pointerTarget.addEventListener("wheel", handleWheel, { capture: true, passive: false });
+      pointerTarget.addEventListener("contextmenu", onContextMenu, true);
     } else {
       pointerTarget.removeEventListener("pointermove", onPointerMove, true);
       pointerTarget.removeEventListener("pointerdown", onPointerDown, true);
       pointerTarget.removeEventListener("pointerup", onPointerUp, true);
       pointerTarget.removeEventListener("pointercancel", onPointerCancel, true);
+      pointerTarget.removeEventListener("wheel", handleWheel, true);
+      pointerTarget.removeEventListener("contextmenu", onContextMenu, true);
     }
   };
   setPointerEventsEnabled(enablePointerEvents);
@@ -342,9 +673,25 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
       }
     },
     setPointerEventsEnabled,
-    handleRay(ray, phase, sourceId = "xr:primary") {
+    handleRay(ray, phase, sourceId = "xr:primary", source = "xr", gestureMode, zoomDelta) {
       if (disposed) return false;
-      return routeHit(panelForRay(ray), phase, sourceId, () => undefined);
+      const targetHit = targetForRay(ray);
+      const panelHit = panelForRay(ray);
+      const captured = pressedTargets.has(sourceId);
+      const targetWins = captured ||
+        (targetHit !== null && (!panelHit || targetHit.distance <= panelHit.distance));
+      const targetConsumed = routePointerTarget(
+        targetWins ? targetHit : null,
+        phase,
+        sourceId,
+        source,
+        ray,
+        undefined,
+        gestureMode,
+        zoomDelta,
+      );
+      if (targetConsumed) return true;
+      return routeHit(panelHit, phase, sourceId, source, () => undefined);
     },
     dispose() {
       if (disposed) return;
@@ -352,6 +699,26 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
         dispatchParticleDrag("cancel", particle, sourceId, new THREE.Ray());
       }
       particleDrags.clear();
+      for (const [sourceId, target] of pressedTargets) {
+        target.setState({ pressed: false, dragging: false });
+        dispatchPointerEvent(
+          target.id,
+          "up",
+          sourceId,
+          pressedTargetSources.get(sourceId) ?? "xr",
+          undefined,
+          true,
+        );
+      }
+      pressedTargets.clear();
+      pressedTargetSources.clear();
+      for (const [sourceId, target] of hoveredTargets) {
+        target.setState({ hover: false });
+        dispatchPointerEvent(target.id, "leave", sourceId, hoveredTargetSources.get(sourceId) ?? "xr");
+      }
+      hoveredTargets.clear();
+      hoveredTargetSources.clear();
+      hoveredTargetCounts.clear();
       setPointerEventsEnabled(false);
       disposed = true;
       for (const mount of panels) {

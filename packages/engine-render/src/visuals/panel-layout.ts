@@ -1,6 +1,7 @@
 import { spatialLayout } from "../spatial-layout.js";
 import { spatialTokens, type SpatialTokens } from "../spatial-tokens.js";
 import { horizonTokens } from "../horizon-tokens.js";
+import { xrTokens } from "../xr-tokens.js";
 
 export interface GlassPanelSize {
   readonly width: number;
@@ -496,5 +497,9 @@ function defaultFontSize(kind: GlassPanelItem["kind"]): number {
 function minimumFontSize(kind: GlassPanelItem["kind"]): number {
   return kind === "heading"
     ? horizonTokens.typeScale.headline3.sizeDp
-    : Math.max(horizonTokens.typeScale.body1.sizeDp, spatialLayout.minTextSizePx);
+    : Math.max(
+        horizonTokens.typeScale.body1.sizeDp,
+        spatialLayout.minTextSizePx,
+        xrTokens.typography.minimumSizeDp,
+      );
 }

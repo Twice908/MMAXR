@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { horizonTokens } from "../horizon-tokens.js";
 import { spatialLayout, type SpatialDockProfile } from "../spatial-layout.js";
+import { PANEL_LIMITS, xrTokens } from "../xr-tokens.js";
 
 export type SpatialPanelKey = "mission" | "particles" | "elementInfo" | "narration" | "settings";
 export type SpatialDockTabKey = Exclude<SpatialPanelKey, "settings">;
@@ -19,6 +20,97 @@ export interface SpatialDockLayout {
   readonly detailWidthMeters: number;
   readonly detailHeightMeters: number;
   readonly tabHeightMeters: number;
+}
+
+export interface PanelGroupPlacement {
+  readonly position: Readonly<{ x: number; y: number; z: number }>;
+  readonly orientation: Readonly<{ x: number; y: number; z: number; w: number }>;
+  readonly forward: Readonly<{ x: number; y: number; z: number }>;
+}
+
+/** Compute a translated group origin along its captured viewer ray. */
+export function calculatePanelGroupPosition(
+  viewerPosition: Readonly<{ x: number; y: number; z: number }>,
+  forward: Readonly<{ x: number; y: number; z: number }>,
+  distanceMeters: number,
+  heightOffsetMeters = xrTokens.placement.heightOffsetMeters,
+): Readonly<{ x: number; y: number; z: number }> {
+  if (![viewerPosition.x, viewerPosition.y, viewerPosition.z,
+    forward.x, forward.y, forward.z, distanceMeters, heightOffsetMeters]
+    .every(Number.isFinite) || distanceMeters <= 0 ||
+    Math.hypot(forward.x, forward.y, forward.z) === 0) {
+    throw new RangeError("Panel group position requires a finite viewer ray and positive distance.");
+  }
+  const direction = new THREE.Vector3(forward.x, forward.y, forward.z).normalize();
+  const position = new THREE.Vector3(viewerPosition.x, viewerPosition.y, viewerPosition.z)
+    .addScaledVector(direction, distanceMeters)
+    .add(new THREE.Vector3(0, heightOffsetMeters, 0));
+  return { x: position.x, y: position.y, z: position.z };
+}
+
+/** Apply uniform scale without changing the captured group position or rotation. */
+export function applyPanelGroupScale(group: THREE.Object3D, scale: number): number {
+  const clamped = clampPanelGroupScale(scale);
+  group.scale.setScalar(clamped);
+  return clamped;
+}
+
+/** Calculate a one-time world pose from the first valid viewer pose. */
+export function calculatePanelGroupPlacement(
+  viewerPosition: Readonly<{ x: number; y: number; z: number }>,
+  viewerOrientation: Readonly<{ x: number; y: number; z: number; w: number }>,
+  distanceMeters = PANEL_LIMITS.distanceMeters.default,
+  heightOffsetMeters = xrTokens.placement.heightOffsetMeters,
+): PanelGroupPlacement {
+  if (![viewerPosition.x, viewerPosition.y, viewerPosition.z, distanceMeters, heightOffsetMeters]
+    .every(Number.isFinite) ||
+    ![viewerOrientation.x, viewerOrientation.y, viewerOrientation.z, viewerOrientation.w]
+      .every(Number.isFinite) ||
+    distanceMeters <= 0) {
+    throw new RangeError("Panel group placement requires a finite viewer pose and positive distance.");
+  }
+  const orientation = new THREE.Quaternion(
+    viewerOrientation.x,
+    viewerOrientation.y,
+    viewerOrientation.z,
+    viewerOrientation.w,
+  ).normalize();
+  const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(orientation).normalize();
+  const position = calculatePanelGroupPosition(
+    viewerPosition,
+    { x: forward.x, y: forward.y, z: forward.z },
+    distanceMeters,
+    heightOffsetMeters,
+  );
+  const yaw = spatialDockOrientation(orientation);
+  return {
+    position,
+    orientation: { x: yaw.x, y: yaw.y, z: yaw.z, w: yaw.w },
+    forward: { x: forward.x, y: forward.y, z: forward.z },
+  };
+}
+
+/** Clamp the two shared PanelGroup control values to their approved token ranges. */
+export function clampPanelGroupDistance(distanceMeters: number): number {
+  if (!Number.isFinite(distanceMeters)) throw new RangeError("Panel distance must be finite.");
+  return THREE.MathUtils.clamp(
+    distanceMeters,
+    PANEL_LIMITS.distanceMeters.min,
+    PANEL_LIMITS.distanceMeters.max,
+  );
+}
+
+export function clampPanelGroupScale(scale: number): number {
+  if (!Number.isFinite(scale)) throw new RangeError("Panel scale must be finite.");
+  return THREE.MathUtils.clamp(scale, PANEL_LIMITS.scale.min, PANEL_LIMITS.scale.max);
+}
+
+/** Return the horizontal angular width of a centered panel at a given distance. */
+export function panelHorizontalAngleDegrees(widthMeters: number, distanceMeters: number): number {
+  if (![widthMeters, distanceMeters].every(Number.isFinite) || widthMeters <= 0 || distanceMeters <= 0) {
+    throw new RangeError("Panel width and distance must be finite and positive.");
+  }
+  return THREE.MathUtils.radToDeg(2 * Math.atan(widthMeters / (2 * distanceMeters)));
 }
 
 /** Toggle one detail card while preserving the single-open-card invariant. */

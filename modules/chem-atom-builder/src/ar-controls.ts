@@ -63,6 +63,15 @@ function formatPose(pose: XrSceneDiagnostics["latestFramePose"]): string {
   })`;
 }
 
+function formatRotation(
+  rotation: XrSceneDiagnostics["panelGroupWorldRotation"],
+): string {
+  if (!rotation) return "unavailable";
+  return `(${[rotation.x, rotation.y, rotation.z, rotation.w]
+    .map((value) => value.toFixed(3))
+    .join(", ")})`;
+}
+
 /** Build a PII-free, copyable XR support and session report. */
 export function buildXrDiagnosticsText(data: XrDiagnosticsData): string {
   const scene = data.scene;
@@ -96,7 +105,19 @@ export function buildXrDiagnosticsText(data: XrDiagnosticsData): string {
     `Atom root world scale: ${formatPosition(scene.atomWorldScale)}`,
     `Atom visibility (atom -> scene): ${atomVisibilityChain || "unavailable"}`,
     `XR camera-to-atom distance: ${scene.xrCameraToAtomDistanceMeters === null ? "unavailable" : `${scene.xrCameraToAtomDistanceMeters.toFixed(3)} m`}`,
-    `Dock/panel group world position: ${formatPosition(scene.panelGroupWorldPosition)}`,
+    `Panel group world position: ${formatPosition(scene.panelGroupWorldPosition)}`,
+    `Panel group world scale: ${scene.panelGroupWorldScale ? formatPosition(scene.panelGroupWorldScale) : "unavailable"}`,
+    `Panel group distance from viewer: ${scene.panelGroupDistanceMeters == null ? "unavailable" : `${scene.panelGroupDistanceMeters.toFixed(3)} m`}`,
+    `Position slider value: ${scene.panelGroupSliderValues?.positionMeters.toFixed(3) ?? "unavailable"} m`,
+    `Scale slider value: ${scene.panelGroupSliderValues?.scale.toFixed(3) ?? "unavailable"}`,
+    `Panel group world rotation (x, y, z, w): ${formatRotation(scene.panelGroupWorldRotation)}`,
+    `Atom position relative to model-panel centre: ${formatPosition(scene.modelStage?.relativeToModelPanelCenter ?? null)}`,
+    `Model stage position: ${formatPosition(scene.modelStage?.position ?? null)}`,
+    `Model stage rotation (x, y, z, w): ${formatRotation(scene.modelStage?.rotation ?? null)}`,
+    `Model stage zoom: ${scene.modelStage?.zoom.toFixed(3) ?? "unavailable"}`,
+    `Model nearest-surface distance: ${scene.modelStage?.nearestSurfaceDistanceMeters == null ? "unavailable" : `${scene.modelStage.nearestSurfaceDistanceMeters.toFixed(3)} m`}`,
+    `Model stage binding limit: ${scene.modelStage?.bindingLimit ?? "none"}`,
+    `fits inside model area: ${scene.modelStage ? scene.modelStage.fitsInsideModelArea ? "yes" : "no" : "unavailable"}`,
     `Atom in viewer space: ${atomViewerSpace}`,
     `Atom position inside view frustum: ${scene.atomInsideViewFrustum === null ? "unknown" : scene.atomInsideViewFrustum ? "yes" : "no"}`,
     `renderer.xr.isPresenting: ${scene.rendererPresenting ? "yes" : "no"}`,

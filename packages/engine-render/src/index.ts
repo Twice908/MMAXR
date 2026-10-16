@@ -80,6 +80,7 @@ export {
   type SphereBatch,
   type SpatialPanelEdgeHint,
   type SpatialPanelItems,
+  type SpatialPanelGroupContent,
   type SpatialPanelSession,
   type SpatialSurfaceLayout,
   type SpatialAtomCaption,
@@ -114,8 +115,63 @@ export {
   type GlassSurfaceState,
 } from "./visuals/glass-material.js";
 export {
+  calculateModelStageLayout,
+  easeModelStageValue,
+  modelFitsStageArea,
+  modelStageZoomBounds,
+  moveModelStageAxis,
+  nearestModelSurfaceDistance,
+  panModelStage,
+  resetModelStagePose,
+  rotateModelStage,
+  zoomModelStage,
+  type ModelStageBindingLimit,
+  type ModelStageLayout,
+  type ModelStagePose,
+} from "./visuals/model-stage.js";
+export {
+  createSpatialButton,
+  createSpatialProgressBar,
+  createSpatialPropertyRow,
+  createSpatialStepper,
+  createSpatialText,
+  nextStepperValue,
+  nextToggleValue,
+  spatialHitTargetSizeDp,
+  type SpatialButton,
+  type SpatialButtonOptions,
+  type SpatialButtonVariant,
+  type SpatialPrimitive,
+  type SpatialProgressBar,
+  type SpatialProgressBarOptions,
+  type SpatialPropertyRowOptions,
+  type SpatialStepper,
+  type SpatialStepperOptions,
+  type SpatialText,
+  type SpatialTextOptions,
+} from "./visuals/spatial-primitives.js";
+export {
+  createSpatialSlider,
+  spatialSliderHitAreaSizeDp,
+  spatialSliderValueFromFraction,
+  type SpatialSlider,
+  type SpatialSliderOptions,
+  type SpatialSliderOrientation,
+} from "./visuals/spatial-slider.js";
+export {
+  SPATIAL_COMPONENT_REGISTRY,
+  type SpatialComponentRegistryEntry,
+} from "./visuals/spatial-component-registry.js";
+export {
+  type SpatialPointerEvent,
+  type SpatialPointerEventType,
+  type SpatialPointerSource,
+  type SpatialPointerTarget,
+} from "./visuals/spatial-pointer.js";
+export {
   GLASS,
   MODEL_LIMITS,
+  MODEL_STAGE,
   PANEL_LIMITS,
   xrTokens,
   type GlassLayer,
@@ -123,6 +179,11 @@ export {
   type GlassTint,
   type GlassVariantTokens,
   type XrTokens,
+  type XrTextColorRole,
+  type XrTextStyle,
+  dpToMeters,
+  getXrTextStyle,
+  textHeightDmm,
 } from "./xr-tokens.js";
 export { mountGlassPanelGallery } from "./visuals/glass-panel-gallery.js";
 export {
@@ -149,6 +210,12 @@ export {
   type SpatialPanelPhase,
 } from "./visuals/spatial-panel-host.js";
 export {
+  calculatePanelGroupPlacement,
+  calculatePanelGroupPosition,
+  applyPanelGroupScale,
+  clampPanelGroupDistance,
+  clampPanelGroupScale,
+  panelHorizontalAngleDegrees,
   calculateSpatialDockLayout,
   pixelsPerMeterAtDepth,
   profileSettings,
@@ -160,5 +227,6 @@ export {
   type SpatialPanelKey,
   type SpatialDockTabKey,
   type SpatialDockLayout,
+  type PanelGroupPlacement,
   type SpatialPresentationProfile,
 } from "./visuals/spatial-placement.js";

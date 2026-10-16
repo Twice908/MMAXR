@@ -115,13 +115,15 @@ the first tab tap.
 Camera-view placement is sampled from viewer heading and gaze at initial
 placement/reset, about 0.7 m ahead in the lower viewport. It is independent of
 the atom's surface placement. Immersive AR/VR uses the approved PNG-derived
-backing shell and four empty panels instead; no content is placed in them yet.
+backing shell and four panels. The model panel contains narration and caption
+controls over a placeholder model area; the particle panel shows live particle
+counts and atom properties; mission and hints panels show current lesson
+content and hint text. Panel actions use the existing module commands.
 Screen-mode UI is unchanged. Exact component visuals remain subject to the kit
 reference.
 
-The old AR atom-attached caption and populated spatial dock are not shown in
-this empty-surface phase. Their content remains available in the DOM fallback
-and camera-view dock pending later panel-content work.
+The camera-view dock remains separate from these immersive panels. The
+immersive model remains a placeholder until model interaction is implemented.
 
 ## TODO(kit) register
 

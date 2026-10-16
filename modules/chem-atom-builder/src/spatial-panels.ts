@@ -1,4 +1,11 @@
-import type { GlassPanelItem } from "@mma/engine-render";
+import {
+  MAX_SUPPORTED_ATOMIC_NUMBER,
+  MAX_SUPPORTED_ELECTRON_COUNT,
+} from "@mma/kit-chemistry";
+import type {
+  GlassPanelItem,
+  SpatialPanelGroupContent,
+} from "@mma/engine-render";
 
 export interface SpatialMissionSources {
   readonly view: "lesson" | "summary" | "free-play";
@@ -62,6 +69,7 @@ export interface SpatialPanelsSource {
     readonly muteAction: string;
     readonly replayLabel: string;
     readonly replayAction: string;
+    readonly replayDisabled: boolean;
     readonly captionsLabel: string;
     readonly captionsAction: string;
     readonly speedControlId: string;
@@ -87,6 +95,7 @@ export interface SpatialPanelItems {
   readonly particles: readonly GlassPanelItem[];
   readonly elementInfo: readonly GlassPanelItem[];
   readonly narration: readonly GlassPanelItem[];
+  readonly bento: SpatialPanelGroupContent;
   readonly arControls?: readonly GlassPanelItem[];
   readonly xrDiagnostics?: readonly GlassPanelItem[];
   readonly settings: readonly GlassPanelItem[];
@@ -103,7 +112,22 @@ export interface SpatialActionHandlers {
   readonly onCopyXrReport?: () => void;
 }
 
+/** Text labels taken from the measured reference layout for immersive controls. */
+export interface SpatialPanelGroupLabels {
+  readonly hints: string;
+  readonly position: string;
+  readonly scale: string;
+  readonly particleInstruction?: string;
+}
+
 const narrationActions = new Set(["enable", "mute", "replay", "captions"]);
+const defaultParticleInstruction = "Drag and Drop";
+const defaultSpatialPanelGroupLabels: SpatialPanelGroupLabels = {
+  hints: "Hints",
+  position: "Position",
+  scale: "Scale",
+  particleInstruction: defaultParticleInstruction,
+};
 
 /** Build spatial panel items from live DOM values and overlay availability. */
 export function buildSpatialPanelItems(
@@ -111,7 +135,10 @@ export function buildSpatialPanelItems(
   overlayGranted = true,
   exitLabel = "Exit AR",
   particleDragEnabled = true,
+  header?: Readonly<{ brand: string; title: string }>,
+  labels: SpatialPanelGroupLabels = defaultSpatialPanelGroupLabels,
 ): SpatialPanelItems {
+  const bento = buildSpatialPanelGroupContent(source, header, labels);
   const arControls = overlayGranted
     ? {}
     : {
@@ -157,6 +184,7 @@ export function buildSpatialPanelItems(
       particles: buildParticles(source, particleDragEnabled),
       elementInfo: buildElementInfo(source),
       narration: buildNarration(source),
+      bento,
       ...arControls,
       ...xrDiagnostics,
       ...buildSettings(source),
@@ -176,6 +204,7 @@ export function buildSpatialPanelItems(
       particles: buildParticles(source, particleDragEnabled),
       elementInfo: buildElementInfo(source),
       narration: buildNarration(source),
+      bento,
       ...arControls,
       ...xrDiagnostics,
       ...buildSettings(source),
@@ -244,9 +273,102 @@ export function buildSpatialPanelItems(
     particles: buildParticles(source, particleDragEnabled),
     elementInfo: buildElementInfo(source),
     narration: buildNarration(source),
+    bento,
     ...arControls,
     ...xrDiagnostics,
     ...buildSettings(source),
+  };
+}
+
+function buildSpatialPanelGroupContent(
+  source: SpatialPanelsSource,
+  header?: Readonly<{ brand: string; title: string }>,
+  labels: SpatialPanelGroupLabels = defaultSpatialPanelGroupLabels,
+): SpatialPanelGroupContent {
+  const progress = /(\d+)\s*\/\s*(\d+)/.exec(source.mission.progress);
+  const progressValue = Number(progress?.[1] ?? 0);
+  const progressMax = Number(progress?.[2] ?? 1);
+  if (!Number.isSafeInteger(progressValue) || !Number.isSafeInteger(progressMax) ||
+    progressMax < 1 || progressValue < 0 || progressValue > progressMax) {
+    throw new Error("Spatial panel mission progress is invalid.");
+  }
+  const particles = source.particles.map((particle): SpatialPanelGroupContent["particles"][number] => {
+    const particleType = particle.addCommand.slice("particle:add:".length);
+    const value = Number(particle.count);
+    if (!Number.isSafeInteger(value) || value < 0) {
+      throw new Error("Spatial panel particle count is invalid.");
+    }
+    if (particleType !== "proton" && particleType !== "neutron" && particleType !== "electron") {
+      throw new Error("Spatial panel particle add command is invalid.");
+    }
+    return {
+      label: particle.label,
+      value,
+      color: particle.color,
+      addAction: particle.addCommand,
+      removeAction: particle.removeCommand,
+      min: particleType === "proton" ? 1 : 0,
+      ...(particleType === "proton"
+        ? { max: MAX_SUPPORTED_ATOMIC_NUMBER }
+        : particleType === "electron"
+          ? { max: MAX_SUPPORTED_ELECTRON_COUNT }
+          : {}),
+    };
+  });
+  return {
+    ...(header ? { header } : {}),
+    model: {
+      caption: source.narration.caption,
+      captionsLabel: `Captions ${source.narration.captionsEnabled ? "On" : "Off"}`,
+      captionsAction: source.narration.captionsAction,
+      captionsEnabled: source.narration.captionsEnabled,
+      speedOptions: source.narration.speedOptions,
+      narrationLabel: `Narration ${source.narration.muted ? "Off" : "On"}`,
+      narrationAction: source.narration.muteAction,
+      narrationEnabled: source.narration.enableHidden && !source.narration.muted,
+      enableLabel: "Enable sound",
+      enableAction: source.narration.enableAction,
+      enableVisible: !source.narration.enableHidden,
+      enableDisabled: source.narration.enableDisabled,
+      replayLabel: "Replay",
+      replayAction: source.narration.replayAction,
+      replayDisabled: source.narration.replayDisabled,
+    },
+    particles,
+    particleHeading: source.particleHeading,
+    particleInstruction: labels.particleInstruction ?? defaultParticleInstruction,
+    element: {
+      ...source.element,
+      number: source.element.number.replace(/^element\b/i, "Element"),
+    },
+    mission: {
+      view: source.mission.view,
+      step: source.mission.step,
+      title: source.mission.title,
+      body: source.mission.goal,
+      hint: source.mission.hintFeedback,
+      progressValue,
+      progressMax,
+      hintAction: source.mission.hintCommand,
+      hintLabel: source.mission.hintLabel,
+      hintDisabled: source.mission.hintDisabled,
+      checkAction: source.mission.checkCommand,
+      checkLabel: source.mission.checkLabel,
+      checkDisabled: source.mission.checkDisabled,
+      freePlayAction: source.mission.freePlayCommand,
+      freePlayLabel: source.mission.freePlayLabel,
+      summaryTitle: source.mission.summaryTitle,
+      summaryDetails: source.mission.summaryDetails,
+      freePlayText: source.mission.freePlayText,
+      resetAction: source.mission.resetCommand,
+      resetLabel: source.mission.resetLabel,
+    },
+    hints: {
+      label: labels.hints,
+      text: source.mission.hintFeedback,
+    },
+    resetViewLabel: source.resetViewLabel,
+    controls: { positionLabel: labels.position, scaleLabel: labels.scale },
   };
 }
 
@@ -544,6 +666,7 @@ export function readSpatialPanelSources(root: ParentNode): SpatialPanelsSource {
       muteAction: narrationButton("mute").dataset.narrationAction ?? "",
       replayLabel: narrationButton("replay").textContent ?? "",
       replayAction: narrationButton("replay").dataset.narrationAction ?? "",
+      replayDisabled: narrationButton("replay").disabled,
       captionsLabel: narrationButton("captions").textContent ?? "",
       captionsAction: narrationButton("captions").dataset.narrationAction ?? "",
       speedControlId: speed.id,

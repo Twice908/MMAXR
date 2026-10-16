@@ -29,14 +29,18 @@ describe("shared glass surfaces", () => {
     const surface = createGlassSurface("control", { width: 1, height: 0.25 }, { reduced: true });
     setGlassSurfaceState(surface, {
       hover: true,
-      pressed: false,
+      pressed: true,
+      dragging: true,
       selected: true,
-      disabled: false,
+      disabled: true,
     });
     updateGlassSurfaceUniforms(surface);
 
     expect(surface.material.uniforms.hover?.value).toBe(1);
+    expect(surface.material.uniforms.pressed?.value).toBe(1);
+    expect(surface.material.uniforms.dragging?.value).toBe(1);
     expect(surface.material.uniforms.selected?.value).toBe(1);
+    expect(surface.material.uniforms.disabled?.value).toBe(1);
     expect(surface.material.uniforms.reduced?.value).toBe(1);
     expect(surface.material.uniforms.size?.value.toArray()).toEqual([1, 0.25]);
     expect(surface.material.uniformsNeedUpdate).toBe(true);

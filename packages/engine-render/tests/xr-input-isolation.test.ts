@@ -167,14 +167,21 @@ describe("browser input isolation during XR", () => {
     expect(addListener).not.toHaveBeenCalled();
     const removeListener = vi.spyOn(target, "removeEventListener");
     host.setPointerEventsEnabled(true);
-    expect(addListener).toHaveBeenCalledTimes(4);
+    expect(addListener.mock.calls.map(([type]) => type)).toEqual([
+      "pointermove",
+      "pointerdown",
+      "pointerup",
+      "pointercancel",
+      "wheel",
+      "contextmenu",
+    ]);
     host.setPointerEventsEnabled(false);
-    expect(removeListener).toHaveBeenCalledTimes(4);
+    expect(removeListener).toHaveBeenCalledTimes(6);
     host.handleRay(new THREE.Ray(), "move");
     expect(panel.hitTest).toHaveBeenCalledOnce();
     host.setPointerEventsEnabled(true);
     host.dispose();
-    expect(removeListener).toHaveBeenCalledTimes(8);
+    expect(removeListener).toHaveBeenCalledTimes(12);
     expect(panel.dispose).toHaveBeenCalledOnce();
   });
 

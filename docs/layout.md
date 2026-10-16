@@ -12,8 +12,8 @@ Shared immersive glass and XR design values live in
 `packages/engine-render/src/xr-tokens.ts`.
 The supplied desktop/headset Atom Builder reference geometry is recorded as
 data in `modules/chem-atom-builder/src/reference-layout.ts`; immersive AR/VR
-uses that data for an empty shell and four empty glass panels. Camera view
-retains its existing spatial dock.
+uses that data for its shell, content regions, and four populated glass
+panels. Camera view retains its existing spatial dock.
 
 Before changing AR/VR/MR/XR UI, read [docs/horizon-ui.md](./horizon-ui.md)
 and use its Meta Horizon OS UI Set components and verified tokens. Do not
@@ -124,10 +124,13 @@ view-only and does not change learning state directly.
 ## Handheld, headset, and orientation
 
 The camera dock is upright and yaw-aligned to the viewer (no pitch or roll).
-Immersive AR/VR instead uses the PNG-derived shell and four empty panels at
-the approved default panel size and distance. Camera view continues to use
-local video and screen input. Ordinary desktop and Android screen mode retain
-their existing layout.
+Immersive AR/VR instead uses the PNG-derived shell and four panels at the
+approved default panel size and distance. The model area remains a placeholder;
+narration/caption controls, live particles and properties, mission progress,
+and the current hint use existing module sources and actions. Android AR uses
+the same measured layout as VR. Camera view continues to use local video and
+screen input. Ordinary desktop and Android screen mode retain their existing
+layout.
 
 ## Do and do not
 

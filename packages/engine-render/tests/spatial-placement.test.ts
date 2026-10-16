@@ -9,7 +9,13 @@ import {
 import {
   calculateSpatialDockLayout,
   calculateSpatialDockPlacement,
+  calculatePanelGroupPlacement,
+  calculatePanelGroupPosition,
+  applyPanelGroupScale,
+  clampPanelGroupDistance,
+  clampPanelGroupScale,
   gravityAlignedQuaternion,
+  panelHorizontalAngleDegrees,
   pixelsPerMeterAtDepth,
   profileSettings,
   selectSpatialPresentationProfile,
@@ -20,7 +26,7 @@ import {
 } from "../src/visuals/spatial-placement.js";
 import { hitTest, layoutPanel, layoutPanelPages, wrapPanelText } from "../src/visuals/panel-layout.js";
 import { spatialTokens } from "../src/spatial-tokens.js";
-import { xrTokens } from "../src/xr-tokens.js";
+import { PANEL_LIMITS, xrTokens } from "../src/xr-tokens.js";
 import {
   canCreateSpatialPanels,
   shouldShowSpatialSettingsFallback,
@@ -257,6 +263,101 @@ describe("spatial dock layout", () => {
       expect(up.y).toBeCloseTo(1);
       expect(up.z).toBeCloseTo(0);
     }
+  });
+
+  it("places the panel group one metre along the captured viewer ray without inheriting tilt", () => {
+    const viewerPosition = { x: 0.3, y: 1.6, z: -0.2 };
+    const viewerOrientation = new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(0.45, 0.7, -0.3),
+    );
+    const placement = calculatePanelGroupPlacement(
+      viewerPosition,
+      viewerOrientation,
+      PANEL_LIMITS.distanceMeters.default,
+    );
+    const nearest = calculatePanelGroupPlacement(
+      viewerPosition,
+      viewerOrientation,
+      PANEL_LIMITS.distanceMeters.min,
+    );
+    const farthest = calculatePanelGroupPlacement(
+      viewerPosition,
+      viewerOrientation,
+      PANEL_LIMITS.distanceMeters.max,
+    );
+    const offset = new THREE.Vector3(
+      placement.position.x - viewerPosition.x,
+      placement.position.y - viewerPosition.y,
+      placement.position.z - viewerPosition.z,
+    );
+    const forward = new THREE.Vector3(
+      placement.forward.x,
+      placement.forward.y,
+      placement.forward.z,
+    );
+    expect(offset.distanceTo(forward)).toBeCloseTo(0);
+    const alignedUp = new THREE.Vector3(0, 1, 0)
+      .applyQuaternion(new THREE.Quaternion(
+        placement.orientation.x,
+        placement.orientation.y,
+        placement.orientation.z,
+        placement.orientation.w,
+      ));
+    expect(alignedUp.x).toBeCloseTo(0);
+    expect(alignedUp.y).toBeCloseTo(1);
+    expect(alignedUp.z).toBeCloseTo(0);
+    expect(nearest.orientation).toEqual(farthest.orientation);
+  });
+
+  it("moves only along the original ray and clamps both position and scale ranges", () => {
+    const position = calculatePanelGroupPosition(
+      { x: 0, y: 1.6, z: 0 },
+      { x: 0.6, y: 0, z: -0.8 },
+      PANEL_LIMITS.distanceMeters.max,
+    );
+    expect(position.x).toBeCloseTo(0.9);
+    expect(position.y).toBeCloseTo(1.6);
+    expect(position.z).toBeCloseTo(-1.2);
+    expect(clampPanelGroupDistance(0)).toBe(PANEL_LIMITS.distanceMeters.min);
+    expect(clampPanelGroupDistance(2)).toBe(PANEL_LIMITS.distanceMeters.max);
+    expect(clampPanelGroupScale(0)).toBe(PANEL_LIMITS.scale.min);
+    expect(clampPanelGroupScale(2)).toBe(PANEL_LIMITS.scale.max);
+  });
+
+  it("scales uniformly about the shell centre without changing group position or rotation", () => {
+    const group = new THREE.Group();
+    group.position.set(0.2, 1.4, -1);
+    group.rotation.set(0, 0.8, 0);
+    const child = new THREE.Object3D();
+    child.position.set(0.3, -0.1, 0);
+    group.add(child);
+    group.updateMatrixWorld(true);
+    const positionBefore = group.position.clone();
+    const rotationBefore = group.quaternion.clone();
+    const childOffsetBefore = child.position.length();
+    const childWorldPositionBefore = child.getWorldPosition(new THREE.Vector3());
+
+    expect(applyPanelGroupScale(group, PANEL_LIMITS.scale.max)).toBe(PANEL_LIMITS.scale.max);
+
+    group.updateMatrixWorld(true);
+    expect(group.position.distanceTo(positionBefore)).toBeCloseTo(0);
+    expect(group.quaternion.angleTo(rotationBefore)).toBeCloseTo(0);
+    expect(child.getWorldPosition(new THREE.Vector3()).distanceTo(group.position))
+      .toBeCloseTo(childOffsetBefore * PANEL_LIMITS.scale.max);
+    expect(childWorldPositionBefore.distanceTo(group.position)).toBeCloseTo(childOffsetBefore);
+    expect(group.scale.toArray()).toEqual([
+      PANEL_LIMITS.scale.max,
+      PANEL_LIMITS.scale.max,
+      PANEL_LIMITS.scale.max,
+    ]);
+  });
+
+  it("keeps the widest shell below the horizontal field-of-view limit at closest and largest", () => {
+    const angle = panelHorizontalAngleDegrees(
+      xrTokens.shellWidthMeters * PANEL_LIMITS.scale.max,
+      PANEL_LIMITS.distanceMeters.min,
+    );
+    expect(angle).toBeLessThan(70);
   });
 
   it("preserves presentation gating and settings fallback behavior", () => {

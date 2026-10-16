@@ -60,6 +60,7 @@ import {
   buildSpatialPanelItems,
   readSpatialPanelSources,
   routeSpatialAction,
+  type SpatialPanelGroupLabels,
 } from "./spatial-panels.js";
 import {
   isSpatialPresentationMode,
@@ -115,6 +116,7 @@ const assessmentItems: readonly AssessmentItem[] = [
 const assessmentsById = new Map(assessmentItems.map((item) => [item.id, item]));
 const atomBuilderSpatialSurfaceLayout: SpatialSurfaceLayout = {
   shell: atomBuilderDesktopReference.shell.normalizedToShellWidth,
+  regions: referenceContentRegions(),
   panels: [
     {
       id: "model-panel",
@@ -137,7 +139,55 @@ const atomBuilderSpatialSurfaceLayout: SpatialSurfaceLayout = {
       rect: atomBuilderDesktopReference.panels.hints.normalizedToShellWidth,
     },
   ],
+  controls: {
+    hintButton: referenceRegionRect("hintButton"),
+    checkButton: referenceRegionRect("checkButton"),
+    freePlayButton: referenceRegionRect("freePlayButton"),
+    futureLogoSlot: referenceRegionRect("futureLogoSlot"),
+    positionSliderTrack: referenceRegionRect("positionSliderTrack"),
+    scaleSliderTrack: referenceRegionRect("scaleSliderTrack"),
+    resetViewButton: referenceRegionRect("resetViewButton"),
+    resetAtomButton: referenceRegionRect("resetAtomButton"),
+  },
 };
+const atomBuilderSpatialPanelLabels = referenceSpatialPanelLabels();
+
+function referenceContentRegions(): SpatialSurfaceLayout["regions"] {
+  const regions: Record<string, SpatialSurfaceLayout["shell"]> = {
+    brand: atomBuilderDesktopReference.header.brand.rect.normalizedToShellWidth,
+    moduleTitle: atomBuilderDesktopReference.header.moduleTitle.rect.normalizedToShellWidth,
+  };
+  for (const region of atomBuilderDesktopReference.regions) {
+    if (region.rect) regions[region.id] = region.rect.normalizedToShellWidth;
+  }
+  return regions;
+}
+
+function referenceSpatialPanelLabels(): SpatialPanelGroupLabels {
+  const labelFor = (id: string): string => {
+    const label = atomBuilderDesktopReference.regions.find((region) => region.id === id)?.label;
+    if (!label) {
+      throw new Error(`Atom Builder reference layout is missing the ${id} label.`);
+    }
+    return label;
+  };
+  return {
+    hints: labelFor("hintsLabel"),
+    position: labelFor("positionSliderLabel"),
+    scale: labelFor("scaleSliderLabel"),
+    particleInstruction: "Drag and Drop",
+  };
+}
+
+function referenceRegionRect(id: string): NonNullable<
+  (typeof atomBuilderDesktopReference.regions)[number]["rect"]
+>["normalizedToShellWidth"] {
+  const region = atomBuilderDesktopReference.regions.find((candidate) => candidate.id === id);
+  if (!region?.rect) {
+    throw new Error(`Atom Builder reference layout is missing the measured ${id} rectangle.`);
+  }
+  return region.rect.normalizedToShellWidth;
+}
 
 /** Mount-time options for the screen module. */
 export interface AtomBuilderOptions {
@@ -316,6 +366,11 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
         !spatialArControlsVisible,
         spatialExitLabel,
         spatialArDragEnabled,
+        {
+          brand: atomBuilderDesktopReference.header.brand.text,
+          title: atomBuilderDesktopReference.header.moduleTitle.text,
+        },
+        atomBuilderSpatialPanelLabels,
       );
       const session = tryCreateSpatialPanels(
         () => renderer.createSpatialPanelSession(
@@ -626,6 +681,11 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
             !spatialArControlsVisible,
             spatialExitLabel,
             spatialArDragEnabled,
+            {
+              brand: atomBuilderDesktopReference.header.brand.text,
+              title: atomBuilderDesktopReference.header.moduleTitle.text,
+            },
+            atomBuilderSpatialPanelLabels,
           ));
         }
       }
@@ -781,6 +841,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
         break;
       }
       case "move": {
+        if (spatialSession && root.classList.contains("ar-active")) break;
         if (
           root.classList.contains("ar-active")
           && payload.source === "xr-controller"
@@ -804,6 +865,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
         renderer.endDrag();
         break;
       case "rotate":
+        if (spatialSession && root.classList.contains("ar-active")) break;
         if (typeof payload.deltaX === "number" && typeof payload.deltaY === "number") {
           if (
             root.classList.contains("ar-active")
@@ -816,6 +878,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
         }
         break;
       case "scale":
+        if (spatialSession && root.classList.contains("ar-active")) break;
         if (typeof payload.delta === "number") {
           if (
             root.classList.contains("ar-active")
@@ -869,8 +932,8 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   xrInputAdapter = new XrSessionInputAdapter({
     dispatch: onInput,
     pick: (ray) => renderer.pickRay(ray.origin, ray.direction),
-    handlePanelRay: (ray, phase, sourceId) =>
-      spatialSession?.handleRay(ray, phase, sourceId) ?? false,
+    handlePanelRay: (ray, phase, sourceId, source, gestureMode, zoomDelta) =>
+      spatialSession?.handleRay(ray, phase, sourceId, source, gestureMode, zoomDelta) ?? false,
   });
   root.addEventListener("click", onCommandClick);
   root.addEventListener("mma:spatial-presentation", onSpatialPresentation);

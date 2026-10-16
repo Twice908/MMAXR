@@ -1,4 +1,5 @@
-const MAX_KIT_ELECTRONS = 20;
+/** Highest electron count supported by this kit. */
+export const MAX_SUPPORTED_ELECTRON_COUNT = 20;
 const MAX_BOHR_BURY_OCCUPANCY = 8;
 
 export type ElectronPlacementResult =
@@ -21,7 +22,7 @@ export function bohrBuryConfiguration(electronCount: number): readonly number[] 
   if (
     !Number.isInteger(electronCount) ||
     electronCount < 0 ||
-    electronCount > MAX_KIT_ELECTRONS
+    electronCount > MAX_SUPPORTED_ELECTRON_COUNT
   ) {
     throw new RangeError("This kit supports electron counts from 0 to 20.");
   }
@@ -106,7 +107,7 @@ export function validateElectronPlacement(
     };
   }
 
-  if (shells.reduce((total, count) => total + count, 0) >= MAX_KIT_ELECTRONS) {
+  if (shells.reduce((total, count) => total + count, 0) >= MAX_SUPPORTED_ELECTRON_COUNT) {
     return { valid: false, message: "This kit supports up to 20 electrons." };
   }
 
