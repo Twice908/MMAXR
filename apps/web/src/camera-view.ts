@@ -31,6 +31,40 @@ export interface CameraViewEnvironment {
   readonly getUserMedia: ((constraints: MediaStreamConstraints) => Promise<MediaStream>) | null;
   readonly document: Document;
   readonly now: () => number;
+  readonly isAndroid?: boolean;
+}
+
+interface CameraDeviceOrientationDetail {
+  readonly alpha: number;
+  readonly beta: number;
+  readonly gamma: number;
+  readonly screenAngleDegrees: number;
+}
+
+type DeviceOrientationPermissionWindow = Window & {
+  readonly DeviceOrientationEvent?: {
+    requestPermission?: () => Promise<string>;
+  };
+};
+
+/** Request motion permission directly from the Camera-start gesture when the browser requires it. */
+export async function requestCameraOrientationPermission(
+  view: Window | null,
+): Promise<boolean> {
+  const orientationEvent = (view as DeviceOrientationPermissionWindow | null)
+    ?.DeviceOrientationEvent;
+  if (!orientationEvent) return false;
+  if (typeof orientationEvent.requestPermission !== "function") return true;
+  try {
+    return await orientationEvent.requestPermission() === "granted";
+  } catch {
+    return false;
+  }
+}
+
+/** Match Android only for the Camera-view layout gate; other pointer profiles stay unchanged. */
+export function isAndroidCameraDevice(userAgent: string): boolean {
+  return /Android/i.test(userAgent);
 }
 
 /** Camera-view availability and a student-facing reason when unavailable. */
@@ -237,6 +271,43 @@ export function mountCameraView(options: CameraViewOptions): () => void {
   let video: HTMLVideoElement | null = null;
   let activeSince: number | null = null;
   let statusDismissTimeout: ReturnType<typeof globalThis.setTimeout> | null = null;
+  let orientationListener: ((event: DeviceOrientationEvent) => void) | null = null;
+  let orientationChangeListener: (() => void) | null = null;
+  let latestOrientation: CameraDeviceOrientationDetail | null = null;
+
+  const removeOrientationListeners = (): void => {
+    const view = environment.document.defaultView;
+    if (orientationListener) view?.removeEventListener("deviceorientation", orientationListener);
+    if (orientationChangeListener) {
+      view?.removeEventListener("orientationchange", orientationChangeListener);
+      view?.screen.orientation?.removeEventListener("change", orientationChangeListener);
+    }
+    orientationListener = null;
+    orientationChangeListener = null;
+  };
+
+  const installOrientationListeners = (): void => {
+    const view = environment.document.defaultView;
+    if (!view) return;
+    orientationListener = (event) => {
+      if (event.alpha === null || event.beta === null || event.gamma === null) return;
+      latestOrientation = {
+        alpha: event.alpha,
+        beta: event.beta,
+        gamma: event.gamma,
+        screenAngleDegrees: view.screen.orientation?.angle ?? 0,
+      };
+      root.dispatchEvent(new CustomEvent("mma:camera-look-orientation", {
+        detail: latestOrientation,
+      }));
+    };
+    orientationChangeListener = () => {
+      root.dispatchEvent(new Event("mma:camera-look-orientation-change"));
+    };
+    view.addEventListener("deviceorientation", orientationListener);
+    view.addEventListener("orientationchange", orientationChangeListener);
+    view.screen.orientation?.addEventListener("change", orientationChangeListener);
+  };
 
   const setStatus = (message: string): void => {
     if (statusDismissTimeout !== null) globalThis.clearTimeout(statusDismissTimeout);
@@ -274,10 +345,13 @@ export function mountCameraView(options: CameraViewOptions): () => void {
     setScreenRendererTransparentBackground(sceneHost, false);
   };
   const cleanStream = (): void => {
+    root.classList.remove("android-camera-legacy-dock-open");
     root.dispatchEvent(new CustomEvent("mma:settings-close"));
     root.dispatchEvent(new CustomEvent("mma:spatial-presentation", {
-      detail: { active: false, expanded: false },
+    detail: { active: false, expanded: false, androidLayout: environment.isAndroid === true },
     }));
+    removeOrientationListeners();
+    latestOrientation = null;
     stopCameraStream(stream, video);
     stream = null;
     video = null;
@@ -317,6 +391,10 @@ export function mountCameraView(options: CameraViewOptions): () => void {
     const token = ++requestToken;
     setStatus("Starting camera view...");
     try {
+      if (environment.isAndroid === true &&
+        await requestCameraOrientationPermission(environment.document.defaultView)) {
+        installOrientationListeners();
+      }
       const acquiredStream = await environment.getUserMedia({
         audio: false,
         video: { facingMode: { ideal: "user" } },
@@ -349,7 +427,7 @@ export function mountCameraView(options: CameraViewOptions): () => void {
       for (const target of [document.documentElement, document.body, root]) {
         target.classList.add("camera-active");
       }
-      setScreenRendererTransparentBackground(sceneHost, true);
+      setScreenRendererTransparentBackground(sceneHost, true, environment.isAndroid === true);
       await cameraVideo.play();
       if (disposed || !starting) {
         cleanStream();
@@ -372,7 +450,12 @@ export function mountCameraView(options: CameraViewOptions): () => void {
       panel.hidden = false;
       setPanelCollapsed(true);
       root.dispatchEvent(new CustomEvent("mma:spatial-presentation", {
-        detail: { active: true, expanded: false },
+        detail: {
+          active: true,
+          expanded: false,
+          androidLayout: environment.isAndroid === true,
+          orientation: latestOrientation,
+        },
       }));
       emitTelemetry("camera_view_started", 0, "none");
     } catch (error) {
@@ -433,11 +516,14 @@ export function mountCameraView(options: CameraViewOptions): () => void {
     root.dispatchEvent(new CustomEvent("mma:settings-toggle"));
   };
   const onPanelToggleClick = (): void => {
-    setPanelCollapsed(!panel.classList.contains("is-collapsed"));
+    const expanded = panel.classList.contains("is-collapsed");
+    setPanelCollapsed(!expanded);
+    root.classList.toggle("android-camera-legacy-dock-open", expanded);
     root.dispatchEvent(new CustomEvent("mma:spatial-presentation", {
       detail: {
         active: true,
-        expanded: !panel.classList.contains("is-collapsed"),
+        expanded,
+        androidLayout: environment.isAndroid === true,
       },
     }));
   };
@@ -524,6 +610,7 @@ function browserCameraEnvironment(): CameraViewEnvironment {
     getUserMedia: getUserMedia ? getUserMedia.bind(navigator.mediaDevices) : null,
     document,
     now: () => performance.now(),
+    isAndroid: isAndroidCameraDevice(navigator.userAgent),
   };
 }
 

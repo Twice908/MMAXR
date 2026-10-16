@@ -55,10 +55,12 @@ function makePointerEvent(
   type: "move" | "down" | "up",
   pointerType: "mouse" | "touch",
   pointerId: number,
+  clientX = 50,
+  clientY = 50,
 ): PointerEvent {
   return Object.assign(new Event(`pointer${type}`, { cancelable: true }), {
-    clientX: 50,
-    clientY: 50,
+    clientX,
+    clientY,
     pointerId,
     pointerType,
   }) as PointerEvent;
@@ -144,6 +146,73 @@ describe("spatial panel ray consumption", () => {
       "mouse",
       "touch",
     ]);
+    object3d.geometry.dispose();
+    (object3d.material as THREE.Material).dispose();
+  });
+
+  it("routes model targets before one-finger background look-around", () => {
+    const group = new THREE.Group();
+    const { target, object3d } = makePointerTarget(group, vi.fn(), undefined, "model-stage");
+    const pointerTarget = Object.assign(new EventTarget(), {
+      getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 100 }),
+    }) as HTMLElement;
+    const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 10);
+    camera.position.set(0, 0, 1);
+    camera.lookAt(0, 0, 0);
+    camera.updateMatrixWorld(true);
+    const background = vi.fn();
+    const host = createSpatialPanelHost({
+      group,
+      camera,
+      pointerTarget,
+      panels: [],
+      pointerTargets: [target],
+      onPanelAction: vi.fn(),
+      onBackgroundPointer: background,
+      enablePointerEvents: true,
+    });
+
+    pointerTarget.dispatchEvent(makePointerEvent("down", "touch", 1));
+    pointerTarget.dispatchEvent(makePointerEvent("up", "touch", 1));
+    expect(background).not.toHaveBeenCalled();
+
+    pointerTarget.dispatchEvent(makePointerEvent("down", "touch", 2, 99, 50));
+    pointerTarget.dispatchEvent(makePointerEvent("move", "touch", 2, 90, 55));
+    pointerTarget.dispatchEvent(makePointerEvent("up", "touch", 2, 90, 55));
+    expect(background.mock.calls.map(([event]) => event.phase)).toEqual([
+      "down", "move", "up",
+    ]);
+    host.dispose();
+    object3d.geometry.dispose();
+    (object3d.material as THREE.Material).dispose();
+  });
+
+  it("cancels background look-around when a second finger is added", () => {
+    const group = new THREE.Group();
+    const { target, object3d } = makePointerTarget(group, vi.fn(), undefined, "model-stage");
+    const pointerTarget = Object.assign(new EventTarget(), {
+      getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 100 }),
+    }) as HTMLElement;
+    const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 10);
+    camera.position.set(0, 0, 1);
+    camera.lookAt(0, 0, 0);
+    camera.updateMatrixWorld(true);
+    const background = vi.fn();
+    const host = createSpatialPanelHost({
+      group,
+      camera,
+      pointerTarget,
+      panels: [],
+      pointerTargets: [target],
+      onPanelAction: vi.fn(),
+      onBackgroundPointer: background,
+      enablePointerEvents: true,
+    });
+
+    pointerTarget.dispatchEvent(makePointerEvent("down", "touch", 1, 99, 50));
+    pointerTarget.dispatchEvent(makePointerEvent("down", "touch", 2, 99, 50));
+    expect(background.mock.calls.map(([event]) => event.phase)).toEqual(["down", "cancel"]);
+    host.dispose();
     object3d.geometry.dispose();
     (object3d.material as THREE.Material).dispose();
   });

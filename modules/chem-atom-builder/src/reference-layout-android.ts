@@ -6,7 +6,8 @@ import type {
 } from "./reference-layout.js";
 
 const SOURCE_IMAGE = Object.freeze({ width: 1320, height: 1051 });
-const SHELL_BOUNDS = Object.freeze({ x: 5, y: -8, width: 1312, height: 1018 });
+const LAYOUT_CANVAS_BOUNDS = Object.freeze({ x: 0, y: -8, width: 1320, height: 1092 });
+const SHELL_BOUNDS = Object.freeze({ x: 5, y: -8, width: 1312, height: 1084 });
 
 function referenceRect(x: number, y: number, width: number, height: number): ReferenceRect {
   return {
@@ -25,6 +26,7 @@ export const atomBuilderAndroidReference = Object.freeze({
   source: {
     asset: "assets/Android AR-VR Layout.png",
     canvasPx: SOURCE_IMAGE,
+    layoutCanvasBoundsPx: LAYOUT_CANVAS_BOUNDS,
     coordinateOrigin: "top-left",
     shellBoundsPx: SHELL_BOUNDS,
     shellWidthPx: SHELL_BOUNDS.width,
@@ -92,12 +94,25 @@ export const atomBuilderAndroidReference = Object.freeze({
     { id: "scaleSliderLabel", label: "Scale", rect: referenceRect(195, 951, 91, 37), orientation: "horizontal" },
     { id: "positionSliderTrack", rect: referenceRect(449, 911, 384, 29), orientation: "horizontal" },
     { id: "positionSliderLabel", label: "Position", rect: referenceRect(575, 951, 134, 37), orientation: "horizontal" },
+    {
+      id: "hintButton",
+      rect: referenceRect(194, 1004, 110, 48),
+      note: "Added by owner; not in the supplied PNG.",
+    },
+    {
+      id: "checkButton",
+      rect: referenceRect(320, 1004, 113, 48),
+      note: "Added by owner; not in the supplied PNG.",
+    },
+    {
+      id: "freePlayButton",
+      rect: referenceRect(449, 1004, 239, 48),
+      note: "Added by owner; not in the supplied PNG.",
+    },
 
     { id: "captionTextArea", rect: null, note: "No caption text or backing is shown in the supplied reference." },
-    { id: "hintButton", rect: null, note: "Not present in the supplied reference." },
-    { id: "checkButton", rect: null, note: "Not present in the supplied reference." },
-    { id: "freePlayButton", rect: null, note: "Not present in the supplied reference." },
   ] satisfies readonly ReferenceRegion[],
+  ownerAddedNotInPng: ["hintButton", "checkButton", "freePlayButton"],
   proposedScales: {
     spacingPx: [4, 8, 12, 16, 24, 32, 40, 48, 64, 80, 96, 128, 160],
     radiusPx: [8, 12, 16, 24, 32, 48, 56],
@@ -114,7 +129,6 @@ export const atomBuilderAndroidReference = Object.freeze({
   },
   missingFromDesktop: [
     "MMAXR brand/header and Atom Builder title/header",
-    "Hint, Check, and Free play action buttons",
   ],
 } as const);
 
@@ -138,7 +152,7 @@ function parentForRegion(id: string): string {
   }
   if (/^hints(Label|Body)$/.test(id)) return panelElementIds.hints;
   if (id === "modelArea") return panelElementIds.model;
-  if (/^(futureLogoSlot|resetViewButton|resetAtomButton|captionsOn|replay|speedChip1x|narrationOn|scaleSliderTrack|scaleSliderLabel|positionSliderTrack|positionSliderLabel)$/.test(id)) {
+  if (/^(futureLogoSlot|resetViewButton|resetAtomButton|captionsOn|replay|speedChip1x|narrationOn|scaleSliderTrack|scaleSliderLabel|positionSliderTrack|positionSliderLabel|hintButton|checkButton|freePlayButton)$/.test(id)) {
     return "shell";
   }
   return "canvas";
@@ -168,7 +182,12 @@ export const atomBuilderAndroidLayoutElements: readonly ReferenceLayoutElement[]
   Object.freeze([
     {
       id: "canvas",
-      rect: referenceRect(0, 0, SOURCE_IMAGE.width, SOURCE_IMAGE.height),
+      rect: referenceRect(
+        LAYOUT_CANVAS_BOUNDS.x,
+        LAYOUT_CANVAS_BOUNDS.y,
+        LAYOUT_CANVAS_BOUNDS.width,
+        LAYOUT_CANVAS_BOUNDS.height,
+      ),
       parentId: null,
       role: "content",
     },

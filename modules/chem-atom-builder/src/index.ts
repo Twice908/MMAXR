@@ -177,6 +177,9 @@ const atomBuilderAndroidSurfaceLayout: SpatialSurfaceLayout = {
     rect: rect.normalizedToShellWidth,
   })),
   controls: {
+    hintButton: androidRegionRect("hintButton"),
+    checkButton: androidRegionRect("checkButton"),
+    freePlayButton: androidRegionRect("freePlayButton"),
     futureLogoSlot: androidRegionRect("futureLogoSlot"),
     positionSliderTrack: androidRegionRect("positionSliderTrack"),
     scaleSliderTrack: androidRegionRect("scaleSliderTrack"),
@@ -365,6 +368,8 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     spatialArControlsVisible = false;
     spatialArDragEnabled = false;
     spatialExitLabel = "Exit AR";
+    root.classList.remove("android-camera-panels-active");
+    root.classList.remove("android-camera-legacy-dock-open");
     setSpatialPanelsDomHidden(root, false);
     root.classList.remove("spatial-dom-settings-open");
   };
@@ -379,7 +384,9 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     mode: "ar" | "camera",
     expanded?: boolean,
     overlayGranted?: boolean,
+    androidCameraView = false,
   ): void => {
+    const useAndroidCameraPanels = mode === "camera" && androidCameraView;
     spatialArControlsVisible = mode === "ar" && overlayGranted === false;
     spatialArDragEnabled = mode === "ar";
     spatialExpanded = expanded ?? (spatialSession ? spatialExpanded : false);
@@ -418,7 +425,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
           (inputId) => routeSpatialPanelAction(inputId),
           mode === "ar" ? root : undefined,
           mode === "ar" ? onInput : undefined,
-          atomBuilderSpatialLayouts,
+          mode === "ar" || useAndroidCameraPanels ? atomBuilderSpatialLayouts : undefined,
         ),
         failSpatialPresentation,
       );
@@ -427,13 +434,13 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
       session.setExpanded(spatialExpanded);
       spatialStyle = document.createElement("style");
       spatialStyle.textContent = `
-        .spatial-panels-active #lesson-panel,
-        .spatial-panels-active .narration-hud,
-        .spatial-panels-active #assessment-card,
-        .spatial-panels-active .lesson-summary,
-        .spatial-panels-active .free-play-status,
-        .spatial-panels-active .particle-rail,
-        .spatial-panels-active .atom-inspector,
+        .spatial-panels-active:not(.android-camera-legacy-dock-open) #lesson-panel,
+        .spatial-panels-active:not(.android-camera-legacy-dock-open) .narration-hud,
+        .spatial-panels-active:not(.android-camera-legacy-dock-open) #assessment-card,
+        .spatial-panels-active:not(.android-camera-legacy-dock-open) .lesson-summary,
+        .spatial-panels-active:not(.android-camera-legacy-dock-open) .free-play-status,
+        .spatial-panels-active:not(.android-camera-legacy-dock-open) .particle-rail,
+        .spatial-panels-active:not(.android-camera-legacy-dock-open) .atom-inspector,
         .spatial-panels-active .camera-view-panel-heading #mission-title,
         .spatial-panels-active #ar-panel-mission-title { display: none !important; }
         .spatial-edge-hints {
@@ -474,6 +481,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
         session.setHintListener((hints) => renderSpatialHints(hintRoot, hints));
       }
       setSpatialPanelsDomHidden(root, true);
+      root.classList.toggle("android-camera-panels-active", useAndroidCameraPanels);
       refreshSpatialPanels();
     } catch (error) {
       failSpatialPresentation(error);
@@ -862,10 +870,51 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     runCommand(command);
   };
   const onSpatialPresentation = (event: Event): void => {
-    const detail = (event as CustomEvent<{ active?: boolean; expanded?: boolean }>).detail;
+    const detail = (event as CustomEvent<{
+      active?: boolean;
+      expanded?: boolean;
+      androidLayout?: boolean;
+      orientation?: {
+        alpha: number;
+        beta: number;
+        gamma: number;
+        screenAngleDegrees: number;
+      } | null;
+    }>).detail;
     if (typeof detail?.active !== "boolean") return;
-    setSpatialPresentation(detail.active, "camera", detail.expanded ?? spatialExpanded);
+    setSpatialPresentation(
+      detail.active,
+      "camera",
+      detail.expanded ?? spatialExpanded,
+      undefined,
+      detail.androidLayout === true,
+    );
+    if (detail.androidLayout && detail.orientation) {
+      renderer.updateCameraViewOrientation(detail.orientation);
+    }
   };
+  const onCameraLookOrientation = (event: Event): void => {
+    const detail = (event as CustomEvent<{
+      alpha?: number;
+      beta?: number;
+      gamma?: number;
+      screenAngleDegrees?: number;
+    }>).detail;
+    if (
+      typeof detail?.alpha === "number" &&
+      typeof detail.beta === "number" &&
+      typeof detail.gamma === "number" &&
+      typeof detail.screenAngleDegrees === "number"
+    ) {
+      renderer.updateCameraViewOrientation({
+        alpha: detail.alpha,
+        beta: detail.beta,
+        gamma: detail.gamma,
+        screenAngleDegrees: detail.screenAngleDegrees,
+      });
+    }
+  };
+  const onCameraLookOrientationChange = (): void => renderer.rebaseCameraViewOrientation();
 
   const onInput = (action: InputAction): void => {
     if (spatialParticleDrag.handle(action)) return;
@@ -977,6 +1026,8 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   });
   root.addEventListener("click", onCommandClick);
   root.addEventListener("mma:spatial-presentation", onSpatialPresentation);
+  root.addEventListener("mma:camera-look-orientation", onCameraLookOrientation);
+  root.addEventListener("mma:camera-look-orientation-change", onCameraLookOrientationChange);
   root.addEventListener("mma:xr-diagnostics-update", refreshSpatialPanels);
   renderState(store.getState());
   store.events.emit("module_started", {
@@ -997,6 +1048,8 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     root.removeEventListener("mma:local-telemetry", onLocalTelemetry);
     root.removeEventListener("click", onCommandClick);
     root.removeEventListener("mma:spatial-presentation", onSpatialPresentation);
+    root.removeEventListener("mma:camera-look-orientation", onCameraLookOrientation);
+    root.removeEventListener("mma:camera-look-orientation-change", onCameraLookOrientationChange);
     root.removeEventListener("mma:xr-diagnostics-update", refreshSpatialPanels);
     clearSpatialPresentation();
     narrationPlayer.dispose();

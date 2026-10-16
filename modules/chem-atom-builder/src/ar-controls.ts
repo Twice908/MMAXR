@@ -117,9 +117,18 @@ export function buildXrDiagnosticsText(data: XrDiagnosticsData): string {
     `Required look angles L/R/U/D: ${scene.spatialLayoutLookAngles
       ? `${scene.spatialLayoutLookAngles.leftDegrees.toFixed(1)} / ${scene.spatialLayoutLookAngles.rightDegrees.toFixed(1)} / ${scene.spatialLayoutLookAngles.upDegrees.toFixed(1)} / ${scene.spatialLayoutLookAngles.downDegrees.toFixed(1)} deg`
       : "unavailable"}`,
+    `Camera look yaw/pitch: ${scene.cameraLookAngles
+      ? `${scene.cameraLookAngles.yawDegrees.toFixed(1)} / ${scene.cameraLookAngles.pitchDegrees.toFixed(1)} deg`
+      : "inactive"}`,
+    `Camera look limits yaw/pitch: ${scene.cameraLookLimits
+      ? `${scene.cameraLookLimits.yawDegrees.toFixed(1)} / ${scene.cameraLookLimits.pitchDegrees.toFixed(1)} deg`
+      : "inactive"}`,
     `Layout fits at minimum scale: ${scene.spatialLayoutFitsAtMinimumScale == null
       ? "unavailable"
       : scene.spatialLayoutFitsAtMinimumScale ? "yes" : "no"}`,
+    `Camera layout fits at minimum scale (portrait/landscape): ${scene.cameraFitsAtMinimumScale
+      ? `${scene.cameraFitsAtMinimumScale.portrait ? "yes" : "no"} / ${scene.cameraFitsAtMinimumScale.landscape ? "yes" : "no"}`
+      : "inactive"}`,
     `Panel group world rotation (x, y, z, w): ${formatRotation(scene.panelGroupWorldRotation)}`,
     `Atom position relative to model-panel centre: ${formatPosition(scene.modelStage?.relativeToModelPanelCenter ?? null)}`,
     `Model stage position: ${formatPosition(scene.modelStage?.position ?? null)}`,
@@ -403,6 +412,23 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
     root.dispatchEvent(new Event("mma:xr-diagnostics-update"));
     return report;
   };
+  const onSpatialPresentationDiagnostics = (event: Event): void => {
+    const detail = (event as CustomEvent<{
+      active?: boolean;
+      androidLayout?: boolean;
+    }>).detail;
+    if (!diagnostics) return;
+    if (detail?.active && detail.androidLayout) {
+      if (diagnosticsRefresh === null) {
+        diagnosticsRefresh = globalThis.setInterval(() => {
+          if (!disposed) updateDiagnostics();
+        }, 500);
+      }
+    } else if (!spatialActive && diagnosticsRefresh !== null) {
+      globalThis.clearInterval(diagnosticsRefresh);
+      diagnosticsRefresh = null;
+    }
+  };
   const onInputSourcesChange = (): void => {
     latestSessionInfo = controller.sessionInfo;
     updateDiagnostics();
@@ -582,6 +608,7 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
     });
   };
   root.addEventListener("mma:xr-runtime-error", onSpatialRuntimeError);
+  root.addEventListener("mma:spatial-presentation", onSpatialPresentationDiagnostics);
 
   if (diagnostics) {
     updateDiagnostics();
@@ -715,6 +742,7 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
   return async () => {
     disposed = true;
     root.removeEventListener("mma:xr-runtime-error", onSpatialRuntimeError);
+    root.removeEventListener("mma:spatial-presentation", onSpatialPresentationDiagnostics);
     if (statusDismissTimeout !== null) globalThis.clearTimeout(statusDismissTimeout);
     statusDismissTimeout = null;
     root.removeEventListener("click", onAction);

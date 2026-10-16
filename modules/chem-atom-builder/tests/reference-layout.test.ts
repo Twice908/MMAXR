@@ -8,6 +8,7 @@ import {
   atomBuilderAndroidReference,
 } from "../src/reference-layout-android.js";
 import { calculateSpatialLayoutLookAngles } from "../../../packages/engine-render/src/visuals/spatial-placement.js";
+import { spatialHitTargetSizeDp } from "../../../packages/engine-render/src/visuals/spatial-primitives.js";
 import { horizonTokens } from "../../../packages/engine-render/src/horizon-tokens.js";
 import { ANDROID_PANEL_LIMITS, xrTokens } from "../../../packages/engine-render/src/xr-tokens.js";
 
@@ -32,23 +33,24 @@ describe("Atom Builder desktop reference layout data", () => {
         const layout = atomBuilderAndroidReference;
         const regions = new Map(layout.regions.map((region) => [region.id, region]));
         expect(layout.source.canvasPx).toEqual({ width: 1320, height: 1051 });
-        expect(layout.source.shellBoundsPx).toEqual({ x: 5, y: -8, width: 1312, height: 1018 });
+        expect(layout.source.shellBoundsPx).toEqual({ x: 5, y: -8, width: 1312, height: 1084 });
         expect(layout.shell.normalizedToShellWidth).toEqual({
           x: 0,
           y: 0,
           width: 1,
-          height: 1018 / 1312,
+          height: 1084 / 1312,
         });
         expect(Object.keys(layout.panels)).toEqual(["hints", "model", "particles", "mission"]);
         expect(layout.panels.model.sourcePx).toEqual({ x: 470, y: 123, width: 380, height: 380 });
-        expect(layout.missingFromDesktop).toEqual(expect.arrayContaining([
+        expect(layout.missingFromDesktop).toEqual([
           "MMAXR brand/header and Atom Builder title/header",
-          "Hint, Check, and Free play action buttons",
-        ]));
+        ]);
         expect(regions.get("captionTextArea")?.rect).toBeNull();
-        expect(regions.get("hintButton")?.rect).toBeNull();
-        expect(regions.get("checkButton")?.rect).toBeNull();
-        expect(regions.get("freePlayButton")?.rect).toBeNull();
+        expect(layout.ownerAddedNotInPng).toEqual(["hintButton", "checkButton", "freePlayButton"]);
+        for (const id of layout.ownerAddedNotInPng) {
+          expect(regions.get(id)?.rect).not.toBeNull();
+          expect(regions.get(id)?.note).toMatch(/Added by owner; not in the supplied PNG/);
+        }
         expect(regions.get("positionSliderTrack")?.orientation).toBe("horizontal");
         expect(regions.get("scaleSliderTrack")?.orientation).toBe("horizontal");
         expect(regions.get("positionSliderLabel")?.label).toBe("Position");
@@ -138,7 +140,38 @@ describe("Atom Builder desktop reference layout data", () => {
             projectionY,
           );
           expect(framing.fitsInView, `${viewport.width}x${viewport.height}`).toBe(true);
-        }
+      }
+  });
+
+    it("records the body-text size at fit-all scale in portrait and landscape", () => {
+      const verticalFov = 60 * Math.PI / 180;
+      const textHeightMeters = xrTokens.typography.body.sizeDp *
+        horizonTokens.metresPerDp * ANDROID_PANEL_LIMITS.scale.min;
+      const pixelsAtViewportHeight = (height: number): number =>
+        textHeightMeters * height /
+        (2 * ANDROID_PANEL_LIMITS.distanceMeters.default * Math.tan(verticalFov / 2));
+
+      expect(pixelsAtViewportHeight(915)).toBeCloseTo(3.9, 1);
+      expect(pixelsAtViewportHeight(412)).toBeCloseTo(1.8, 1);
+      expect(pixelsAtViewportHeight(915)).toBeLessThan(12);
+      expect(pixelsAtViewportHeight(412)).toBeLessThan(12);
+    });
+
+    it("keeps the owner-added action-pill hit areas at least 48 dp", () => {
+      const regions = new Map(atomBuilderAndroidReference.regions.map((region) => [region.id, region]));
+      for (const id of atomBuilderAndroidReference.ownerAddedNotInPng) {
+        const rect = regions.get(id)?.rect?.sourcePx;
+        if (!rect) throw new Error(`Android action pill ${id} has no measured bounds.`);
+        const visibleSize = {
+          widthDp: rect.width / atomBuilderAndroidReference.source.shellWidthPx *
+            xrTokens.shellWidthMeters / horizonTokens.metresPerDp,
+          heightDp: rect.height / atomBuilderAndroidReference.source.shellWidthPx *
+            xrTokens.shellWidthMeters / horizonTokens.metresPerDp,
+        };
+        const hitArea = spatialHitTargetSizeDp(visibleSize.widthDp, visibleSize.heightDp);
+        expect(hitArea.widthDp).toBeGreaterThanOrEqual(48);
+        expect(hitArea.heightDp).toBeGreaterThanOrEqual(48);
+      }
     });
   });
 

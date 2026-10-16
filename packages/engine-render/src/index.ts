@@ -172,6 +172,8 @@ export {
 export {
   GLASS,
   ANDROID_PANEL_LIMITS,
+  ANDROID_CAMERA_FOV_DEGREES,
+  LOOK_LIMITS,
   MODEL_LIMITS,
   MODEL_STAGE,
   PANEL_LIMITS,
@@ -210,7 +212,18 @@ export {
   type SpatialPanelHostOptions,
   type SpatialPanelMount,
   type SpatialPanelPhase,
+  type SpatialBackgroundPointerEvent,
 } from "./visuals/spatial-panel-host.js";
+export {
+  cameraDragLookDelta,
+  calculateCameraLookLimits,
+  deviceOrientationQuaternion,
+  relativeDeviceLookAngles,
+  softClampCameraAngle,
+  type CameraLookAngles,
+  type CameraLookLimits,
+  type DeviceOrientationSample,
+} from "./visuals/camera-look-around.js";
 export {
   calculatePanelGroupPlacement,
   calculatePanelGroupPosition,

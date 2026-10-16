@@ -10,6 +10,13 @@ import type {
 
 export type SpatialPanelPhase = "move" | "down" | "up" | "cancel";
 
+export interface SpatialBackgroundPointerEvent {
+  readonly phase: SpatialPanelPhase;
+  readonly pointerId: number;
+  readonly clientX: number;
+  readonly clientY: number;
+}
+
 export interface SpatialPanelMount {
   readonly panel: GlassPanel;
   readonly position?: Readonly<{ x: number; y: number; z: number }>;
@@ -33,6 +40,7 @@ export interface SpatialPanelHostOptions {
   /** Receive the shared action vocabulary for particle-token ray gestures. */
   readonly onSpatialInput?: (action: InputAction) => void;
   readonly onWheel?: (ray: THREE.Ray, deltaY: number) => boolean;
+  readonly onBackgroundPointer?: (event: SpatialBackgroundPointerEvent) => void;
 }
 
 interface PanelHit {
@@ -98,6 +106,7 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
     shouldIgnorePointerTarget,
     onSpatialInput,
     onWheel,
+    onBackgroundPointer,
   } = options;
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
@@ -109,6 +118,8 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
   const hoveredTargetCounts = new Map<SpatialPointerTarget, number>();
   const pressedTargets = new Map<string, SpatialPointerTarget>();
   const pressedTargetSources = new Map<string, SpatialPointerSource>();
+  const activeTouchPointerIds = new Set<number>();
+  const backgroundPointerIds = new Set<number>();
   const collapsed = new Map<GlassPanel, boolean>();
   const panelObjects = panels.map(({ panel }) => panel.object3d);
   const pointerTargetObjects = pointerTargets.map(({ object3d }) => object3d);
@@ -536,6 +547,40 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
 
   const consumePointerEvent = (event: PointerEvent, phase: SpatialPanelPhase): void => {
     if (shouldIgnorePointerTarget?.(event.target)) return;
+    if (event.pointerType === "touch") {
+      if (phase === "down") activeTouchPointerIds.add(event.pointerId);
+      if (phase === "up" || phase === "cancel") activeTouchPointerIds.delete(event.pointerId);
+    }
+    if (backgroundPointerIds.has(event.pointerId)) {
+      if (phase === "move" || phase === "up" || phase === "cancel") {
+        onBackgroundPointer?.({
+          phase,
+          pointerId: event.pointerId,
+          clientX: event.clientX,
+          clientY: event.clientY,
+        });
+      }
+      if (phase === "up" || phase === "cancel") {
+        backgroundPointerIds.delete(event.pointerId);
+        releaseCapturedPointer(event.pointerId);
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      return;
+    }
+    if (phase === "down" && event.pointerType === "touch" && activeTouchPointerIds.size > 1) {
+      for (const pointerId of backgroundPointerIds) {
+        onBackgroundPointer?.({
+          phase: "cancel",
+          pointerId,
+          clientX: event.clientX,
+          clientY: event.clientY,
+        });
+        backgroundPointerIds.delete(pointerId);
+        releaseCapturedPointer(pointerId);
+      }
+    }
     const ray = screenRay(event);
     if (!ray) return;
     const sourceId = `pointer:${event.pointerId}`;
@@ -571,6 +616,28 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
     const consumed = routeHit(panelHit, phase, sourceId, source, () => undefined);
     if (consumed) {
       if (phase === "down" && "setPointerCapture" in pointerTarget) {
+        pointerTarget.setPointerCapture(event.pointerId);
+        capturedPointerIds.add(event.pointerId);
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      return;
+    }
+    if (
+      phase === "down" &&
+      source === "touch" &&
+      activeTouchPointerIds.size === 1 &&
+      onBackgroundPointer
+    ) {
+      backgroundPointerIds.add(event.pointerId);
+      onBackgroundPointer({
+        phase,
+        pointerId: event.pointerId,
+        clientX: event.clientX,
+        clientY: event.clientY,
+      });
+      if ("setPointerCapture" in pointerTarget) {
         pointerTarget.setPointerCapture(event.pointerId);
         capturedPointerIds.add(event.pointerId);
       }
@@ -643,6 +710,16 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
         dispatchParticleDrag("cancel", particle, sourceId, new THREE.Ray());
         particleDrags.delete(sourceId);
       }
+      for (const pointerId of backgroundPointerIds) {
+        backgroundPointerIds.delete(pointerId);
+        onBackgroundPointer?.({
+          phase: "cancel",
+          pointerId,
+          clientX: 0,
+          clientY: 0,
+        });
+      }
+      activeTouchPointerIds.clear();
     }
     if (enabled) {
       pointerTarget.addEventListener("pointermove", onPointerMove, true);

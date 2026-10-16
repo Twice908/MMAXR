@@ -284,6 +284,12 @@ export const ANDROID_PANEL_LIMITS = Object.freeze({
   scale: { min: 0.4, default: 0.65, max: 1 },
   distanceMeters: { min: 1.1, default: 1.25, max: 1.8 },
 });
+export const ANDROID_CAMERA_FOV_DEGREES = 60;
+export const LOOK_LIMITS = Object.freeze({
+  marginDegrees: 8,
+  smoothing: 0.18,
+  dragRadiansPerPixel: 0.003,
+});
 export const MODEL_LIMITS = xrTokens.modelLimits;
 export const MODEL_STAGE = xrTokens.modelStage;
 

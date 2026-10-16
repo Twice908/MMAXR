@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   cameraViewErrorReason,
   detectCameraViewCapability,
+  isAndroidCameraDevice,
+  requestCameraOrientationPermission,
   stopCameraStream,
 } from "./camera-view.js";
 
@@ -45,6 +47,32 @@ describe("camera view capability", () => {
       available: false,
       reason: "Use AR for camera-based viewing on this device.",
     });
+  });
+});
+
+describe("camera view motion permission", () => {
+  it("gates Android camera layout by the Android user agent only", () => {
+    expect(isAndroidCameraDevice("Mozilla/5.0 (Linux; Android 14; Pixel)")).toBe(true);
+    expect(isAndroidCameraDevice("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0)")).toBe(false);
+    expect(isAndroidCameraDevice("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")).toBe(false);
+  });
+
+  it("requests orientation permission from the supplied camera-start view", async () => {
+    const requestPermission = vi.fn().mockResolvedValue("granted");
+    const view = {
+      DeviceOrientationEvent: { requestPermission },
+    } as unknown as Window;
+    await expect(requestCameraOrientationPermission(view)).resolves.toBe(true);
+    expect(requestPermission).toHaveBeenCalledOnce();
+  });
+
+  it("uses drag fallback when orientation is unavailable or permission is denied", async () => {
+    await expect(requestCameraOrientationPermission(null)).resolves.toBe(false);
+    const requestPermission = vi.fn().mockResolvedValue("denied");
+    const view = {
+      DeviceOrientationEvent: { requestPermission },
+    } as unknown as Window;
+    await expect(requestCameraOrientationPermission(view)).resolves.toBe(false);
   });
 });
 

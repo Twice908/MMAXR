@@ -95,9 +95,9 @@ Do not change existing UI behavior as part of adopting these tokens. The table
 maps concepts only; exact visual replacement and interaction details require
 the kit reference.
 
-## Existing camera-view dock and immersive surfaces
+## Existing non-Android camera-view dock and immersive surfaces
 
-The camera-view dock has equal-width Mission, Particles, Element, and
+The non-Android Camera-view dock has equal-width Mission, Particles, Element, and
 Sound button tabs, all visible within 92% of the viewport. Settings is present
 only when DOM overlay is unavailable. The selected tab uses the primary-button
 role; unselected tabs use secondary. Each button provides default, hover,
@@ -112,25 +112,36 @@ remain available during free play. The one-source tooltip copy is
 “Tap a tab to open it. Open Particles to build the atom.” and disappears on
 the first tab tap.
 
-Camera-view placement is sampled from viewer heading and gaze at initial
+Non-Android Camera-view dock placement is sampled from viewer heading and gaze at initial
 placement/reset, about 0.7 m ahead in the lower viewport. It is independent of
 the atom's surface placement. World-space/headset XR keeps the desktop/headset
 reference layout. Handheld Android immersive AR/VR selects the measured
 `reference-layout-android.ts`: top-row controls, Hints/model/Particles panels,
 Mission beneath Hints and model, and one horizontal Scale/Position slider pair.
 It uses the existing shell glass variant behind the item union plus the
-24 px shell-padding token; the PNG shows no shell edge. The model stage,
-particles, properties, mission and hints reuse their existing builders and
-actions. The Android reference has no MMAXR/Atom Builder header or Hint, Check,
-and Free play buttons, so no positions are assigned to those controls.
-Screen-mode and Camera-view UI are unchanged. Exact component visuals remain
-subject to the kit reference.
+24 px shell-padding token; the PNG shows no shell edge. Owner-added Hint,
+Check, and Free play pills sit below the sliders and labels, use the desktop
+action-button dimensions/style, and are explicitly marked as not present in
+the PNG. The shell union extends below the source image to cover them. The
+MMAXR/Atom Builder header remains omitted. The model stage, particles,
+properties, mission, hints, and action buttons reuse the shared builders and
+actions. At minimum scale, 16 dp body text is below a comfortable reading size
+in both phone orientations; preserve that visible trade-off rather than hiding
+content.
 
-The camera-view dock remains separate from these immersive panels. Android
-immersive AR/VR uses the shared `ModelStage` inside the central model panel and
-the existing shared pointer host. XR `transient-pointer` selects reach that
-host as taps; they do not provide continuous drag or multi-touch gestures.
-No second input system is introduced.
+Android Camera view reuses the same Android `PanelGroup` and `ModelStage` over
+the transparent local-video feed; the old DOM dock content is collapsed while
+the group is active, with its existing expand/collapse header preserved as a
+fallback. This path is selected by an Android User-Agent check and does
+not affect desktop Camera or headset sessions. Camera look-around uses
+DeviceOrientation relative to the initial pose, with one-finger empty-background
+drag as a fallback. Device orientation permission is requested from the
+existing Camera-start gesture; Reset View recenters both ModelStage and camera
+look-around. The group stays fixed and upright while only the view rotates.
+Immersive Android AR/VR continues to follow the XR viewer pose without a
+separate look-around input. Both Camera and XR touch paths use the same
+pointer-priority host: ModelStage, controls/panels, then background drag only
+for Camera view.
 
 ## TODO(kit) register
 

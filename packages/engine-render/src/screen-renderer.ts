@@ -9,10 +9,21 @@ import {
 import {
   dpToMeters,
   MODEL_STAGE,
+  ANDROID_CAMERA_FOV_DEGREES,
   ANDROID_PANEL_LIMITS,
+  LOOK_LIMITS,
   PANEL_LIMITS,
   xrTokens,
 } from "./xr-tokens.js";
+import {
+  cameraDragLookDelta,
+  calculateCameraLookLimits,
+  deviceOrientationQuaternion,
+  relativeDeviceLookAngles,
+  softClampCameraAngle,
+  type CameraLookLimits,
+  type DeviceOrientationSample,
+} from "./visuals/camera-look-around.js";
 import {
   createGlassSurface,
   disposeGlassSurface,
@@ -305,9 +316,10 @@ function readSpatialDockSafeRect(
 export function setScreenRendererTransparentBackground(
   host: HTMLElement,
   transparent: boolean,
+  androidCameraLayout = false,
 ): void {
   host.dispatchEvent(new CustomEvent(SCREEN_BACKGROUND_MODE_EVENT, {
-    detail: transparent,
+    detail: androidCameraLayout ? { transparent, androidCameraLayout } : transparent,
   }));
 }
 
@@ -379,6 +391,9 @@ export interface XrSceneDiagnostics {
   readonly panelGroupWorldRotation?: Readonly<{ x: number; y: number; z: number; w: number }> | null;
   readonly panelGroupDistanceMeters?: number | null;
   readonly panelGroupSliderValues?: Readonly<{ positionMeters: number; scale: number }> | null;
+  readonly cameraLookAngles?: Readonly<{ yawDegrees: number; pitchDegrees: number }> | null;
+  readonly cameraLookLimits?: Readonly<{ yawDegrees: number; pitchDegrees: number }> | null;
+  readonly cameraFitsAtMinimumScale?: Readonly<{ portrait: boolean; landscape: boolean }> | null;
   readonly activeSpatialLayout?: "headset" | "android" | null;
   readonly spatialLayoutLimits?: Readonly<{
     scale: Readonly<{ min: number; default: number; max: number }>;
@@ -706,6 +721,12 @@ export class ScreenSceneRenderer {
   private dragParticle: string | null = null;
   private arActive = false;
   private cameraViewActive = false;
+  private androidCameraLayoutActive = false;
+  private cameraLookYaw = 0;
+  private cameraLookPitch = 0;
+  private cameraLookLimits: CameraLookLimits | null = null;
+  private cameraOrientationBaseline: THREE.Quaternion | null = null;
+  private cameraDragPosition: Readonly<{ x: number; y: number }> | null = null;
   private currentFrame: ScreenSceneFrame | null = null;
   private activeXRSession: XRSession | null = null;
   private activeXRMode: "immersive-ar" | "immersive-vr" | null = null;
@@ -1220,9 +1241,11 @@ export class ScreenSceneRenderer {
     if (panelWorld) {
       const viewerPosition = viewerPose
         ? new THREE.Vector3(viewerPose.position.x, viewerPose.position.y, viewerPose.position.z)
-        : this.renderer.xr.isPresenting
-          ? this.renderer.xr.getCamera().getWorldPosition(new THREE.Vector3())
-          : null;
+        : this.androidCameraLayoutActive
+          ? this.camera.getWorldPosition(new THREE.Vector3())
+          : this.renderer.xr.isPresenting
+            ? this.renderer.xr.getCamera().getWorldPosition(new THREE.Vector3())
+            : null;
       if (viewerPosition) panelGroupDistanceMeters = viewerPosition.distanceTo(panelWorld);
     }
     const spatialLayoutLimits = this.activeSpatialLayout === "android"
@@ -1234,9 +1257,11 @@ export class ScreenSceneRenderer {
       ({ id }) => id === "model-panel",
     );
     const xrCamera = this.renderer.xr.getCamera();
-    const projectionCamera = xrCamera instanceof THREE.ArrayCamera
-      ? xrCamera.cameras[0] ?? xrCamera
-      : xrCamera;
+    const projectionCamera = this.androidCameraLayoutActive
+      ? this.camera
+      : xrCamera instanceof THREE.ArrayCamera
+        ? xrCamera.cameras[0] ?? xrCamera
+        : xrCamera;
     const projectionX = projectionCamera.projectionMatrix.elements[0]!;
     const projectionY = projectionCamera.projectionMatrix.elements[5]!;
     const spatialLayoutLookAngles = this.activeSpatialSurfaceLayout && activeModelPanel &&
@@ -1266,6 +1291,27 @@ export class ScreenSceneRenderer {
           projectionX,
           projectionY,
         ).fitsInView
+      : null;
+    const cameraFitsAtMinimumScale = this.androidCameraLayoutActive &&
+      this.activeSpatialSurfaceLayout && activeModelPanel
+      ? (() => {
+          const projectionY = 1 / Math.tan(
+            THREE.MathUtils.degToRad(ANDROID_CAMERA_FOV_DEGREES) / 2,
+          );
+          const fits = (aspect: number): boolean =>
+            calculateSpatialLayoutLookAngles(
+              {
+                shell: this.activeSpatialSurfaceLayout!.shell,
+                modelPanel: activeModelPanel.rect,
+              },
+              xrTokens.shellWidthMeters,
+              ANDROID_PANEL_LIMITS.distanceMeters.default,
+              ANDROID_PANEL_LIMITS.scale.min,
+              projectionY / aspect,
+              projectionY,
+            ).fitsInView;
+          return { portrait: fits(412 / 915), landscape: fits(915 / 412) };
+        })()
       : null;
     let atomViewerSpace: XrSceneDiagnostics["atomViewerSpace"] = null;
     let atomInsideViewFrustum: boolean | null = null;
@@ -1385,6 +1431,19 @@ export class ScreenSceneRenderer {
         : null,
       panelGroupDistanceMeters,
       panelGroupSliderValues: this.panelGroupSliderValues,
+      cameraLookAngles: this.androidCameraLayoutActive
+        ? {
+            yawDegrees: THREE.MathUtils.radToDeg(this.cameraLookYaw),
+            pitchDegrees: THREE.MathUtils.radToDeg(this.cameraLookPitch),
+          }
+        : null,
+      cameraLookLimits: this.cameraLookLimits
+        ? {
+            yawDegrees: THREE.MathUtils.radToDeg(this.cameraLookLimits.yawRadians),
+            pitchDegrees: THREE.MathUtils.radToDeg(this.cameraLookLimits.pitchRadians),
+          }
+        : null,
+      cameraFitsAtMinimumScale,
       activeSpatialLayout: this.activeSpatialLayout,
       spatialLayoutLimits,
       spatialLayoutLookAngles: spatialLayoutLookAngles
@@ -1538,11 +1597,38 @@ export class ScreenSceneRenderer {
 
   /** Restore the screen camera or immersive ModelStage view without changing atom state. */
   resetView(): void {
+    if (this.androidCameraLayoutActive) this.resetCameraViewLookAround();
     if (this.resetModelStageView()) return;
     this.yaw = 0;
     this.pitch = 0;
     this.distance = screenZoomConfig.defaultDistance;
     this.updateCamera();
+  }
+
+  /** Update the Android Camera view from a device orientation relative to its initial pose. */
+  updateCameraViewOrientation(sample: DeviceOrientationSample): void {
+    if (!this.androidCameraLayoutActive) return;
+    const orientation = deviceOrientationQuaternion(sample);
+    if (!this.cameraOrientationBaseline) {
+      this.cameraOrientationBaseline = orientation;
+      return;
+    }
+    const look = relativeDeviceLookAngles(this.cameraOrientationBaseline, orientation);
+    this.setCameraLookAngles(look.yawRadians, look.pitchRadians);
+  }
+
+  /** Rebase the device orientation after a screen rotation without moving the view. */
+  rebaseCameraViewOrientation(): void {
+    this.cameraOrientationBaseline = null;
+  }
+
+  /** Recenter Camera view look-around and the ModelStage through Reset View. */
+  resetCameraViewLookAround(): void {
+    this.cameraLookYaw = 0;
+    this.cameraLookPitch = 0;
+    this.cameraOrientationBaseline = null;
+    this.cameraDragPosition = null;
+    this.applyCameraLookToCamera();
   }
 
   /** Rotate the atom view in AR without changing its fixed world anchor. */
@@ -1620,8 +1706,11 @@ export class ScreenSceneRenderer {
     if (!canCreateSpatialPanels(this.arActive, this.cameraViewActive)) {
       throw new Error("Spatial panels require an active AR or camera-view presentation.");
     }
-    if (this.arActive && emptySurfaceLayout) {
-      const layoutName = selectSpatialLayoutName(this.spatialPresentationProfile, true);
+    if (emptySurfaceLayout && (
+      this.arActive ||
+      (this.cameraViewActive && this.androidCameraLayoutActive)
+    )) {
+      const layoutName = selectSpatialLayoutName(this.spatialPresentationProfile, this.arActive || this.androidCameraLayoutActive);
       const layout = "android" in emptySurfaceLayout
         ? emptySurfaceLayout[layoutName]
         : emptySurfaceLayout;
@@ -1991,7 +2080,9 @@ export class ScreenSceneRenderer {
     pointerTarget: HTMLElement,
     onSpatialInput?: (action: InputAction) => void,
   ): SpatialPanelSession {
-    const viewerCamera = this.renderer.xr.getCamera();
+    const viewerCamera = this.cameraViewActive
+      ? this.camera
+      : this.renderer.xr.getCamera();
     const camera = viewerCamera instanceof THREE.ArrayCamera
       ? viewerCamera.cameras[0] ?? viewerCamera
       : viewerCamera;
@@ -2774,6 +2865,7 @@ export class ScreenSceneRenderer {
             )));
           }
           this.panelGroupSliderValues = { positionMeters: distanceMeters, scale };
+          this.refreshCameraLookLimits();
           this.render();
         },
       });
@@ -2803,6 +2895,7 @@ export class ScreenSceneRenderer {
           scale = clampPanelGroupScale(next, panelLimits);
           applyPanelGroupScale(group, scale, panelLimits);
           this.panelGroupSliderValues = { positionMeters: distanceMeters, scale };
+          this.refreshCameraLookLimits();
           this.render();
         },
       });
@@ -2918,6 +3011,7 @@ export class ScreenSceneRenderer {
       this.activeSpatialLayout = layoutName;
       this.activeSpatialSurfaceLayout = layout;
       this.panelGroupSliderValues = { positionMeters: positionDistance, scale };
+      this.refreshCameraLookLimits();
     } catch (error) {
       for (const row of propertyRows) row.dispose();
       for (const primitive of primitives) primitive.dispose();
@@ -2985,6 +3079,19 @@ export class ScreenSceneRenderer {
     const initialViewerPose = this.firstNonNullViewerPose ?? this.latestFramePose;
     if (initialViewerPose) {
       placeFromViewerPose(initialViewerPose);
+    } else if (this.cameraViewActive && this.androidCameraLayoutActive) {
+      camera.updateMatrixWorld(true);
+      const cameraPosition = camera.getWorldPosition(new THREE.Vector3());
+      const cameraOrientation = camera.getWorldQuaternion(new THREE.Quaternion());
+      placeFromViewerPose({
+        position: { x: cameraPosition.x, y: cameraPosition.y, z: cameraPosition.z },
+        orientation: {
+          x: cameraOrientation.x,
+          y: cameraOrientation.y,
+          z: cameraOrientation.z,
+          w: cameraOrientation.w,
+        },
+      });
     } else {
       this.pendingSpatialDockReposition = pendingPlacement;
     }
@@ -3002,6 +3109,9 @@ export class ScreenSceneRenderer {
       },
       enablePointerEvents: true,
       ...(onSpatialInput ? { onSpatialInput } : {}),
+      ...(this.cameraViewActive && this.androidCameraLayoutActive
+        ? { onBackgroundPointer: (event) => this.handleCameraBackgroundPointer(event) }
+        : {}),
       onWheel: (_ray, deltaY) => {
         const pose = this.modelStagePose;
         if (!pose) return false;
@@ -3217,6 +3327,7 @@ export class ScreenSceneRenderer {
       this.camera.aspect = width / height;
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(width, height, false);
+      if (this.androidCameraLayoutActive) this.refreshCameraLookLimits();
     }
     this.positionSlotMarkers();
     this.render();
@@ -3227,11 +3338,30 @@ export class ScreenSceneRenderer {
   };
 
   private readonly onBackgroundModeChange = (event: Event): void => {
-    const transparent = (event as CustomEvent<unknown>).detail;
-    if (typeof transparent !== "boolean" || this.arActive) {
+    const detail = (event as CustomEvent<unknown>).detail;
+    const transparent = typeof detail === "boolean"
+      ? detail
+      : typeof detail === "object" && detail !== null &&
+        "transparent" in detail && typeof detail.transparent === "boolean"
+        ? detail.transparent
+        : null;
+    if (transparent === null || this.arActive) {
       return;
     }
+    const androidCameraLayout = typeof detail === "object" && detail !== null &&
+      "androidCameraLayout" in detail && detail.androidCameraLayout === true;
     this.cameraViewActive = transparent;
+    this.androidCameraLayoutActive = transparent && androidCameraLayout;
+    this.camera.fov = this.androidCameraLayoutActive ? ANDROID_CAMERA_FOV_DEGREES : 42;
+    this.camera.updateProjectionMatrix();
+    if (!this.androidCameraLayoutActive) {
+      this.cameraLookLimits = null;
+      this.cameraLookYaw = 0;
+      this.cameraLookPitch = 0;
+      this.cameraOrientationBaseline = null;
+    } else {
+      this.applyCameraLookToCamera();
+    }
     this.scene.background = transparent ? null : this.screenBackground;
     this.renderer.setClearColor(0x000000, transparent ? 0 : 1);
     this.render();
@@ -3486,8 +3616,73 @@ export class ScreenSceneRenderer {
       horizontalDistance * Math.cos(this.yaw),
     );
     this.camera.lookAt(0, 0, 0);
+    this.applyCameraLookToCamera();
     this.positionSlotMarkers();
     this.render();
+  }
+
+  private refreshCameraLookLimits(): void {
+    const layout = this.activeSpatialSurfaceLayout;
+    const modelPanel = layout?.panels.find(({ id }) => id === "model-panel");
+    if (!this.androidCameraLayoutActive || !layout || !modelPanel) {
+      this.cameraLookLimits = null;
+      return;
+    }
+    this.cameraLookLimits = calculateCameraLookLimits(
+      layout,
+      modelPanel.rect,
+      xrTokens.shellWidthMeters,
+      this.panelGroupSliderValues?.positionMeters ?? ANDROID_PANEL_LIMITS.distanceMeters.default,
+      this.spatialPanelGroup?.scale.x ?? ANDROID_PANEL_LIMITS.scale.default,
+      ANDROID_CAMERA_FOV_DEGREES,
+      this.camera.aspect,
+      LOOK_LIMITS.marginDegrees,
+    );
+  }
+
+  private setCameraLookAngles(yawRadians: number, pitchRadians: number): void {
+    this.refreshCameraLookLimits();
+    const limits = this.cameraLookLimits;
+    if (!limits) return;
+    const targetYaw = softClampCameraAngle(yawRadians, limits.yawRadians);
+    const targetPitch = softClampCameraAngle(pitchRadians, limits.pitchRadians);
+    this.cameraLookYaw += (targetYaw - this.cameraLookYaw) * LOOK_LIMITS.smoothing;
+    this.cameraLookPitch += (targetPitch - this.cameraLookPitch) * LOOK_LIMITS.smoothing;
+    this.applyCameraLookToCamera();
+    this.render();
+  }
+
+  private handleCameraBackgroundPointer(event: Readonly<{
+    phase: "move" | "down" | "up" | "cancel";
+    pointerId: number;
+    clientX: number;
+    clientY: number;
+  }>): void {
+    if (event.phase === "down") {
+      this.cameraDragPosition = { x: event.clientX, y: event.clientY };
+      return;
+    }
+    if (event.phase === "move" && this.cameraDragPosition) {
+      const delta = cameraDragLookDelta(
+        event.clientX - this.cameraDragPosition.x,
+        event.clientY - this.cameraDragPosition.y,
+        LOOK_LIMITS.dragRadiansPerPixel,
+      );
+      this.cameraDragPosition = { x: event.clientX, y: event.clientY };
+      this.setCameraLookAngles(
+        this.cameraLookYaw + delta.yawRadians,
+        this.cameraLookPitch + delta.pitchRadians,
+      );
+      return;
+    }
+    this.cameraDragPosition = null;
+  }
+
+  private applyCameraLookToCamera(): void {
+    if (!this.androidCameraLayoutActive) return;
+    this.camera.rotation.order = "YXZ";
+    this.camera.rotation.set(this.cameraLookPitch, this.cameraLookYaw, 0, "YXZ");
+    this.camera.updateMatrixWorld(true);
   }
 
   private updateArAtomScale(): void {

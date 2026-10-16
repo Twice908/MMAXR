@@ -47,8 +47,13 @@ export const SPATIAL_COMPONENT_REGISTRY: readonly SpatialComponentRegistryEntry[
     },
     {
       component: "SpatialPanelGroup",
-      props: ["layout", "scale", "distance", "profile"],
+      props: ["layout", "scale", "distance", "profile", "cameraLookLimits"],
       kitComponent: "PanelGroup + exactly one shared scale/position Slider pair",
+    },
+    {
+      component: "CameraLookAround",
+      props: ["orientation", "screenAngle", "yawLimit", "pitchLimit", "smoothing", "backgroundDrag"],
+      kitComponent: "Android Camera only; DeviceOrientation with one-finger empty-background drag fallback",
     },
     {
       component: "Stepper",
