@@ -1,6 +1,7 @@
 import "./shell.css";
 import "./camera-view.css";
 import { createIdGenerator } from "@mma/engine-core";
+import projectOptions from "virtual:iwsdk-project";
 import { mountCameraView } from "./camera-view.js";
 
 const appRoot = document.querySelector<HTMLElement>("#app");
@@ -13,11 +14,7 @@ const app: HTMLElement = appRoot;
 app.className = "app-shell";
 app.innerHTML = '<div class="shell-loading" role="status">Loading Atom Builder...</div>';
 
-if (import.meta.env.DEV && new URLSearchParams(window.location.search).has("glass-panels")) {
-  void import("@mma/engine-render")
-    .then(({ mountGlassPanelGallery }) => mountGlassPanelGallery(app))
-    .catch(showLoadError);
-} else if (import.meta.env.DEV && new URLSearchParams(window.location.search).has("narration-generator")) {
+if (import.meta.env.DEV && new URLSearchParams(window.location.search).has("narration-generator")) {
   void import("./narration-generator.js")
     .then(({ mountNarrationGenerator }) => mountNarrationGenerator(app))
     .catch(showLoadError);
@@ -27,11 +24,8 @@ if (import.meta.env.DEV && new URLSearchParams(window.location.search).has("glas
       if (manifest.modes[0] !== "screen") {
         throw new Error("This build supports the screen mode only.");
       }
-      mountAtomBuilder(app, {
-        diagnostics: import.meta.env.DEV,
-        // Official Meta controller and hand models, served from public/xr-input-profiles.
-        xrInputModelsPath: `${import.meta.env.BASE_URL}xr-input-profiles`,
-      });
+      // World options come from iwsdk.config.json, shared with the IWSDK editor.
+      mountAtomBuilder(app, { diagnostics: import.meta.env.DEV, worldOptions: projectOptions });
       const sceneHost = app.querySelector<HTMLElement>(".scene-viewport");
       if (!sceneHost) {
         throw new Error("Camera view could not find the screen scene.");

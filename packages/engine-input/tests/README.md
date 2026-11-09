@@ -8,7 +8,6 @@ The suite is intentionally divided by responsibility so regressions identify the
 tests/
 ├── helpers/
 │   ├── fake-dom.ts
-│   ├── fake-xr.ts
 │   └── test-actions.ts
 ├── action-dispatcher.test.ts
 ├── event-bus.test.ts
@@ -16,9 +15,6 @@ tests/
 ├── mouse.test.ts
 ├── raycast-picker.test.ts
 ├── touch.test.ts
-├── xr-buttons.test.ts
-├── xr-input-rig.test.ts
-├── xr-pinch.test.ts
 └── integration.test.ts
 ```
 
@@ -66,21 +62,6 @@ pnpm exec vitest run packages/engine-input/tests --coverage
 - cancellation
 - two-finger pinch scale
 - pointer capture/release
-
-### XR buttons and pinch (pure)
-- xr-standard button indices and analog hysteresis
-- thumbstick axes, radial deadzone, rescaling, one-stick fallback
-- edge detection
-- joint pinch hysteresis and hand-size scaling
-
-### XR input rig
-- controller trigger, squeeze, A/X, B/Y, thumbstick, and unmapped thumbstick click
-- events-only, gamepad-only, and merged signals without double presses
-- one press per source
-- hand pinch via gamepad, events, and joint fallback with ownership handover
-- tracking loss, source removal and switching, session end, dispose
-- phone-AR transient taps
-- paired zoom, haptics, pointer frames, diagnostics
 
 ### Picking
 - screen coordinate conversion

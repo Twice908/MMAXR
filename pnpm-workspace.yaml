@@ -5,6 +5,8 @@ packages:
   - "modules/*"
   - "tools/*"
 allowBuilds:
+  # Vite 7 (IWSDK dev plugin) needs esbuild's platform binary check.
+  esbuild: true
   onnxruntime-node: false
   protobufjs: false
   sharp: false
@@ -12,3 +14,8 @@ minimumReleaseAgeExclude:
   - '@vitest/mocker@5.0.3'
   - '@vitest/spy@5.0.3'
   - vitest@5.0.3
+# IWSDK ships and expects one three.js runtime: Meta's super-three fork. Every
+# package resolves to it so objects can move between IWSDK and our code.
+overrides:
+  three: npm:super-three@0.181.0
+  '@types/three': 0.181.0

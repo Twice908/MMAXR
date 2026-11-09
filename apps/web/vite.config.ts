@@ -2,6 +2,7 @@ import { createRequire } from "node:module";
 import { readFile } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { iwsdkDev } from "@iwsdk/vite-plugin-dev";
 import { defineConfig, loadEnv, type Plugin } from "vite";
 
 const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -18,13 +19,21 @@ export default defineConfig(({ command, mode }) => {
 			__PIPER_BASE_PATH__: JSON.stringify(piperBasePath),
 		},
 		assetsInclude: ["**/*.wav.gz", "**/*.mp3"],
+		// IWSDK dev tooling: Quest emulator (IWER), managed Runtime/Editor browser, HTTPS.
+		// `pnpm --filter @mma/web dev` runs `iwsdk dev`; `dev:runtime` is plain Vite.
+		server: { port: 5173, strictPort: true },
 		resolve: {
-			dedupe: ["three"],
+			// One three.js (super-three) and one UIKit graph, or UIKit instanceof checks fail.
+			dedupe: ["three", "@pmndrs/uikit", "@pmndrs/uikit-horizon"],
 		},
 		optimizeDeps: {
 			include: ["piper-tts-web", "wasm-media-encoders"],
+			exclude: ["@babylonjs/havok"],
 		},
-		plugins: command === "serve" ? [piperDevAssets()] : [],
+		plugins: [
+			iwsdkDev(),
+			...(command === "serve" ? [piperDevAssets()] : []),
+		],
 	};
 });
 

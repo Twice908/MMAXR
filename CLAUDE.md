@@ -13,7 +13,7 @@ Current status (update this block as work completes):
 - Done: Phase 3a-4a phone AR lesson flow with a world-fixed atom, DOM controls, a collapsible lesson panel, comfort safeguards, and touch-only view controls (pinch scale, one-finger rotation, reset); AR particle dragging is not enabled.
 - Done: Android handheld WebXR AR/VR selects the measured phone panel layout; world-space headset sessions keep the desktop/headset layout.
 - Done: Desktop screen camera view with local-only video, screen input, and clean media-track teardown; it does not use world tracking.
-- Done: XR input rebuilt as one `XrInputRig` (controllers, hands, phone taps) with procedural ray/hand visuals and `?xrdebug=1` input diagnostics; mock-tested only, still needs verification on a Quest (docs/adr/0004-xr-input-rig.md).
+- Done: Ported the 3D scene, XR sessions and XR input to IWSDK 1.0.1 (super-three 0.181); XR lesson UI uses the Horizon UI kit; glass panels and the custom input rig are removed (docs/adr/0005-iwsdk-runtime.md). Needs headset and Android AR checks.
 - Next: Review the eight assessment items and verify generated narration on desktop and phone.
 - Not started: Phase 2b live voice guide, remaining XR work (including headset VR and other 3a-4b work), portal link (Phase 4).
 
@@ -56,7 +56,9 @@ pnpm typecheck                     # all packages
 pnpm lint                          # includes dependency-boundary rules
 pnpm test                          # Vitest
 pnpm generate:narration             # generate local mock audio and captions
-pnpm --filter @mma/web dev         # dev server (http://localhost:5173)
+pnpm --filter @mma/web dev         # IWSDK dev session: Runtime/Editor browser + Quest emulator (https://localhost:5173)
+pnpm --filter @mma/web dev:runtime # plain Vite dev server only
+pnpm --filter @mma/web dev:down    # stop the IWSDK dev session
 pnpm --filter @mma/web build       # production build
 pnpm validate:manifests            # once the validator tool exists
 ```

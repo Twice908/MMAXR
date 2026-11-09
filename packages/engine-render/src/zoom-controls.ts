@@ -36,7 +36,7 @@ export interface ZoomControlsConfig {
  * The enable predicate lets immersive XR pass wheel gestures through untouched.
  */
 export function installZoomControls(
-  canvas: HTMLCanvasElement,
+  canvas: HTMLElement,
   getDistance: () => number,
   setDistance: (distance: number) => void,
   config: ZoomControlsConfig = screenZoomConfig,

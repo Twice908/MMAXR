@@ -1,6 +1,6 @@
 # ADR 0004: One XR input rig for controllers and hands
 
-Status: Accepted
+Status: Superseded by ADR 0005 (IWSDK runtime)
 
 ## Context
 

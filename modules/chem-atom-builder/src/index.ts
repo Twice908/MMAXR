@@ -19,18 +19,13 @@ import {
 } from "@mma/kit-chemistry";
 import {
   ScreenInputAdapter,
-  ScreenSceneRenderer,
-  XrInputRig,
-  formatXrInputDiagnostics,
+  SceneRenderer,
+  XR_COMMAND,
   arTouchGestureConfig,
   installZoomControls,
   screenZoomConfig,
-  spatialLayout,
   type InputAction,
-  type SpatialPanelEdgeHint,
-  type SpatialPanelSession,
-  type SpatialSurfaceLayout,
-  type SpatialSurfaceLayouts,
+  type WorldOptions,
 } from "@mma/engine-render";
 import {
   NarrationPlayer,
@@ -49,8 +44,6 @@ import sodiumItems from "../assessments/m2-sodium-ion.json";
 import carbon14Items from "../assessments/m3-carbon-14.json";
 import chlorideItems from "../assessments/m4-chloride-ion.json";
 import rawManifest from "../module.json";
-import { atomBuilderDesktopReference } from "./reference-layout.js";
-import { atomBuilderAndroidReference } from "./reference-layout-android.js";
 import {
   createAtomBuilderLearningReducer,
   createAtomBuilderLearningState,
@@ -59,25 +52,10 @@ import {
   type AtomBuilderLearningState,
 } from "./learning.js";
 import { layoutAtom } from "./layout.js";
-import {
-  buildSpatialPanelItems,
-  readSpatialPanelSources,
-  routeSpatialAction,
-  type SpatialPanelGroupLabels,
-} from "./spatial-panels.js";
-import {
-  isSpatialPresentationMode,
-  setSpatialPanelsDomHidden,
-  tryCreateSpatialPanels,
-} from "./spatial-presentation.js";
+import { NARRATION_COMMAND, buildXrLessonContent } from "./xr-lesson.js";
 import "./glass-tokens.css";
 import "./horizon-tokens.css";
 import "./atom-builder.css";
-import { placeSpatialHint } from "./spatial-hints.js";
-import {
-  blocksViewInputDuringParticleDrag,
-  createSpatialParticleDragHandler,
-} from "./spatial-particle-drag.js";
 
 interface LocalEventEntry {
   readonly type: string;
@@ -117,127 +95,11 @@ const assessmentItems: readonly AssessmentItem[] = [
   ...chlorideItems,
 ].map((item) => assessmentItemSchema.parse(item));
 const assessmentsById = new Map(assessmentItems.map((item) => [item.id, item]));
-const atomBuilderHeadsetSurfaceLayout: SpatialSurfaceLayout = {
-  shell: atomBuilderDesktopReference.shell.normalizedToShellWidth,
-  regions: referenceContentRegions(),
-  panels: [
-    {
-      id: "model-panel",
-      variant: "panel",
-      rect: atomBuilderDesktopReference.panels.model.normalizedToShellWidth,
-    },
-    {
-      id: "particles-panel",
-      variant: "panel",
-      rect: atomBuilderDesktopReference.panels.particles.normalizedToShellWidth,
-    },
-    {
-      id: "mission-panel",
-      variant: "card",
-      rect: atomBuilderDesktopReference.panels.mission.normalizedToShellWidth,
-    },
-    {
-      id: "hints-panel",
-      variant: "card",
-      rect: atomBuilderDesktopReference.panels.hints.normalizedToShellWidth,
-    },
-  ],
-  controls: {
-    hintButton: referenceRegionRect("hintButton"),
-    checkButton: referenceRegionRect("checkButton"),
-    freePlayButton: referenceRegionRect("freePlayButton"),
-    futureLogoSlot: referenceRegionRect("futureLogoSlot"),
-    positionSliderTrack: referenceRegionRect("positionSliderTrack"),
-    scaleSliderTrack: referenceRegionRect("scaleSliderTrack"),
-    resetViewButton: referenceRegionRect("resetViewButton"),
-    resetAtomButton: referenceRegionRect("resetAtomButton"),
-  },
-};
-const atomBuilderAndroidRegions = Object.fromEntries(
-  atomBuilderAndroidReference.regions.flatMap((region) =>
-    region.rect
-      ? [[region.id, region.rect.normalizedToShellWidth]]
-      : [],
-  ),
-);
-const androidRegionRect = (id: string): NonNullable<
-  (typeof atomBuilderAndroidReference.regions)[number]["rect"]
->["normalizedToShellWidth"] => {
-  const region = atomBuilderAndroidReference.regions.find((candidate) => candidate.id === id);
-  if (!region?.rect) {
-    throw new Error(`Android reference layout is missing the measured ${id} rectangle.`);
-  }
-  return region.rect.normalizedToShellWidth;
-};
-const atomBuilderAndroidSurfaceLayout: SpatialSurfaceLayout = {
-  shell: atomBuilderAndroidReference.shell.normalizedToShellWidth,
-  regions: atomBuilderAndroidRegions,
-  panels: Object.entries(atomBuilderAndroidReference.panels).map(([key, rect]) => ({
-    id: `${key}-panel`,
-    variant: key === "model" || key === "particles" ? "panel" : "card",
-    rect: rect.normalizedToShellWidth,
-  })),
-  controls: {
-    hintButton: androidRegionRect("hintButton"),
-    checkButton: androidRegionRect("checkButton"),
-    freePlayButton: androidRegionRect("freePlayButton"),
-    futureLogoSlot: androidRegionRect("futureLogoSlot"),
-    positionSliderTrack: androidRegionRect("positionSliderTrack"),
-    scaleSliderTrack: androidRegionRect("scaleSliderTrack"),
-    resetViewButton: androidRegionRect("resetViewButton"),
-    resetAtomButton: androidRegionRect("resetAtomButton"),
-    positionSliderOrientation: "horizontal",
-    scaleSliderOrientation: "horizontal",
-  },
-};
-const atomBuilderSpatialLayouts: SpatialSurfaceLayouts = {
-  headset: atomBuilderHeadsetSurfaceLayout,
-  android: atomBuilderAndroidSurfaceLayout,
-};
-const atomBuilderSpatialPanelLabels = referenceSpatialPanelLabels();
-
-function referenceContentRegions(): SpatialSurfaceLayout["regions"] {
-  const regions: Record<string, SpatialSurfaceLayout["shell"]> = {
-    brand: atomBuilderDesktopReference.header.brand.rect.normalizedToShellWidth,
-    moduleTitle: atomBuilderDesktopReference.header.moduleTitle.rect.normalizedToShellWidth,
-  };
-  for (const region of atomBuilderDesktopReference.regions) {
-    if (region.rect) regions[region.id] = region.rect.normalizedToShellWidth;
-  }
-  return regions;
-}
-
-function referenceSpatialPanelLabels(): SpatialPanelGroupLabels {
-  const labelFor = (id: string): string => {
-    const label = atomBuilderDesktopReference.regions.find((region) => region.id === id)?.label;
-    if (!label) {
-      throw new Error(`Atom Builder reference layout is missing the ${id} label.`);
-    }
-    return label;
-  };
-  return {
-    hints: labelFor("hintsLabel"),
-    position: labelFor("positionSliderLabel"),
-    scale: labelFor("scaleSliderLabel"),
-    particleInstruction: "Drag and Drop",
-  };
-}
-
-function referenceRegionRect(id: string): NonNullable<
-  (typeof atomBuilderDesktopReference.regions)[number]["rect"]
->["normalizedToShellWidth"] {
-  const region = atomBuilderDesktopReference.regions.find((candidate) => candidate.id === id);
-  if (!region?.rect) {
-    throw new Error(`Atom Builder reference layout is missing the measured ${id} rectangle.`);
-  }
-  return region.rect.normalizedToShellWidth;
-}
-
 /** Mount-time options for the screen module. */
 export interface AtomBuilderOptions {
   readonly diagnostics?: boolean;
-  /** Folder of official XR controller and hand models; see `ScreenRendererOptions`. */
-  readonly xrInputModelsPath?: string;
+  /** IWSDK project options (`virtual:iwsdk-project`); renderer defaults are used when omitted. */
+  readonly worldOptions?: WorldOptions;
 }
 
 /** Mount the Class 9-10 atom builder and return its complete teardown. */
@@ -344,155 +206,26 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   const ghost = requiredElement<HTMLElement>(root, "#drag-ghost");
   const narrationControls = requiredElement<HTMLElement>(root, ".narration-controls");
   const narrationSpeed = requiredElement<HTMLSelectElement>(root, "#narration-speed");
-  const renderer = new ScreenSceneRenderer({
+  // Desktop and phones keep the website layout: IWSDK renders the atom inside the
+  // scene viewport. The Horizon UI panels appear only inside AR/VR sessions.
+  const renderer = new SceneRenderer({
     host: sceneHost,
+    ...(options.worldOptions === undefined ? {} : { worldOptions: options.worldOptions }),
     ...(options.diagnostics === undefined ? {} : { diagnostics: options.diagnostics }),
-    ...(options.xrInputModelsPath === undefined ? {} : { xrInputModelsPath: options.xrInputModelsPath }),
   });
-  let spatialSession: SpatialPanelSession | null = null;
-  let spatialHintRoot: HTMLElement | null = null;
-  let spatialStyle: HTMLStyleElement | null = null;
-  let spatialExpanded = false;
-  let spatialArControlsVisible = false;
-  let spatialArDragEnabled = false;
-  let spatialExitLabel = "Exit AR";
-  let xrInput: XrInputRig | null = null;
+  renderer.ready.catch((error: unknown) => {
+    console.error("The 3D scene could not start; lesson controls keep working.", error);
+  });
   let input: ScreenInputAdapter | null = null;
   let xrSessionActive = false;
-  let spatialFailureLogged = false;
-  let refreshSpatialPanels: () => void = () => undefined;
-  let routeSpatialPanelAction: (inputId: string) => void = () => undefined;
-  const clearSpatialPresentation = (): void => {
-    spatialSession?.dispose();
-    spatialSession = null;
-    spatialHintRoot?.remove();
-    spatialHintRoot = null;
-    spatialStyle?.remove();
-    spatialStyle = null;
-    spatialArControlsVisible = false;
-    spatialArDragEnabled = false;
-    spatialExitLabel = "Exit AR";
-    root.classList.remove("android-camera-panels-active");
-    root.classList.remove("android-camera-legacy-dock-open");
-    setSpatialPanelsDomHidden(root, false);
-    root.classList.remove("spatial-dom-settings-open");
-  };
-  const failSpatialPresentation = (error: unknown): void => {
-    clearSpatialPresentation();
-    if (spatialFailureLogged) return;
-    spatialFailureLogged = true;
-    console.warn("Spatial panels unavailable; continuing with the DOM panels.", error);
-  };
-  const setSpatialPresentation = (
-    active: boolean,
-    mode: "ar" | "camera",
-    expanded?: boolean,
-    overlayGranted?: boolean,
-    androidCameraView = false,
-  ): void => {
-    const useAndroidCameraPanels = mode === "camera" && androidCameraView;
-    spatialArControlsVisible = mode === "ar" && overlayGranted === false;
-    spatialArDragEnabled = mode === "ar";
-    spatialExpanded = expanded ?? (spatialSession ? spatialExpanded : false);
-    if (!isSpatialPresentationMode(mode)) {
-      clearSpatialPresentation();
-      return;
-    }
-    if (!active) {
-      clearSpatialPresentation();
-      return;
-    }
-    if (spatialSession) {
-      try {
-        spatialSession.setExpanded(spatialExpanded);
-        refreshSpatialPanels();
-      } catch (error) {
-        failSpatialPresentation(error);
-      }
-      return;
-    }
-    try {
-      const items = buildSpatialPanelItems(
-        readSpatialPanelSources(root),
-        !spatialArControlsVisible,
-        spatialExitLabel,
-        spatialArDragEnabled,
-        {
-          brand: atomBuilderDesktopReference.header.brand.text,
-          title: atomBuilderDesktopReference.header.moduleTitle.text,
-        },
-        atomBuilderSpatialPanelLabels,
-      );
-      const session = tryCreateSpatialPanels(
-        () => renderer.createSpatialPanelSession(
-          items,
-          (inputId) => routeSpatialPanelAction(inputId),
-          mode === "ar" ? root : undefined,
-          mode === "ar" ? onInput : undefined,
-          mode === "ar" || useAndroidCameraPanels ? atomBuilderSpatialLayouts : undefined,
-        ),
-        failSpatialPresentation,
-      );
-      if (!session) return;
-      spatialSession = session;
-      session.setExpanded(spatialExpanded);
-      spatialStyle = document.createElement("style");
-      spatialStyle.textContent = `
-        .spatial-panels-active:not(.android-camera-legacy-dock-open) #lesson-panel,
-        .spatial-panels-active:not(.android-camera-legacy-dock-open) .narration-hud,
-        .spatial-panels-active:not(.android-camera-legacy-dock-open) #assessment-card,
-        .spatial-panels-active:not(.android-camera-legacy-dock-open) .lesson-summary,
-        .spatial-panels-active:not(.android-camera-legacy-dock-open) .free-play-status,
-        .spatial-panels-active:not(.android-camera-legacy-dock-open) .particle-rail,
-        .spatial-panels-active:not(.android-camera-legacy-dock-open) .atom-inspector,
-        .spatial-panels-active .camera-view-panel-heading #mission-title,
-        .spatial-panels-active #ar-panel-mission-title { display: none !important; }
-        .spatial-edge-hints {
-          position: fixed; inset: 0; z-index: 20; pointer-events: none; box-sizing: border-box;
-          padding: max(36px, calc(env(safe-area-inset-top) + 8px))
-            max(36px, calc(env(safe-area-inset-right) + 8px))
-            max(36px, calc(env(safe-area-inset-bottom) + 8px))
-            max(36px, calc(env(safe-area-inset-left) + 8px));
-        }
-        .spatial-edge-hint {
-          position: absolute; pointer-events: auto; transform: translate(-50%, -50%);
-          border: 1px solid rgba(255,255,255,.8); border-radius: 999px;
-          background: rgba(255,255,255,.84); color: #20222a; width: 36px; height: 36px;
-        }
-        .spatial-edge-hint:disabled { pointer-events: none; }
-      `;
-      root.append(spatialStyle);
-      if (spatialLayout.edgeHints) {
-        const hintRoot = document.createElement("div");
-        spatialHintRoot = hintRoot;
-        hintRoot.className = "spatial-edge-hints";
-        hintRoot.setAttribute("aria-label", "Panel direction hints");
-        const keys = ["mission", "particles", "elementInfo", "narration", "settings"] as const;
-        for (const key of keys) {
-          const button = document.createElement("button");
-          button.type = "button";
-          button.className = "spatial-edge-hint";
-          button.dataset.panel = key;
-          button.setAttribute("aria-label", "Panel direction hint");
-          button.textContent = "›";
-          button.disabled = mode === "ar";
-          button.addEventListener("click", () => {
-            if (mode === "camera") spatialSession?.focusPanel(key);
-          });
-          hintRoot.append(button);
-        }
-        root.append(hintRoot);
-        session.setHintListener((hints) => renderSpatialHints(hintRoot, hints));
-      }
-      setSpatialPanelsDomHidden(root, true);
-      root.classList.toggle("android-camera-panels-active", useAndroidCameraPanels);
-      refreshSpatialPanels();
-    } catch (error) {
-      failSpatialPresentation(error);
-    }
-  };
+  let xrLessonVisible = false;
+  let xrExitLabel = "Exit AR";
+  let narrationCaption = "";
+  let narrationView = { audioEnabled: false, muted: false, captionsEnabled: true };
+  let refreshXrLesson: () => void = () => undefined;
+  let onXrCommand: (command: string) => void = () => undefined;
   const disposeZoomControls = installZoomControls(
-    renderer.canvas,
+    sceneHost,
     () => renderer.getDistance(),
     (distance) => renderer.setDistance(distance),
     screenZoomConfig,
@@ -626,33 +359,21 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
       );
     },
     recordLocalEvent: recordLocalArEvent,
-    onSpatialActiveChange: (active, sessionInfo, session) => {
+    onSpatialActiveChange: (active, sessionInfo) => {
       xrSessionActive = active;
       input?.setEnabled(!active);
-      spatialSession?.setPointerEventsEnabled(!active);
       root.classList.toggle("xr-session-active", active);
       root.classList.toggle(
         "xr-vr-active",
         active && sessionInfo.mode === "immersive-vr",
       );
-      spatialExitLabel = sessionInfo.mode === "immersive-vr" ? "Exit VR" : "Exit AR";
-      setSpatialPresentation(active, "ar", undefined, sessionInfo.overlayGranted ?? undefined);
-      if (active && session) {
-        xrInput?.setSession(session as unknown as XRSession);
-      } else {
-        xrInput?.setSession(null);
-      }
+      xrExitLabel = sessionInfo.mode === "immersive-vr" ? "Exit VR" : "Exit AR";
+      // Headsets get the Horizon UI panels in the scene; phones keep the DOM overlay,
+      // so in AR the panels appear only when the overlay was not granted.
+      xrLessonVisible = active && (sessionInfo.mode === "immersive-vr" || sessionInfo.overlayGranted === false);
+      if (xrLessonVisible) refreshXrLesson();
+      else renderer.hideLessonPanels();
     },
-    onSpatialExpandedChange: (expanded) => {
-      spatialExpanded = expanded;
-      try {
-        spatialSession?.setExpanded(expanded);
-        refreshSpatialPanels();
-      } catch (error) {
-        failSpatialPresentation(error);
-      }
-    },
-    getInputDiagnostics: () => (xrInput ? formatXrInputDiagnostics(xrInput.getDiagnostics()) : []),
     ...(options.diagnostics === undefined ? {} : { diagnostics: options.diagnostics }),
   });
 
@@ -698,7 +419,13 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     },
     onViewChange: (state) => {
       renderNarrationView(root, state);
-      refreshSpatialPanels();
+      narrationCaption = state.settings.captionsEnabled ? state.captionText : "";
+      narrationView = {
+        audioEnabled: state.audioEnabled,
+        muted: state.settings.muted,
+        captionsEnabled: state.settings.captionsEnabled,
+      };
+      refreshXrLesson();
     },
     onTelemetry: (event) => publishNarrationTelemetry(event, store.events, telemetryContext, clock, idGenerator),
   });
@@ -722,62 +449,43 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   const onNarrationSpeedChange = (): void => {
     narrationPlayer.setSpeed(Number(narrationSpeed.value) as 0.75 | 1 | 1.25);
   };
-  refreshSpatialPanels = () => {
-    try {
-      if (spatialSession) {
-        const source = readSpatialPanelSources(root);
-        if (spatialSession) {
-          spatialSession.update(buildSpatialPanelItems(
-            source,
-            !spatialArControlsVisible,
-            spatialExitLabel,
-            spatialArDragEnabled,
-            {
-              brand: atomBuilderDesktopReference.header.brand.text,
-              title: atomBuilderDesktopReference.header.moduleTitle.text,
-            },
-            atomBuilderSpatialPanelLabels,
-          ));
-        }
-      }
-    } catch (error) {
-      failSpatialPresentation(error);
+  const entryButton = (mode: "immersive-ar" | "immersive-vr") =>
+    root.querySelector<HTMLButtonElement>(`.ar-start[data-session-mode='${mode}']`);
+  const xrLessonContent = () => buildXrLessonContent(store.getState(), manifest.missions, assessmentItems, {
+    lastHintText,
+    caption: narrationCaption,
+    exitLabel: xrExitLabel,
+    session: {
+      inXr: xrSessionActive,
+      canEnterVr: entryButton("immersive-vr")?.hidden === false,
+      canEnterAr: entryButton("immersive-ar")?.hidden === false,
+    },
+    narration: narrationView,
+  });
+  refreshXrLesson = () => {
+    if (xrLessonVisible) renderer.setLessonPanels(xrLessonContent(), (command) => onXrCommand(command));
+  };
+  onXrCommand = (command) => {
+    if (command === XR_COMMAND.exit) {
+      root.querySelector<HTMLButtonElement>("[data-ar-action='exit']")?.click();
+    } else if (command === XR_COMMAND.recenter) {
+      renderer.recenter();
+    } else if (command === XR_COMMAND.enterVr) {
+      entryButton("immersive-vr")?.click();
+    } else if (command === XR_COMMAND.enterAr) {
+      entryButton("immersive-ar")?.click();
+    } else if (command === NARRATION_COMMAND.sound) {
+      if (!narrationView.audioEnabled) void narrationPlayer.enableSound();
+      else narrationPlayer.toggleMuted();
+    } else if (command === NARRATION_COMMAND.captions) {
+      narrationPlayer.toggleCaptions();
+    } else if (command === NARRATION_COMMAND.replay) {
+      narrationPlayer.replayLastCue();
+    } else {
+      runCommand(command);
     }
   };
-  routeSpatialPanelAction = (inputId) => {
-    routeSpatialAction(inputId, {
-      runCommand,
-      onNarrationAction: (actionId) => {
-        const button = [...root.querySelectorAll<HTMLButtonElement>("[data-narration-action]")]
-          .find((candidate) => candidate.dataset.narrationAction === actionId);
-        button?.click();
-      },
-      onNarrationSpeedChange: (speed) => {
-        if (speed === "0.75" || speed === "1" || speed === "1.25") {
-          narrationSpeed.value = speed;
-        }
-        onNarrationSpeedChange();
-      },
-      onResetView: () => {
-        const resetView = spatialArControlsVisible
-          ? root.querySelector<HTMLButtonElement>("[data-ar-action='reset-view']")
-            ?? root.querySelector<HTMLButtonElement>("[data-command='reset-view']")
-          : root.querySelector<HTMLButtonElement>(
-              "[data-ar-action='reset-view'], [data-command='reset-view']",
-            );
-        resetView?.click();
-        spatialSession?.reposition();
-      },
-      onPanelToggle: () => {
-        const panelToggle = root.querySelector<HTMLButtonElement>(
-          "[data-ar-action='panel-toggle'], [data-camera-action='panel-toggle']",
-        );
-        panelToggle?.click();
-      },
-      onExitAr: () => root.querySelector<HTMLButtonElement>("[data-ar-action='exit']")?.click(),
-      onCopyXrReport: () => root.querySelector<HTMLButtonElement>("[data-ar-action='copy-xr-report']")?.click(),
-    });
-  };
+
   narrationControls.addEventListener("click", onNarrationAction);
   narrationSpeed.addEventListener("change", onNarrationSpeedChange);
 
@@ -804,7 +512,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     feedback.classList.toggle("is-visible", chemistry.validationMessages.length > 0);
     renderer.update(layoutAtom(chemistry));
     renderLearningState(root, state, assessmentItems, assessmentsById, lastHintText);
-    refreshSpatialPanels();
+    refreshXrLesson();
   };
 
   const dispatchLearningAction = (action: EngineAction): void => {
@@ -847,24 +555,6 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     }
     renderState(store.getState());
   };
-  const spatialParticleDrag = createSpatialParticleDragHandler({
-    begin: (particle) => {
-      activeParticle = `tray:${particle}`;
-      const swatch = root.querySelector<HTMLElement>(`[data-particle="${particle}"]`);
-      const color = swatch ? getComputedStyle(swatch).backgroundColor : undefined;
-      renderer.beginDrag(particle, color);
-      ghost.textContent = particle;
-      ghost.classList.add("is-visible");
-    },
-    move: (ray) => renderer.updateSpatialDragRay(ray.origin, ray.direction),
-    runCommand,
-    end: () => {
-      activeParticle = null;
-      ghost.classList.remove("is-visible");
-      renderer.endDrag();
-    },
-  });
-
   const onCommandClick = (event: MouseEvent): void => {
     const command = (event.target as Element | null)
       ?.closest<HTMLElement>("[data-command]")
@@ -885,14 +575,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
       } | null;
     }>).detail;
     if (typeof detail?.active !== "boolean") return;
-    setSpatialPresentation(
-      detail.active,
-      "camera",
-      detail.expanded ?? spatialExpanded,
-      undefined,
-      detail.androidLayout === true,
-    );
-    if (detail.androidLayout && detail.orientation) {
+    if (detail.active && detail.androidLayout && detail.orientation) {
       renderer.updateCameraViewOrientation(detail.orientation);
     }
   };
@@ -920,10 +603,9 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   const onCameraLookOrientationChange = (): void => renderer.rebaseCameraViewOrientation();
 
   const onInput = (action: InputAction): void => {
-    if (spatialParticleDrag.handle(action)) return;
-    if (blocksViewInputDuringParticleDrag(action.type, spatialParticleDrag.isActive())) return;
     const payload = asPayload(action.payload);
-    switch (action.type) {      case "grab": {
+    switch (action.type) {
+      case "grab": {
         activeParticle = typeof payload.source === "string" ? payload.source : null;
         if (activeParticle?.startsWith("tray:")) {
           renderer.beginDrag(activeParticle.replace("tray:", ""));
@@ -933,7 +615,6 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
         break;
       }
       case "move": {
-        if (spatialSession && root.classList.contains("ar-active")) break;
         if (
           root.classList.contains("ar-active")
           && payload.source === "xr-controller"
@@ -957,7 +638,6 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
         renderer.endDrag();
         break;
       case "rotate":
-        if (spatialSession && root.classList.contains("ar-active")) break;
         if (typeof payload.deltaX === "number" && typeof payload.deltaY === "number") {
           if (
             root.classList.contains("ar-active")
@@ -970,7 +650,6 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
         }
         break;
       case "scale":
-        if (spatialSession && root.classList.contains("ar-active")) break;
         if (typeof payload.delta === "number") {
           if (
             root.classList.contains("ar-active")
@@ -1021,24 +700,11 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
       renderer.endDrag();
     },
   });
-  xrInput = new XrInputRig({
-    dispatch: onInput,
-    pick: (ray) => renderer.pickRay(ray.origin, ray.direction),
-    handlePanelRay: (ray, phase, sourceId, source, gestureMode, zoomDelta) =>
-      spatialSession?.handleRay(ray, phase, sourceId, source, gestureMode, zoomDelta) ?? false,
-    getHitDistance: (sourceId) => spatialSession?.getLastHitDistance?.(sourceId),
-    getReferenceSpace: () => renderer.getXrReferenceSpace(),
-    handleThumbstick: (axes, sourceId, handedness, deltaSeconds) =>
-      spatialSession?.handleThumbstick?.(axes, sourceId, handedness, deltaSeconds) ?? false,
-    onPointerFrame: (info) => renderer.updateXrPointer(info.inputSource, info.hitDistance, info.pressed),
-    primaryCommand: "lesson/check",
-  });
-  renderer.setXrFrameListener((frame, timeMs) => xrInput?.update(frame, timeMs));
+
   root.addEventListener("click", onCommandClick);
   root.addEventListener("mma:spatial-presentation", onSpatialPresentation);
   root.addEventListener("mma:camera-look-orientation", onCameraLookOrientation);
   root.addEventListener("mma:camera-look-orientation-change", onCameraLookOrientationChange);
-  root.addEventListener("mma:xr-diagnostics-update", refreshSpatialPanels);
   renderState(store.getState());
   store.events.emit("module_started", {
     type: "module_started",
@@ -1049,9 +715,6 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   return () => {
     disposeZoomControls();
     input?.dispose();
-    renderer.setXrFrameListener(null);
-    xrInput?.dispose();
-    xrInput = null;
     unsubscribe();
     narrationControls.removeEventListener("click", onNarrationAction);
     narrationSpeed.removeEventListener("change", onNarrationSpeedChange);
@@ -1061,8 +724,6 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     root.removeEventListener("mma:spatial-presentation", onSpatialPresentation);
     root.removeEventListener("mma:camera-look-orientation", onCameraLookOrientation);
     root.removeEventListener("mma:camera-look-orientation-change", onCameraLookOrientationChange);
-    root.removeEventListener("mma:xr-diagnostics-update", refreshSpatialPanels);
-    clearSpatialPresentation();
     narrationPlayer.dispose();
     void disposeArControls().finally(() => renderer.dispose());
     root.replaceChildren();
@@ -1100,7 +761,7 @@ function applyCommand(
   command: string,
   state: Readonly<AtomBuilderLearningState>,
   dispatch: (action: EngineAction) => void,
-  renderer: ScreenSceneRenderer,
+  renderer: SceneRenderer,
 ): void {
   if (command === "reset-view") {
     renderer.resetView();
@@ -1338,43 +999,7 @@ function renderNarrationView(root: HTMLElement, state: NarrationViewState): void
   );
 }
 
-function renderSpatialHints(
-  container: HTMLElement,
-  hints: readonly SpatialPanelEdgeHint[],
-): void {
-  const rects = (selector: string): DOMRect[] => [...container.ownerDocument.querySelectorAll<HTMLElement>(selector)]
-    .filter((element) => !element.hidden && element.getClientRects().length > 0)
-    .map((element) => element.getBoundingClientRect());
-  const viewport = { width: container.ownerDocument.defaultView?.innerWidth ?? 0,
-    height: container.ownerDocument.defaultView?.innerHeight ?? 0 };
-  const style = container.ownerDocument.defaultView?.getComputedStyle(container);
-  const safeArea = {
-    top: Number.parseFloat(style?.paddingTop ?? "0") || 0,
-    right: Number.parseFloat(style?.paddingRight ?? "0") || 0,
-    bottom: Number.parseFloat(style?.paddingBottom ?? "0") || 0,
-    left: Number.parseFloat(style?.paddingLeft ?? "0") || 0,
-  };
-  const topControls = rects(".ar-exit, .spatial-settings-fallback");
-  const bottomControls = rects(".ar-overlay-panel, .camera-view-panel, .dom-settings-sheet");
-  const controls = [...topControls, ...bottomControls];
-  for (const hint of hints) {
-    const button = container.querySelector<HTMLButtonElement>(`[data-panel="${hint.key}"]`);
-    if (!button) continue;
-    const position = hint.visible
-      ? placeSpatialHint(hint, viewport, safeArea, topControls, bottomControls, controls)
-      : null;
-    button.hidden = position === null;
-    if (!position) continue;
-    const left = `${position.x.toFixed(1)}px`;
-    const top = `${position.y.toFixed(1)}px`;
-    const transform = `translate(-50%, -50%) rotate(${hint.angle.toFixed(2)}rad)`;
-    if (button.style.left !== left) button.style.left = left;
-    if (button.style.top !== top) button.style.top = top;
-    if (button.style.transform !== transform) button.style.transform = transform;
-  }
-}
-
-function asPayload(payload: InputAction["payload"]): Record<string, string | number | null> {
+function asPayload(payload: EngineAction["payload"]): Record<string, string | number | null> {
   return typeof payload === "object" && payload !== null && !Array.isArray(payload)
     ? payload as Record<string, string | number | null>
     : {};
@@ -1412,11 +1037,4 @@ function isArHudTarget(target: EventTarget | null): boolean {
     ".ar-status, .ar-break-reminder, .ar-diagnostics, .ar-confirmation",
   ) !== null;
 }
-export {
-  buildSpatialPanelItems,
-  readSpatialPanelSources,
-  routeSpatialAction,
-  type SpatialActionHandlers,
-  type SpatialPanelItems,
-  type SpatialPanelsSource,
-} from "./spatial-panels.js";
+export { buildXrLessonContent, type XrLessonExtras } from "./xr-lesson.js";
