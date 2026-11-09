@@ -27,6 +27,8 @@ export interface ArControlsOptions {
     session: ArSessionHandle | null,
   ) => void;
   readonly onSpatialExpandedChange?: (expanded: boolean) => void;
+  /** Development report lines describing each XR input source (controllers and hands). */
+  readonly getInputDiagnostics?: () => readonly string[];
   readonly diagnostics?: boolean;
 }
 
@@ -43,6 +45,8 @@ export interface XrDiagnosticsData {
   readonly referenceSpaceType: string | null;
   readonly frameRate: number | null;
   readonly scene: XrSceneDiagnostics;
+  /** One line per fact about each XR input source; omitted outside an XR session. */
+  readonly inputLines?: readonly string[];
   readonly lastErrorMessage?: string | null;
   readonly lastErrorStack?: string | null;
 }
@@ -145,6 +149,7 @@ export function buildXrDiagnosticsText(data: XrDiagnosticsData): string {
     `View count: ${scene.viewCount ?? "unavailable"}`,
     `VR environment present: ${scene.environmentPresent ? "yes" : "no"}`,
     `Scene object issues: ${scene.sceneIssues.join("; ") || "none"}`,
+    ...(data.inputLines ?? []),
     `Last XR error: ${data.lastErrorMessage || "none"}`,
     `Last XR error stack:\n${data.lastErrorStack || "unavailable"}`,
   ].join("\n");
@@ -405,6 +410,7 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
       referenceSpaceType: latestSessionInfo?.referenceSpaceType ?? null,
       frameRate: latestSessionInfo?.frameRate ?? null,
       scene: renderer.getXrSceneDiagnostics(),
+      inputLines: options.getInputDiagnostics?.() ?? [],
       lastErrorMessage: lastXrErrorMessage,
       lastErrorStack: lastXrErrorStack,
     });

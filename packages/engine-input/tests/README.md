@@ -12,13 +12,13 @@ tests/
 │   └── test-actions.ts
 ├── action-dispatcher.test.ts
 ├── event-bus.test.ts
-├── gestures.test.ts
 ├── input-manager.test.ts
 ├── mouse.test.ts
 ├── raycast-picker.test.ts
 ├── touch.test.ts
-├── xr-controller.test.ts
-├── xr-hand.test.ts
+├── xr-buttons.test.ts
+├── xr-input-rig.test.ts
+├── xr-pinch.test.ts
 └── integration.test.ts
 ```
 
@@ -67,35 +67,20 @@ pnpm exec vitest run packages/engine-input/tests --coverage
 - two-finger pinch scale
 - pointer capture/release
 
-### Gesture recognition
-- pinch hysteresis
-- pinch start/move/release
-- grab start/move/release
-- movement deadzone
-- left/right hand isolation
-- two-hand scaling
-- two-hand rotation
-- reset/remove hand
+### XR buttons and pinch (pure)
+- xr-standard button indices and analog hysteresis
+- thumbstick axes, radial deadzone, rescaling, one-stick fallback
+- edge detection
+- joint pinch hysteresis and hand-size scaling
 
-### XR controllers
-- controller creation
-- connected/disconnected
-- handedness
-- target picking
-- select/grab/release
-- squeeze/grab/release
-- hover
-- cleanup
-
-### XR hands
-- 25-joint reading
-- missing-pose tolerance
-- left/right detection
-- pinch
-- grab
-- target picking
-- debug-joint lifecycle
-- disconnect cleanup
+### XR input rig
+- controller trigger, squeeze, A/X, B/Y, thumbstick, and unmapped thumbstick click
+- events-only, gamepad-only, and merged signals without double presses
+- one press per source
+- hand pinch via gamepad, events, and joint fallback with ownership handover
+- tracking loss, source removal and switching, session end, dispose
+- phone-AR transient taps
+- paired zoom, haptics, pointer frames, diagnostics
 
 ### Picking
 - screen coordinate conversion
@@ -106,7 +91,6 @@ pnpm exec vitest run packages/engine-input/tests --coverage
 - stable target IDs
 
 ### Integration
-- mouse/touch/XR sharing one action stream
+- mouse and touch sharing one action stream
 - no duplicate action vocabulary
 - InputManager lifecycle
-- XR frame forwarding

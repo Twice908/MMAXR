@@ -1,7 +1,6 @@
 import type { EngineAction } from "@mma/engine-core";
 import { InputManager, type TouchInputOptions } from "@mma/engine-input";
 import type { ScreenPickFunction } from "@mma/engine-input";
-import * as THREE from "three";
 
 /** Configuration for translating browser pointer events into engine actions. */
 export interface ScreenInputOptions {
@@ -26,7 +25,6 @@ export class ScreenInputAdapter {
     this.dispatch = options.dispatch;
     this.onDragEnd = options.onDragEnd;
     this.manager = new InputManager({
-      renderer: {} as THREE.WebGLRenderer,
       root: options.root,
       dispatch: (action) => {
         this.dispatch(action as EngineAction);
@@ -36,8 +34,6 @@ export class ScreenInputAdapter {
       },
       pickScreenTarget: options.pickTarget,
       ...(options.touch === undefined ? {} : { touch: options.touch }),
-      enableXrControllers: false,
-      enableXrHands: false,
     });
   }
 

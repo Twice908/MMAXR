@@ -13,6 +13,7 @@ Current status (update this block as work completes):
 - Done: Phase 3a-4a phone AR lesson flow with a world-fixed atom, DOM controls, a collapsible lesson panel, comfort safeguards, and touch-only view controls (pinch scale, one-finger rotation, reset); AR particle dragging is not enabled.
 - Done: Android handheld WebXR AR/VR selects the measured phone panel layout; world-space headset sessions keep the desktop/headset layout.
 - Done: Desktop screen camera view with local-only video, screen input, and clean media-track teardown; it does not use world tracking.
+- Done: XR input rebuilt as one `XrInputRig` (controllers, hands, phone taps) with procedural ray/hand visuals and `?xrdebug=1` input diagnostics; mock-tested only, still needs verification on a Quest (docs/adr/0004-xr-input-rig.md).
 - Next: Review the eight assessment items and verify generated narration on desktop and phone.
 - Not started: Phase 2b live voice guide, remaining XR work (including headset VR and other 3a-4b work), portal link (Phase 4).
 

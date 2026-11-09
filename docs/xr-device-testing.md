@@ -49,6 +49,47 @@ where available, once in VR.
 - If testing Quest passthrough, verify it on the headset; the desktop emulator
   does not provide it.
 
+## Controllers and hands (input rig)
+
+Open the app with `?xrdebug=1` and use the XR report's `Input ...` lines. Each source
+shows its kind, ray tracking, select/squeeze state, pressed gamepad buttons, select and
+squeeze event counts, whether a system pinch has been seen, and its profiles. Record
+anything that differs from the expectations below in the [device matrix](./device-matrix.md).
+
+In the Immersive Web Emulator, rays follow where each emulated controller or hand points
+(its target ray, local -Z). The DevUI **Rot** fields are in radians, so `Rot Y 1.04` turns a
+controller 60° outward and its ray will miss the panel. In the DevUI gizmo the blue **arrow**
+is the controller's +Z axis, which is its back: aim the blue **ball** end at the panel, not
+the arrow. Set Rot to `0, 0, 0` (pointing
+straight ahead), or click a controller's gizmo to switch it to rotate mode and turn it toward
+the panel, then use the save icon so the pose persists. Controllers are drawn with the
+official Meta Quest models and hands with the generic hand mesh (from
+`apps/web/public/xr-input-profiles`); a blue stand-in with a nose cone along the ray shows
+only while a model loads or for a device whose profile is not bundled.
+
+Controllers (Quest Touch):
+
+- Trigger clicks a panel button and drags sliders and particles. Expect `select` events
+  and gamepad button 0 to agree; the report should show `buttons [0]`.
+- Squeeze pans the model. Two controllers squeezing and moving apart zoom it.
+- The thumbstick rotates the model sideways and zooms with up/down, only when no button
+  is held. Confirm the stick is axes 2-3 (the report does not show axes; rotate to check).
+- A/X clicks the panel under the ray, or checks the lesson step if none is hit. B/Y resets
+  the view. Thumbstick click does nothing.
+- Confirm the ray and reticle follow the controller, shorten on a hit, and brighten on press.
+- Feel for the short haptic tick on hover and click.
+
+Hands:
+
+- Put the controllers down so hands appear in the report as `hand`. Pinch to click and
+  drag. The report's `system select` should read `seen` if the browser reports pinch
+  through events or the hand gamepad; `not seen` means the joint fallback is in use.
+- Two hands pinching and moving apart zoom the model. Do not use the palm pinch (it opens
+  the system menu or exits the session).
+- In VR the hand mesh is drawn; in AR passthrough it is hidden.
+- Switch between controllers and hands mid-session; both must keep working with no stuck press.
+- Watch for ray drift at the moment of a pinch and report it.
+
 ## Apple Vision Pro checklist
 
 Use Safari. If WebXR is unavailable, enable **Settings > Apps > Safari >

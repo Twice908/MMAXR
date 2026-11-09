@@ -30,6 +30,8 @@ import {
   type GlassSurface,
 } from "./visuals/glass-material.js";
 import { createGlassPanel, type GlassPanel } from "./visuals/glass-panel.js";
+import { XrInputVisuals } from "./visuals/xr-input-visuals.js";
+import { createOfficialXrInputModels } from "./visuals/xr-input-models.js";
 import type { GlassPanelItem } from "./visuals/panel-layout.js";
 import {
   calculateSpatialDockLayout,
@@ -144,6 +146,12 @@ export type QualityTier = "low" | "mid" | "high";
 export interface ScreenRendererOptions {
   readonly host: HTMLElement;
   readonly diagnostics?: boolean;
+  /**
+   * Folder with official WebXR Input Profiles models (`profilesList.json`, one folder per
+   * profile). When set, XR controllers and hands use those models; otherwise, or while a
+   * model loads, procedural stand-ins are shown. Models load only during an XR session.
+   */
+  readonly xrInputModelsPath?: string;
 }
 
 export interface SpatialPanelItems {
@@ -242,6 +250,13 @@ export interface SpatialPanelSession {
     gestureMode?: "rotate" | "pan",
     zoomDelta?: number,
   ): boolean;
+  handleThumbstick?(
+    axes: { x: number; y: number },
+    sourceId: string,
+    handedness: "left" | "right" | "none",
+    deltaSeconds?: number,
+  ): boolean;
+  getLastHitDistance?(sourceId: string): number | undefined;
   setHintListener(listener: ((hints: readonly SpatialPanelEdgeHint[]) => void) | null): void;
   focusPanel(key: SpatialPanelEdgeHint["key"]): void;
   dispose(): void;
@@ -766,6 +781,8 @@ export class ScreenSceneRenderer {
   private xrRenderLoopRunning = false;
   private arDiagnosticsListener: ((diagnostics: ArRenderDiagnostics) => void) | null = null;
   private spatialHintUpdater: (() => void) | null = null;
+  private readonly xrInputVisuals: XrInputVisuals;
+  private xrFrameListener: ((frame: XRFrame, timeMs: number) => void) | null = null;
   private disposed = false;
 
   /** Create a WebGL canvas inside a host element and configure quality limits. */
@@ -872,6 +889,11 @@ export class ScreenSceneRenderer {
     });
     this.resizeObserver.observe(this.host);
     this.resize();
+    this.xrInputVisuals = new XrInputVisuals(
+      this.renderer,
+      this.scene,
+      options.xrInputModelsPath ? createOfficialXrInputModels(options.xrInputModelsPath) : undefined,
+    );
     this.render();
     this.startDiagnosticsLoop();
   }
@@ -1036,6 +1058,7 @@ export class ScreenSceneRenderer {
     this.renderer.xr.enabled = true;
     const enabledFeatures = new Set(Array.from((session as XRSession).enabledFeatures ?? []));
     this.activeXRMode = mode;
+    this.xrInputVisuals.setHandsVisible(mode === "immersive-vr");
     this.spatialPresentationProfile = selectSpatialPresentationProfile(
       mode,
       (session as XRSession & { interactionMode?: string }).interactionMode,
@@ -1082,6 +1105,7 @@ export class ScreenSceneRenderer {
             this.firstNonNullViewerPose = viewerFrame.pose;
           }
           this.updateArPlacementFromFrame(frame, viewerFrame);
+          this.xrFrameListener?.(frame, time);
           if (viewerFrame && this.pendingSpatialDockReposition) {
             const reposition = this.pendingSpatialDockReposition;
             this.pendingSpatialDockReposition = null;
@@ -1091,6 +1115,7 @@ export class ScreenSceneRenderer {
         }
         const frameTime = this.lastFrameTime === 0 ? 0 : time - this.lastFrameTime;
         this.lastFrameTime = time;
+        this.xrInputVisuals.update();
         this.render(frameTime);
       });
       this.vrEnvironment = createVrEnvironmentForSession(
@@ -1193,10 +1218,29 @@ export class ScreenSceneRenderer {
       this.atomRoot.scale.setScalar(1);
       this.arViewTransform = DEFAULT_AR_VIEW_TRANSFORM;
       this.scene.background = this.screenBackground;
+      this.xrInputVisuals.reset();
     });
     attempt(() => this.render());
     attempt(() => this.startDiagnosticsLoop());
     if (cleanupError) throw cleanupError;
+  }
+
+  /** Return the active XR reference space managed by Three.js. */
+  getXrReferenceSpace(): XRReferenceSpace | null {
+    return this.renderer.xr.getReferenceSpace();
+  }
+
+  /**
+   * Receive every XR frame from the render loop, before the scene is drawn. Input reads
+   * its rays here so they share the frame and reference space used for rendering.
+   */
+  setXrFrameListener(listener: ((frame: XRFrame, timeMs: number) => void) | null): void {
+    this.xrFrameListener = listener;
+  }
+
+  /** Size the ray and reticle drawn for an XR input source. View-only; never changes learning state. */
+  updateXrPointer(inputSource: XRInputSource, hitDistance: number | undefined, pressed: boolean): void {
+    this.xrInputVisuals.updatePointer(inputSource, hitDistance, pressed);
   }
 
   /** Subscribe to live AR renderer facts for a development-only overlay. */
@@ -1352,7 +1396,9 @@ export class ScreenSceneRenderer {
     }
 
     const sceneIssues: string[] = [];
-    this.scene.traverse((object) => {
+    // XR input visuals are hidden by design until a source connects; they are not issues.
+    const visitSceneIssues = (object: THREE.Object3D): void => {
+      if (object.userData.diagnosticsIgnore === true) return;
       const name = object.name || object.type;
       const issues: string[] = [];
       if (!object.visible) issues.push("visible=false");
@@ -1368,7 +1414,9 @@ export class ScreenSceneRenderer {
         issues.push("NaN/non-finite transform");
       }
       if (issues.length > 0) sceneIssues.push(`${name}: ${issues.join(", ")}`);
-    });
+      for (const child of object.children) visitSceneIssues(child);
+    };
+    visitSceneIssues(this.scene);
     const baseLayer = this.activeXRSession?.renderState.baseLayer;
     const modelStageDiagnostics = this.modelStage && this.modelStageLayout &&
       this.modelStagePose && this.modelPanelCenter
@@ -2038,6 +2086,7 @@ export class ScreenSceneRenderer {
         },
         handleRay: (ray, phase, sourceId, source, gestureMode, zoomDelta) =>
           panelHost.handleRay(ray, phase, sourceId, source, gestureMode, zoomDelta),
+        getLastHitDistance: (sourceId: string) => panelHost.getLastHitDistance(sourceId),
         setHintListener: () => undefined,
         focusPanel: (key) => {
           if (keys.includes(key as SpatialPanelKey)) {
@@ -3102,6 +3151,7 @@ export class ScreenSceneRenderer {
       pointerTarget,
       panels: [],
       pointerTargets,
+      blockingSurfaces: surfaces,
       onPanelAction,
       onPointerEvent: (event) => {
         this.updateModelSubpartHighlight(event);
@@ -3138,6 +3188,40 @@ export class ScreenSceneRenderer {
         panelHost.setPointerEventsEnabled(enabled || this.arActive),
       handleRay: (ray, phase, sourceId, source, gestureMode, zoomDelta) =>
         panelHost.handleRay(ray, phase, sourceId, source, gestureMode, zoomDelta),
+      getLastHitDistance: (sourceId: string) => panelHost.getLastHitDistance(sourceId),
+      handleThumbstick: (axes, _sourceId, _handedness, deltaSeconds) => {
+        const currentPose = this.modelStagePose;
+        if (!currentPose) return false;
+        // Speeds were tuned per frame at 72 Hz; scale by frame time so 90/120 Hz feel the same.
+        const frameScale = deltaSeconds === undefined ? 1 : deltaSeconds * 72;
+        if (Math.abs(axes.x) > 0.01) {
+          const deltaX = axes.x * 0.05 * frameScale;
+          const rotation = rotateModelStage(
+            new THREE.Quaternion(
+              currentPose.rotation.x,
+              currentPose.rotation.y,
+              currentPose.rotation.z,
+              currentPose.rotation.w,
+            ),
+            deltaX,
+            0,
+            MODEL_STAGE.gestureRadiansPerMeter,
+          );
+          applyStagePose({
+            ...currentPose,
+            rotation: {
+              x: rotation.x,
+              y: rotation.y,
+              z: rotation.z,
+              w: rotation.w,
+            },
+          }, this.modelStageBindingLimit);
+        }
+        if (Math.abs(axes.y) > 0.01) {
+          zoomStage(-axes.y * 0.03 * frameScale * currentPose.zoom);
+        }
+        return true;
+      },
       setHintListener: () => undefined,
       focusPanel: () => undefined,
       dispose: () => {
@@ -3285,6 +3369,8 @@ export class ScreenSceneRenderer {
     this.renderer.setAnimationLoop(null);
     this.pendingSpatialDockReposition = null;
     this.disposeVrEnvironment();
+    this.xrFrameListener = null;
+    this.xrInputVisuals.dispose();
     this.resizeObserver.disconnect();
     this.reducedMotion.removeEventListener("change", this.onReducedMotionChange);
     this.atomCaptionPanel?.dispose();

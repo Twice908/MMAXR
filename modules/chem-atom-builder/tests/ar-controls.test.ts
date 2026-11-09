@@ -6,6 +6,35 @@ import {
 } from "../src/ar-controls.js";
 
 describe("XR diagnostics report", () => {
+  it("appends the XR input source lines before the last error", () => {
+    const report = buildXrDiagnosticsText({
+      supportedModes: [],
+      requestedFeatures: [],
+      grantedFeatures: [],
+      overlayGranted: null,
+      interactionMode: null,
+      environmentBlendMode: null,
+      inputSourceTypes: [],
+      referenceSpaceType: null,
+      frameRate: null,
+      scene: {
+        atomVisibilityChain: [],
+        sceneIssues: [],
+        framesRendered: 0,
+        xrCameraToAtomDistanceMeters: null,
+        panelGroupDistanceMeters: null,
+        firstFramePoseWasNull: null,
+        atomInsideViewFrustum: null,
+        viewCount: null,
+      } as never,
+      inputLines: ["Input xr-source-right-1 (controller/right): ray tracked-pointer, tracked"],
+    });
+    const lines = report.split("\n");
+    const inputIndex = lines.findIndex((line) => line.startsWith("Input xr-source-right-1"));
+    expect(inputIndex).toBeGreaterThan(-1);
+    expect(lines[inputIndex + 1]).toBe("Last XR error: none");
+  });
+
   it("formats the complete report without personal or device-identifying data", () => {
     expect(buildXrDiagnosticsText({
       supportedModes: ["immersive-ar", "immersive-vr"],

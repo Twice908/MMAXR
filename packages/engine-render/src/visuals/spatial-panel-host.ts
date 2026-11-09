@@ -41,6 +41,11 @@ export interface SpatialPanelHostOptions {
   readonly onSpatialInput?: (action: InputAction) => void;
   readonly onWheel?: (ray: THREE.Ray, deltaY: number) => boolean;
   readonly onBackgroundPointer?: (event: SpatialBackgroundPointerEvent) => void;
+  /**
+   * Non-interactive panel surfaces (glass backings) that stop XR rays. A ray that hits one
+   * ends there: the visual ray shortens to the surface and nothing behind it is picked.
+   */
+  readonly blockingSurfaces?: readonly THREE.Object3D[];
 }
 
 interface PanelHit {
@@ -91,6 +96,7 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
     gestureMode?: "rotate" | "pan",
     zoomDelta?: number,
   ): boolean;
+  getLastHitDistance(sourceId: string): number | undefined;
   dispose(): void;
 } {
   const {
@@ -107,6 +113,7 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
     onSpatialInput,
     onWheel,
     onBackgroundPointer,
+    blockingSurfaces = [],
   } = options;
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
@@ -124,6 +131,7 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
   const panelObjects = panels.map(({ panel }) => panel.object3d);
   const pointerTargetObjects = pointerTargets.map(({ object3d }) => object3d);
   const pointerTargetsById = new Map(pointerTargets.map((target) => [target.id, target]));
+  const lastHitDistances = new Map<string, number>();
   let hovered: PanelHit | null = null;
   let disposed = false;
   let pointerEventsEnabled = false;
@@ -160,6 +168,15 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
       inputId: mount.panel.hitTest(intersection.uv),
       distance: intersection.distance,
     };
+  };
+
+  const surfaceDistanceForRay = (ray: THREE.Ray): number | null => {
+    if (blockingSurfaces.length === 0) return null;
+    raycaster.ray.copy(ray);
+    const intersection = raycaster
+      .intersectObjects(blockingSurfaces as THREE.Object3D[], false)
+      .find(({ object }) => object.visible);
+    return intersection?.distance ?? null;
   };
 
   const targetForRay = (ray: THREE.Ray): PointerTargetHit | null => {
@@ -754,6 +771,15 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
       if (disposed) return false;
       const targetHit = targetForRay(ray);
       const panelHit = panelForRay(ray);
+      const surfaceDistance = phase === "cancel" ? null : surfaceDistanceForRay(ray);
+      const distances = [targetHit?.distance, panelHit?.distance, surfaceDistance ?? undefined]
+        .filter((distance): distance is number => distance !== undefined);
+      const hitDistance = distances.length > 0 ? Math.min(...distances) : undefined;
+      if (hitDistance !== undefined) {
+        lastHitDistances.set(sourceId, hitDistance);
+      } else {
+        lastHitDistances.delete(sourceId);
+      }
       const captured = pressedTargets.has(sourceId);
       const targetWins = captured ||
         (targetHit !== null && (!panelHit || targetHit.distance <= panelHit.distance));
@@ -768,10 +794,16 @@ export function createSpatialPanelHost(options: SpatialPanelHostOptions): {
         zoomDelta,
       );
       if (targetConsumed) return true;
-      return routeHit(panelHit, phase, sourceId, source, () => undefined);
+      if (routeHit(panelHit, phase, sourceId, source, () => undefined)) return true;
+      // The ray rests on a panel backing: consume it so nothing behind the panel is picked.
+      return surfaceDistance !== null;
+    },
+    getLastHitDistance(sourceId: string): number | undefined {
+      return lastHitDistances.get(sourceId);
     },
     dispose() {
       if (disposed) return;
+      lastHitDistances.clear();
       for (const [sourceId, particle] of particleDrags) {
         dispatchParticleDrag("cancel", particle, sourceId, new THREE.Ray());
       }

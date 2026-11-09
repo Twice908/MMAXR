@@ -27,7 +27,11 @@ if (import.meta.env.DEV && new URLSearchParams(window.location.search).has("glas
       if (manifest.modes[0] !== "screen") {
         throw new Error("This build supports the screen mode only.");
       }
-      mountAtomBuilder(app, { diagnostics: import.meta.env.DEV });
+      mountAtomBuilder(app, {
+        diagnostics: import.meta.env.DEV,
+        // Official Meta controller and hand models, served from public/xr-input-profiles.
+        xrInputModelsPath: `${import.meta.env.BASE_URL}xr-input-profiles`,
+      });
       const sceneHost = app.querySelector<HTMLElement>(".scene-viewport");
       if (!sceneHost) {
         throw new Error("Camera view could not find the screen scene.");

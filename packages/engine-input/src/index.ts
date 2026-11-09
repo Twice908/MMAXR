@@ -7,12 +7,6 @@ export {
 } from "./action-dispatcher.js";
 
 export {
-  GestureRecognizer,
-  type GestureConfig,
-  type TwoHandState,
-} from "./gestures.js";
-
-export {
   MouseInputAdapter,
   type MouseInputOptions,
 } from "./mouse.js";
@@ -28,20 +22,38 @@ export {
 } from "./touch.js";
 
 export {
-  XrControllerInputAdapter,
-  type XrControllerInputOptions,
-} from "./xr-controller.js";
-export {
-  XrSessionInputAdapter,
-  type XrSessionInputOptions,
-} from "./xr-session-input.js";
+  EdgeChannel,
+  XR_PRESS_VALUE,
+  XR_RELEASE_VALUE,
+  XR_STANDARD_BUTTON,
+  XR_THUMBSTICK_DEADZONE,
+  readButton,
+  readThumbstick,
+  type Edge,
+  type GamepadLike,
+  type ThumbstickReading,
+} from "./xr-buttons.js";
 
 export {
-  XrHandInputAdapter,
-  XR_HAND_JOINTS,
-  type XrHandInputOptions,
-  type XrHandJointName,
-} from "./xr-hand.js";
+  PINCH_END_DISTANCE,
+  PINCH_START_DISTANCE,
+  REFERENCE_HAND_SIZE,
+  PinchDetector,
+  distance3,
+  handScale,
+  midpoint3,
+  type PinchJoints,
+  type Point3,
+} from "./xr-pinch.js";
+
+export {
+  XrInputRig,
+  formatXrInputDiagnostics,
+  type XrInputDiagnostics,
+  type XrInputRigOptions,
+  type XrPointerFrameInfo,
+  type XrPointerKind,
+} from "./xr-input-rig.js";
 
 export {
   InputManager,

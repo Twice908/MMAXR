@@ -2,11 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import * as THREE from "three";
 import {
   InputManager,
-  createRaycastPicker,
   createScreenRayPicker,
 } from "../src/index.js";
 import { FakeDomElement, event, pointerEvent } from "./helpers/fake-dom.js";
-import { asWebGLRenderer, makeFakeRenderer } from "./helpers/fake-xr.js";
 
 describe("engine-input integration", () => {
   it("routes mouse and touch through one EngineAction stream", () => {
@@ -24,11 +22,9 @@ describe("engine-input integration", () => {
     scene.add(object);
 
     const root = new FakeDomElement();
-    const renderer = asWebGLRenderer(makeFakeRenderer());
     const dispatch = vi.fn();
 
     const input = new InputManager({
-      renderer,
       root: root as unknown as HTMLElement,
       dispatch,
       pickScreenTarget: createScreenRayPicker(
@@ -36,9 +32,6 @@ describe("engine-input integration", () => {
         scene,
         root as unknown as HTMLElement,
       ),
-      pickWorldRay: createRaycastPicker(scene),
-      enableXrControllers: false,
-      enableXrHands: false,
     });
 
     root.dispatchEvent(event("mousedown", {
@@ -64,16 +57,12 @@ describe("engine-input integration", () => {
 
   it("keeps the public action vocabulary device-independent", () => {
     const root = new FakeDomElement();
-    const renderer = asWebGLRenderer(makeFakeRenderer());
     const dispatch = vi.fn();
 
     const input = new InputManager({
-      renderer,
       root: root as unknown as HTMLElement,
       dispatch,
       pickScreenTarget: () => "atom:1",
-      enableXrControllers: false,
-      enableXrHands: false,
     });
 
     root.dispatchEvent(event("mousedown", {
@@ -97,16 +86,12 @@ describe("engine-input integration", () => {
 
   it("does not create duplicate listeners after repeated updates", () => {
     const root = new FakeDomElement();
-    const renderer = asWebGLRenderer(makeFakeRenderer());
     const dispatch = vi.fn();
 
     const input = new InputManager({
-      renderer,
       root: root as unknown as HTMLElement,
       dispatch,
       pickScreenTarget: () => "atom:1",
-      enableXrControllers: false,
-      enableXrHands: false,
     });
 
     input.update();

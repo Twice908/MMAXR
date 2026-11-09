@@ -84,6 +84,42 @@ describe("spatial panel ray consumption", () => {
     expect(atomPicker).toHaveBeenCalledOnce();
   });
 
+  it("stops XR rays on a panel backing so the ray ends there and nothing behind is picked", () => {
+    const group = new THREE.Group();
+    const { target } = makePointerTarget(group, vi.fn());
+    target.object3d.position.x = 5; // button far to the side; the backing is what the ray meets
+    const backing = new THREE.Mesh(
+      new THREE.PlaneGeometry(2, 2),
+      new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }),
+    );
+    backing.position.z = -0.01;
+    group.add(backing);
+    group.updateMatrixWorld(true);
+    const camera = new THREE.PerspectiveCamera();
+    const host = createSpatialPanelHost({
+      group,
+      camera,
+      pointerTarget: new EventTarget() as HTMLElement,
+      panels: [],
+      pointerTargets: [target],
+      blockingSurfaces: [backing],
+      onPanelAction: vi.fn(),
+      enablePointerEvents: false,
+    });
+    const ray = new THREE.Ray(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, -1));
+    const outside = new THREE.Ray(new THREE.Vector3(3, 0, 1), new THREE.Vector3(0, 0, -1));
+
+    expect(host.handleRay(ray, "move", "controller:1", "controller")).toBe(true);
+    expect(host.getLastHitDistance("controller:1")).toBeCloseTo(1.01);
+    expect(host.handleRay(ray, "down", "controller:1", "controller")).toBe(true);
+    expect(host.handleRay(ray, "up", "controller:1", "controller")).toBe(true);
+    expect(host.handleRay(outside, "move", "controller:1", "controller")).toBe(false);
+    expect(host.getLastHitDistance("controller:1")).toBeUndefined();
+    backing.visible = false;
+    expect(host.handleRay(ray, "move", "controller:1", "controller")).toBe(false);
+    host.dispose();
+  });
+
   it("routes controller and hand rays through the shared pointer-event API", () => {
     const group = new THREE.Group();
     const events: SpatialPointerEvent[] = [];

@@ -1,360 +1,79 @@
 # @mma/engine-input
 
-Device-independent input for MMAXR.
+Device-independent input for MMAXR. It turns mouse, touch, and WebXR controllers and
+hands into the engine's serializable action vocabulary: `hover`, `select`, `grab`,
+`move`, `release`, `rotate`, `scale`, `confirm`, `back`. Modules never read raw device
+events.
 
-This package is designed to sit between browser/XR input devices and `@mma/engine-core`. It emits the same serializable action vocabulary already used by MMAXR:
+## What is in the package
 
-- `hover`
-- `select`
-- `grab`
-- `move`
-- `release`
-- `rotate`
-- `scale`
-- `confirm`
-- `back`
+| Part | Files | Role |
+|---|---|---|
+| Screen input | `mouse.ts`, `touch.ts`, `pointer-base.ts`, `input-manager.ts` | Mouse, pen and touch (including pinch) on a DOM element |
+| Picking | `raycast-picker.ts` | Screen and world ray picking by `userData.inputId` |
+| XR input | `xr-input-rig.ts` | **One** adapter for Meta Quest controllers, hands, and phone-AR taps |
+| XR helpers (pure) | `xr-buttons.ts`, `xr-pinch.ts` | Gamepad mapping, deadzone, edge detection, joint pinch detection |
 
-It contains working adapters for:
+`engine-input` may import `engine-core` types and three.js. It must not import modules or
+kits, and it does not own the XR session lifecycle: the renderer owns the session and
+calls `XrInputRig.update(frame, time)` once per XR frame.
 
-- mouse
-- touch / multitouch
-- WebXR controllers
-- WebXR articulated hands
-- pinch
-- grab
-- two-hand scale
-- two-hand rotate
+## XR input rig
 
-It does not depend on React, React Three Fiber, Babylon, or any UI framework.
+```ts
+const rig = new XrInputRig({
+  dispatch: onInput,                          // engine action sink
+  pick: (ray) => renderer.pickRay(ray.origin, ray.direction),
+  handlePanelRay: (ray, phase, sourceId, kind, gestureMode, zoomDelta) =>
+    spatialSession.handleRay(ray, phase, sourceId, kind, gestureMode, zoomDelta),
+  getReferenceSpace: () => renderer.getXrReferenceSpace(),
+  primaryCommand: "lesson/check",             // sent with `confirm` on A/X
+});
+rig.setSession(xrSession);                    // synchronous; pass null to detach
+renderer.setXrFrameListener((frame, t) => rig.update(frame, t));
+```
 
-## Installation
+### Controls
 
-From the MMAXR repository root:
+| Input | Controller | Hand |
+|---|---|---|
+| Point | Target ray from `targetRaySpace` | Meta's emulated hand target ray |
+| Click / drag | Trigger (button 0, or `select` events) | Pinch (hand gamepad button 0, `select` events, or fingertip distance) |
+| Pan the model | Squeeze (button 1, or `squeeze` events) | not mapped |
+| Zoom | Two controllers pressing together, change in separation | Two hands pinching together |
+| Rotate / zoom model | Thumbstick (axes 2-3, radial deadzone) | not mapped |
+| Confirm | A / X (button 4), or click the panel under the ray | not mapped |
+| Back (reset view) | B / Y (button 5) | not mapped |
+
+The thumbstick click is intentionally unmapped. A palm pinch is reserved by the Quest
+system (left palm pinch exits the session) and is never used.
+
+### How signals are merged
+
+- Each source has one state machine and **one press at a time**: a squeeze while the
+  trigger is held is ignored, so releasing one button cannot clear the other.
+- Events and gamepad polling both report edges into the same state, so a press is never
+  doubled, and a runtime that lacks one signal still works.
+- Fingertip-distance pinch is only a fallback for a hand that has never reported a pinch
+  through events or its gamepad. If the system pinch appears while a joint pinch is held,
+  ownership is handed over without a second press.
+- If a source loses its pose for 12 frames during a press, the press is cancelled.
+- Rays are read in the renderer's reference space and are not smoothed.
+- Controllers get short haptic ticks on panel hover, press and release when an actuator
+  exists; failures are ignored.
+
+### Diagnostics
+
+`rig.getDiagnostics()` lists each source (kind, handedness, profiles, pressed buttons,
+event counts, pinch gap, ray tracking). Open the app with `?xrdebug=1` to include these
+lines in the XR report.
+
+## Tests
 
 ```bash
-pnpm --filter @mma/engine-input add three@0.186.1
+pnpm exec vitest run packages/engine-input
+pnpm exec tsc -p packages/engine-input/tsconfig.json --noEmit
 ```
 
-Because this is a workspace package, the preferred package manifest is already included. No runtime dependency other than the existing MMAXR `three` and `@mma/engine-core` packages is required.
-
-If adding the package manually to the monorepo, add:
-
-```json
-{
-  "name": "@mma/engine-input",
-  "version": "0.0.0",
-  "private": true,
-  "type": "module",
-  "exports": {
-    ".": "./src/index.ts"
-  },
-  "dependencies": {
-    "@mma/engine-core": "workspace:*",
-    "three": "0.186.1"
-  },
-  "devDependencies": {
-    "@types/three": "0.186.0"
-  }
-}
-```
-
-## Architecture
-
-```text
-Browser / XR device
-       |
-       +-- Mouse
-       +-- Touch
-       +-- XR Controller
-       +-- XR Hand
-       |
-       v
-@mma/engine-input
-       |
-       +-- Gesture recognition
-       +-- Picking
-       +-- Manipulation actions
-       +-- Two-hand scale / rotate
-       |
-       v
-EngineAction
-       |
-       v
-@mma/engine-core dispatch()
-       |
-       v
-Modules / rules / state
-```
-
-Modules should not listen to browser events or WebXR events directly.
-
-## Basic integration
-
-```ts
-import * as THREE from "three";
-import {
-  InputManager,
-  createRaycastPicker,
-  createScreenRayPicker,
-} from "@mma/engine-input";
-
-const scene = new THREE.Scene();
-
-const input = new InputManager({
-  renderer,
-  root: renderer.domElement,
-
-  dispatch: (action) => {
-    engineStore.dispatch(action);
-  },
-
-  pickScreenTarget: createScreenRayPicker(
-    camera,
-    scene,
-    renderer.domElement,
-  ),
-
-  pickWorldRay: createRaycastPicker(scene),
-});
-```
-
-Make interactive objects identifiable:
-
-```ts
-mesh.userData.inputId = "proton:1";
-```
-
-Then the module receives:
-
-```ts
-{
-  type: "select",
-  payload: {
-    source: "mouse",
-    target: "proton:1"
-  }
-}
-```
-
-## WebXR animation loop
-
-Three.js exposes the active XR session through `renderer.xr`, and the XR frame is available in the renderer animation loop. The hand adapter expects that frame so it can call `XRFrame.getJointPose()` for each tracked joint.
-
-```ts
-renderer.xr.enabled = true;
-
-renderer.setAnimationLoop((_time, frame) => {
-  if (frame) {
-    input.updateXrFrame(frame);
-  }
-
-  input.update();
-  renderer.render(scene, camera);
-});
-```
-
-When the XR session has hand tracking enabled, WebXR exposes `XRInputSource.hand`; an articulated hand contains 25 joint spaces. The adapter reads those joints and derives pinch/grab gestures from their positions.
-
-## Starting an XR session
-
-The application/session layer should request hand tracking:
-
-```ts
-const session = await navigator.xr.requestSession("immersive-vr", {
-  requiredFeatures: ["local-floor"],
-  optionalFeatures: ["hand-tracking"],
-});
-
-renderer.xr.setSession(session);
-```
-
-The input package intentionally does not own session creation. `engine-xr` should continue to own XR session lifecycle.
-
-## Hand gestures
-
-### Pinch
-
-Thumb-tip to index-tip distance:
-
-```text
-distance <= 2.8 cm -> pinch starts
-distance >= 4.5 cm -> pinch ends
-```
-
-The hysteresis prevents rapid start/end oscillation.
-
-Pinching a target emits:
-
-```text
-select
-grab
-move
-release
-```
-
-### Grab
-
-The package estimates finger curl from the four fingertips relative to the wrist.
-
-A grab emits:
-
-```text
-grab
-move
-release
-```
-
-### Two-hand scale
-
-With both hands active:
-
-```text
-newDistance / previousDistance = scale
-```
-
-A `scale` action is emitted with the scale factor and midpoint.
-
-### Two-hand rotate
-
-The angle between the two hands is compared with the previous frame. A quaternion around the local Z axis is emitted as a `rotate` action.
-
-## Important integration rule
-
-Do not make modules depend on `XRHand`, `XRInputSource`, `PointerEvent`, or `MouseEvent`.
-
-Only the input package should know those APIs.
-
-A module should consume:
-
-```ts
-EngineAction
-```
-
-For example:
-
-```ts
-function reduceAtom(state, action) {
-  if (action.type === "grab") {
-    // module-specific state transition
-  }
-
-  if (action.type === "move") {
-    // module-specific state transition
-  }
-
-  return state;
-}
-```
-
-## Picking
-
-The package provides a ready-to-use Three.js raycaster:
-
-```ts
-const pickWorldRay = createRaycastPicker(scene);
-```
-
-Objects can define stable IDs:
-
-```ts
-proton.userData.inputId = "proton:1";
-electron.userData.inputId = "electron:3";
-```
-
-The picker starts at the hit object and walks up the object hierarchy until it finds `userData.inputId`. The nearest tagged object wins; if the hit child is untagged, a tagged parent can provide the stable entity ID. This means a GLTF child mesh can be hit while the module still receives the parent entity ID.
-
-For screen input:
-
-```ts
-const pickScreenTarget = createScreenRayPicker(
-  camera,
-  scene,
-  renderer.domElement,
-);
-```
-
-## Controller models
-
-The input package intentionally does not create controller or hand meshes. Keep visual models in `engine-render` / `engine-xr`.
-
-Three.js provides `renderer.xr.getController(index)` for target-ray space and `getControllerGrip(index)` for grip space. Controller model factories belong in the rendering layer.
-
-## Recommended MMAXR dependency direction
-
-```text
-engine-core
-    ^
-    |
-engine-input
-    ^
-    |
-engine-render / engine-xr
-    ^
-    |
-modules
-```
-
-`engine-input` may import `engine-core` types and Three.js.
-
-`engine-input` must not import modules or subject kits.
-
-`engine-input` should not own XR session lifecycle.
-
-`engine-input` should not contain chemistry/physics/biology rules.
-
-## Wiring the current MMAXR repository
-
-The current repository already has input mapping in `engine-render` and `engine-xr`. Those mappings use the same action vocabulary as this package.
-
-Recommended migration:
-
-1. Add `packages/engine-input`.
-2. Add it to the root typecheck command.
-3. Move raw mouse/touch handling from `engine-render` into `engine-input`.
-4. Move controller/hand input handling into `engine-input`.
-5. Keep `engine-xr` responsible for session capability detection and session lifecycle.
-6. Keep `engine-render` responsible for Three.js rendering and visual XR models.
-7. Make both call the single `dispatch(action)` path.
-8. Remove duplicate raw-input listeners after the migration.
-9. Keep module code unaware of the physical input device.
-
-## Current package integration example
-
-The current MMAXR core defines:
-
-```ts
-type EngineAction = Readonly<{
-  type: string;
-  payload: JsonValue;
-}>;
-```
-
-This package deliberately emits that same shape, so it can be connected directly to the existing store:
-
-```ts
-const input = new InputManager({
-  renderer,
-  root: renderer.domElement,
-  dispatch: (action) => store.dispatch(action),
-  pickScreenTarget,
-  pickWorldRay,
-});
-```
-
-## Testing strategy
-
-Screen input can be tested on desktop Chrome using mouse/touch emulation.
-
-XR controller behavior can be exercised using the repository's existing WebXR emulator workflow.
-
-Hand tracking must ultimately be tested on real hardware because browser support for WebXR hand input is not universal.
-
-The package contains no native-app dependency and does not require React.
-
-## Notes
-
-`XRHand` is a WebXR API with limited browser availability. The adapter therefore treats hand tracking as an optional capability rather than a required input path.
-
-For unsupported devices, mouse/touch input continues to work.
-
-The package does not attempt to emulate actual hand tracking in an emulator; use the XR emulator for controller/session paths and real hardware for optical hand tracking validation.
+Tests use mock `XRSession`, `XRInputSource` and `XRFrame` objects (`tests/helpers/fake-xr.ts`).
+They do not prove behaviour on a headset; use `docs/xr-device-testing.md` for that.

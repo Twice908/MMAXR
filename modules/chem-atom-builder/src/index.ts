@@ -20,7 +20,8 @@ import {
 import {
   ScreenInputAdapter,
   ScreenSceneRenderer,
-  XrSessionInputAdapter,
+  XrInputRig,
+  formatXrInputDiagnostics,
   arTouchGestureConfig,
   installZoomControls,
   screenZoomConfig,
@@ -235,6 +236,8 @@ function referenceRegionRect(id: string): NonNullable<
 /** Mount-time options for the screen module. */
 export interface AtomBuilderOptions {
   readonly diagnostics?: boolean;
+  /** Folder of official XR controller and hand models; see `ScreenRendererOptions`. */
+  readonly xrInputModelsPath?: string;
 }
 
 /** Mount the Class 9-10 atom builder and return its complete teardown. */
@@ -344,6 +347,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   const renderer = new ScreenSceneRenderer({
     host: sceneHost,
     ...(options.diagnostics === undefined ? {} : { diagnostics: options.diagnostics }),
+    ...(options.xrInputModelsPath === undefined ? {} : { xrInputModelsPath: options.xrInputModelsPath }),
   });
   let spatialSession: SpatialPanelSession | null = null;
   let spatialHintRoot: HTMLElement | null = null;
@@ -352,7 +356,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   let spatialArControlsVisible = false;
   let spatialArDragEnabled = false;
   let spatialExitLabel = "Exit AR";
-  let xrInputAdapter: InstanceType<typeof XrSessionInputAdapter> | null = null;
+  let xrInput: XrInputRig | null = null;
   let input: ScreenInputAdapter | null = null;
   let xrSessionActive = false;
   let spatialFailureLogged = false;
@@ -634,11 +638,9 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
       spatialExitLabel = sessionInfo.mode === "immersive-vr" ? "Exit VR" : "Exit AR";
       setSpatialPresentation(active, "ar", undefined, sessionInfo.overlayGranted ?? undefined);
       if (active && session) {
-        void xrInputAdapter?.setSession(session as unknown as XRSession).catch((error: unknown) => {
-          root.dispatchEvent(new CustomEvent("mma:xr-runtime-error", { detail: error }));
-        });
+        xrInput?.setSession(session as unknown as XRSession);
       } else {
-        void xrInputAdapter?.setSession(null);
+        xrInput?.setSession(null);
       }
     },
     onSpatialExpandedChange: (expanded) => {
@@ -650,6 +652,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
         failSpatialPresentation(error);
       }
     },
+    getInputDiagnostics: () => (xrInput ? formatXrInputDiagnostics(xrInput.getDiagnostics()) : []),
     ...(options.diagnostics === undefined ? {} : { diagnostics: options.diagnostics }),
   });
 
@@ -1018,12 +1021,19 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
       renderer.endDrag();
     },
   });
-  xrInputAdapter = new XrSessionInputAdapter({
+  xrInput = new XrInputRig({
     dispatch: onInput,
     pick: (ray) => renderer.pickRay(ray.origin, ray.direction),
     handlePanelRay: (ray, phase, sourceId, source, gestureMode, zoomDelta) =>
       spatialSession?.handleRay(ray, phase, sourceId, source, gestureMode, zoomDelta) ?? false,
+    getHitDistance: (sourceId) => spatialSession?.getLastHitDistance?.(sourceId),
+    getReferenceSpace: () => renderer.getXrReferenceSpace(),
+    handleThumbstick: (axes, sourceId, handedness, deltaSeconds) =>
+      spatialSession?.handleThumbstick?.(axes, sourceId, handedness, deltaSeconds) ?? false,
+    onPointerFrame: (info) => renderer.updateXrPointer(info.inputSource, info.hitDistance, info.pressed),
+    primaryCommand: "lesson/check",
   });
+  renderer.setXrFrameListener((frame, timeMs) => xrInput?.update(frame, timeMs));
   root.addEventListener("click", onCommandClick);
   root.addEventListener("mma:spatial-presentation", onSpatialPresentation);
   root.addEventListener("mma:camera-look-orientation", onCameraLookOrientation);
@@ -1039,8 +1049,9 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   return () => {
     disposeZoomControls();
     input?.dispose();
-    xrInputAdapter?.dispose();
-    xrInputAdapter = null;
+    renderer.setXrFrameListener(null);
+    xrInput?.dispose();
+    xrInput = null;
     unsubscribe();
     narrationControls.removeEventListener("click", onNarrationAction);
     narrationSpeed.removeEventListener("change", onNarrationSpeedChange);
