@@ -6,6 +6,6 @@ version. For XR procedures and detailed checklists, see
 coverage, see [AR testing](./ar-testing.md) and
 [camera-view testing](./camera-view-testing.md).
 
-| Device | OS / browser | Date tested | Screen | Camera view | AR | VR | Notes / tester |
-|---|---|---|---|---|---|---|---|
-|  |  |  |  |  |  |  |  |
+| Device | OS / browser | Date tested | Screen | Camera view | AR | VR | Controllers | Hands | Notes / tester |
+|---|---|---|---|---|---|---|---|---|---|
+|  |  |  |  |  |  |  |  |  |  |

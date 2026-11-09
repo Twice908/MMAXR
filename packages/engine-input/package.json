@@ -13,9 +13,9 @@
   },
   "dependencies": {
     "@mma/engine-core": "workspace:*",
-    "three": "0.186.1"
+    "three": "npm:super-three@0.181.0"
   },
   "devDependencies": {
-    "@types/three": "0.186.0"
+    "@types/three": "0.181.0"
   }
 }

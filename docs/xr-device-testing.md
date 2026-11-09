@@ -49,6 +49,26 @@ where available, once in VR.
 - If testing Quest passthrough, verify it on the headset; the desktop emulator
   does not provide it.
 
+## Controllers and hands (IWSDK input)
+
+XR input, rays, and controller and hand models come from IWSDK (see ADR 0005). Open the
+app with `?xrdebug=1` to see the IWSDK world state, session mode, input source count and
+whether the lesson panels are showing.
+
+In the Immersive Web Emulator, rays follow where each emulated controller or hand points.
+The DevUI **Rot** fields are in radians; `Rot 0, 0, 0` points straight ahead. In the DevUI
+gizmo the blue arrow is the controller's back (+Z); aim the blue ball end at the panels.
+
+Headset checks:
+
+- Panels appear about 1 m away: lesson on the left, build panel on the right, dock under
+  the atom. Text is readable without leaning in; panels never follow the head.
+- Trigger or pinch presses every button (Hint, Check, Free play, steppers, question
+  options, Recenter, Reset atom, Exit). Poking a button with a fingertip also works.
+- Recenter re-places the atom and panels in front of you.
+- Switch between controllers and hands mid-session; both keep working.
+- VR shows a dark room with a floor; AR keeps passthrough.
+
 ## Apple Vision Pro checklist
 
 Use Safari. If WebXR is unavailable, enable **Settings > Apps > Safari >

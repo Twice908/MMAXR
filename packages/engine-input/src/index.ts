@@ -7,12 +7,6 @@ export {
 } from "./action-dispatcher.js";
 
 export {
-  GestureRecognizer,
-  type GestureConfig,
-  type TwoHandState,
-} from "./gestures.js";
-
-export {
   MouseInputAdapter,
   type MouseInputOptions,
 } from "./mouse.js";
@@ -26,22 +20,6 @@ export {
   TouchInputAdapter,
   type TouchInputOptions,
 } from "./touch.js";
-
-export {
-  XrControllerInputAdapter,
-  type XrControllerInputOptions,
-} from "./xr-controller.js";
-export {
-  XrSessionInputAdapter,
-  type XrSessionInputOptions,
-} from "./xr-session-input.js";
-
-export {
-  XrHandInputAdapter,
-  XR_HAND_JOINTS,
-  type XrHandInputOptions,
-  type XrHandJointName,
-} from "./xr-hand.js";
 
 export {
   InputManager,

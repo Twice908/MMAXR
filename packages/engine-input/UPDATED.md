@@ -1,3 +1,5 @@
+> Superseded: the XR controller and hand adapters described below were removed and replaced by `XrInputRig` (see ADR 0004). This note is kept as history only.
+
 # engine-input update
 
 This package is a replacement for the supplied `engine-input` folder.

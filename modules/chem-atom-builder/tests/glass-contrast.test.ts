@@ -1,7 +1,6 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { spatialTokens } from "../../../packages/engine-render/src/spatial-tokens.js";
 
 const tokenFile = fileURLToPath(new URL("../src/glass-tokens.css", import.meta.url));
 const tokenCss = readFileSync(tokenFile, "utf8");
@@ -227,17 +226,6 @@ describe("glass contrast tokens", () => {
       .toBeGreaterThanOrEqual(4.5);
   });
 
-  it("keeps CSS spatial tokens identical to the typed canvas mirror", () => {
-    const declarations = [...spatialTokenCss.matchAll(/^\s*--spatial-([\w-]+):\s*([^;]+);/gm)];
-    const cssValues = Object.fromEntries(
-      declarations.map(([, kebabName, value]) => [
-        kebabName!.replace(/-([a-z])/g, (_match, letter: string) => letter.toUpperCase()),
-        value!.trim(),
-      ]),
-    );
-    expect(Object.keys(cssValues).sort()).toEqual(Object.keys(spatialTokens).sort());
-    expect(cssValues).toEqual(spatialTokens);
-  });
 
   it("keeps spatial ink at WCAG AA over all reference backdrops", () => {
     const bodyText = getSpatialColor("ink").color;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { screenZoomConfig } from "../src/screen-renderer.js";
+import { screenZoomConfig } from "../src/zoom-controls.js";
 
 /** Pure zoom calculation used by ScreenSceneRenderer. */
 function applyZoom(distance: number, delta: number): number {

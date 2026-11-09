@@ -490,6 +490,7 @@ WebXR needs HTTPS except on `localhost`. For on-device phone testing, use a loca
 | Voice languages and Indian-accent recognition quality | Open (test with real students) |
 | Transcript retention for the voice guide | Open (default: none) |
 | Desktop screen camera view uses local video without world tracking | Decided |
+| 3D scene, XR sessions and XR input run on IWSDK 1.0.1 with the Horizon UI kit (ADR 0005) | Decided |
 
 ## 18. License and credits
 

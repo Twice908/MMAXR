@@ -1,5 +1,5 @@
 import type { TelemetryContext } from "@mma/engine-core";
-import { shouldShowSpatialSettingsFallback, type ScreenSceneRenderer } from "@mma/engine-render";
+import { shouldShowSpatialSettingsFallback, type SceneRenderer } from "@mma/engine-render";
 import {
   ArSessionController,
   ArSessionStartError,
@@ -14,7 +14,7 @@ import { arTelemetryEventSchema } from "@mma/schema";
 
 export interface ArControlsOptions {
   readonly root: HTMLElement;
-  readonly renderer: ScreenSceneRenderer;
+  readonly renderer: SceneRenderer;
   readonly telemetryContext: TelemetryContext;
   readonly clock: () => string;
   readonly idGenerator: () => string;
@@ -53,39 +53,9 @@ function formatPosition(position: Readonly<{ x: number; y: number; z: number }> 
     : "unavailable";
 }
 
-function formatPose(pose: XrSceneDiagnostics["latestFramePose"]): string {
-  if (!pose) return "unavailable";
-  const { orientation } = pose;
-  return `position ${formatPosition(pose.position)}, orientation (${
-    [orientation.x, orientation.y, orientation.z, orientation.w]
-      .map((value) => value.toFixed(3))
-      .join(", ")
-  })`;
-}
-
-function formatRotation(
-  rotation: XrSceneDiagnostics["panelGroupWorldRotation"],
-): string {
-  if (!rotation) return "unavailable";
-  return `(${[rotation.x, rotation.y, rotation.z, rotation.w]
-    .map((value) => value.toFixed(3))
-    .join(", ")})`;
-}
-
-/** Build a PII-free, copyable XR support and session report. */
+/** Build the copyable, PII-free XR report shown with `?xrdebug=1`. */
 export function buildXrDiagnosticsText(data: XrDiagnosticsData): string {
   const scene = data.scene;
-  const framebuffer = scene.framebufferSize
-    ? `${scene.framebufferSize.width} x ${scene.framebufferSize.height}`
-    : "unavailable";
-  const atomViewerSpace = scene.atomViewerSpace
-    ? `${scene.atomViewerSpace.distanceMeters.toFixed(3)} m, direction ${
-      formatPosition(scene.atomViewerSpace.direction)
-    }`
-    : "unavailable";
-  const atomVisibilityChain = scene.atomVisibilityChain
-    .map(({ name, visible }) => `${name}:${visible ? "visible" : "hidden"}`)
-    .join(" > ");
   return [
     `Supported session modes: ${data.supportedModes.join(", ") || "none"}`,
     `Requested features: ${data.requestedFeatures.join(", ") || "none"}`,
@@ -96,55 +66,14 @@ export function buildXrDiagnosticsText(data: XrDiagnosticsData): string {
     `Input sources: ${data.inputSourceTypes.join(", ") || "none"}`,
     `Reference space: ${data.referenceSpaceType ?? "unavailable"}`,
     `Frame rate: ${data.frameRate === null ? "unavailable" : `${data.frameRate} Hz`}`,
-    `Scene session mode: ${scene.sessionMode ?? "unavailable"}`,
-    `Renderer reference space actually used: ${scene.referenceSpaceType ?? "unavailable"} (ready: ${scene.referenceSpaceReady ? "yes" : "no"})`,
-    `First frame pose was null: ${scene.firstFramePoseWasNull === null ? "unknown" : scene.firstFramePoseWasNull ? "yes" : "no"}`,
-    `First non-null viewer pose: ${formatPose(scene.firstNonNullViewerPose)}`,
-    `Latest frame viewer pose: ${formatPose(scene.latestFramePose)}`,
-    `Atom world position: ${formatPosition(scene.atomWorldPosition)}`,
-    `Atom root world scale: ${formatPosition(scene.atomWorldScale)}`,
-    `Atom visibility (atom -> scene): ${atomVisibilityChain || "unavailable"}`,
-    `XR camera-to-atom distance: ${scene.xrCameraToAtomDistanceMeters === null ? "unavailable" : `${scene.xrCameraToAtomDistanceMeters.toFixed(3)} m`}`,
-    `Panel group world position: ${formatPosition(scene.panelGroupWorldPosition)}`,
-    `Panel group world scale: ${scene.panelGroupWorldScale ? formatPosition(scene.panelGroupWorldScale) : "unavailable"}`,
-    `Panel group distance from viewer: ${scene.panelGroupDistanceMeters == null ? "unavailable" : `${scene.panelGroupDistanceMeters.toFixed(3)} m`}`,
-    `Position slider value: ${scene.panelGroupSliderValues?.positionMeters.toFixed(3) ?? "unavailable"} m`,
-    `Scale slider value: ${scene.panelGroupSliderValues?.scale.toFixed(3) ?? "unavailable"}`,
-    `Active panel layout: ${scene.activeSpatialLayout ?? "unavailable"}`,
-    `Panel limits: ${scene.spatialLayoutLimits
-      ? `scale min/default/max ${scene.spatialLayoutLimits.scale.min}/${scene.spatialLayoutLimits.scale.default}/${scene.spatialLayoutLimits.scale.max}, distance ${scene.spatialLayoutLimits.distanceMeters.min}/${scene.spatialLayoutLimits.distanceMeters.default}/${scene.spatialLayoutLimits.distanceMeters.max} m`
-      : "unavailable"}`,
-    `Required look angles L/R/U/D: ${scene.spatialLayoutLookAngles
-      ? `${scene.spatialLayoutLookAngles.leftDegrees.toFixed(1)} / ${scene.spatialLayoutLookAngles.rightDegrees.toFixed(1)} / ${scene.spatialLayoutLookAngles.upDegrees.toFixed(1)} / ${scene.spatialLayoutLookAngles.downDegrees.toFixed(1)} deg`
-      : "unavailable"}`,
-    `Camera look yaw/pitch: ${scene.cameraLookAngles
-      ? `${scene.cameraLookAngles.yawDegrees.toFixed(1)} / ${scene.cameraLookAngles.pitchDegrees.toFixed(1)} deg`
-      : "inactive"}`,
-    `Camera look limits yaw/pitch: ${scene.cameraLookLimits
-      ? `${scene.cameraLookLimits.yawDegrees.toFixed(1)} / ${scene.cameraLookLimits.pitchDegrees.toFixed(1)} deg`
-      : "inactive"}`,
-    `Layout fits at minimum scale: ${scene.spatialLayoutFitsAtMinimumScale == null
-      ? "unavailable"
-      : scene.spatialLayoutFitsAtMinimumScale ? "yes" : "no"}`,
-    `Camera layout fits at minimum scale (portrait/landscape): ${scene.cameraFitsAtMinimumScale
-      ? `${scene.cameraFitsAtMinimumScale.portrait ? "yes" : "no"} / ${scene.cameraFitsAtMinimumScale.landscape ? "yes" : "no"}`
-      : "inactive"}`,
-    `Panel group world rotation (x, y, z, w): ${formatRotation(scene.panelGroupWorldRotation)}`,
-    `Atom position relative to model-panel centre: ${formatPosition(scene.modelStage?.relativeToModelPanelCenter ?? null)}`,
-    `Model stage position: ${formatPosition(scene.modelStage?.position ?? null)}`,
-    `Model stage rotation (x, y, z, w): ${formatRotation(scene.modelStage?.rotation ?? null)}`,
-    `Model stage zoom: ${scene.modelStage?.zoom.toFixed(3) ?? "unavailable"}`,
-    `Model nearest-surface distance: ${scene.modelStage?.nearestSurfaceDistanceMeters == null ? "unavailable" : `${scene.modelStage.nearestSurfaceDistanceMeters.toFixed(3)} m`}`,
-    `Model stage binding limit: ${scene.modelStage?.bindingLimit ?? "none"}`,
-    `fits inside model area: ${scene.modelStage ? scene.modelStage.fitsInsideModelArea ? "yes" : "no" : "unavailable"}`,
-    `Atom in viewer space: ${atomViewerSpace}`,
-    `Atom position inside view frustum: ${scene.atomInsideViewFrustum === null ? "unknown" : scene.atomInsideViewFrustum ? "yes" : "no"}`,
+    `IWSDK world ready: ${scene.worldReady ? "yes" : "no"}`,
+    `Scene session mode: ${scene.sessionMode ?? "none"}`,
     `renderer.xr.isPresenting: ${scene.rendererPresenting ? "yes" : "no"}`,
-    `XR base layer framebuffer: ${framebuffer}`,
     `XR frame count: ${scene.framesRendered}`,
-    `View count: ${scene.viewCount ?? "unavailable"}`,
-    `VR environment present: ${scene.environmentPresent ? "yes" : "no"}`,
-    `Scene object issues: ${scene.sceneIssues.join("; ") || "none"}`,
+    `XR input sources (IWSDK): ${scene.inputSourceCount}`,
+    `Atom world position: ${formatPosition(scene.atomWorldPosition)}`,
+    `Atom world scale: ${scene.atomScale.toFixed(3)}`,
+    `Lesson panels visible: ${scene.lessonPanelsVisible ? "yes" : "no"}`,
     `Last XR error: ${data.lastErrorMessage || "none"}`,
     `Last XR error stack:\n${data.lastErrorStack || "unavailable"}`,
   ].join("\n");
@@ -763,7 +692,6 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
     if (spatialActive) options.onSpatialActiveChange?.(false, controller.sessionInfo, null);
     unmountPanel();
     setArActiveState(false, activeTargets);
-    renderer.setArDiagnosticsListener(null);
     actions.remove();
     supportMessage.remove();
     dialog.remove();

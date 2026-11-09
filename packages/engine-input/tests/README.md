@@ -8,17 +8,13 @@ The suite is intentionally divided by responsibility so regressions identify the
 tests/
 ├── helpers/
 │   ├── fake-dom.ts
-│   ├── fake-xr.ts
 │   └── test-actions.ts
 ├── action-dispatcher.test.ts
 ├── event-bus.test.ts
-├── gestures.test.ts
 ├── input-manager.test.ts
 ├── mouse.test.ts
 ├── raycast-picker.test.ts
 ├── touch.test.ts
-├── xr-controller.test.ts
-├── xr-hand.test.ts
 └── integration.test.ts
 ```
 
@@ -67,36 +63,6 @@ pnpm exec vitest run packages/engine-input/tests --coverage
 - two-finger pinch scale
 - pointer capture/release
 
-### Gesture recognition
-- pinch hysteresis
-- pinch start/move/release
-- grab start/move/release
-- movement deadzone
-- left/right hand isolation
-- two-hand scaling
-- two-hand rotation
-- reset/remove hand
-
-### XR controllers
-- controller creation
-- connected/disconnected
-- handedness
-- target picking
-- select/grab/release
-- squeeze/grab/release
-- hover
-- cleanup
-
-### XR hands
-- 25-joint reading
-- missing-pose tolerance
-- left/right detection
-- pinch
-- grab
-- target picking
-- debug-joint lifecycle
-- disconnect cleanup
-
 ### Picking
 - screen coordinate conversion
 - nested `userData.inputId`
@@ -106,7 +72,6 @@ pnpm exec vitest run packages/engine-input/tests --coverage
 - stable target IDs
 
 ### Integration
-- mouse/touch/XR sharing one action stream
+- mouse and touch sharing one action stream
 - no duplicate action vocabulary
 - InputManager lifecycle
-- XR frame forwarding
