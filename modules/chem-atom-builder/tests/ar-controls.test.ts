@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildXrDiagnosticsText,
+  isTouchFirstDevice,
   isXrDiagnosticsEnabled,
   scheduleComfortBreakReminder,
 } from "../src/ar-controls.js";
@@ -93,5 +94,15 @@ describe("AR comfort break reminders", () => {
     vi.advanceTimersByTime(10 * 60 * 1000);
 
     expect(reminder).not.toHaveBeenCalled();
+  });
+});
+
+describe("isTouchFirstDevice", () => {
+  it("treats a device without a fine pointer as touch-first, so phone VR stays hidden", () => {
+    expect(isTouchFirstDevice(() => ({ matches: false }))).toBe(true);
+  });
+
+  it("keeps desktop and headset browsers with a fine pointer eligible for VR", () => {
+    expect(isTouchFirstDevice((query) => ({ matches: query === "(any-pointer: fine)" }))).toBe(false);
   });
 });

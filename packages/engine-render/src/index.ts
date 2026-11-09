@@ -53,9 +53,6 @@ export {
   DEFAULT_WORLD_OPTIONS,
   SceneRenderer,
   arTouchGestureConfig,
-  setScreenRendererTransparentBackground,
-  shouldShowSpatialSettingsFallback,
-  type DeviceOrientationSample,
   type SceneRendererOptions,
   type XrSceneDiagnostics,
 } from "./scene-renderer.js";

@@ -34,14 +34,6 @@ export interface SceneRendererOptions {
   readonly diagnostics?: boolean;
 }
 
-/** Device orientation sample used by the Android camera view look-around. */
-export interface DeviceOrientationSample {
-  readonly alpha: number;
-  readonly beta: number;
-  readonly gamma: number;
-  readonly screenAngleDegrees: number;
-}
-
 /** PII-free facts about the immersive scene for the development report. */
 export interface XrSceneDiagnostics {
   readonly worldReady: boolean;
@@ -98,7 +90,6 @@ const ROTATE_SPEED = 0.006;
 const PITCH_LIMIT = 1.15;
 const AR_SCALE_LIMITS = { min: 0.5, max: 2.5 } as const;
 const AR_DISTANCE_LIMITS = { min: 0.35, max: 2 } as const;
-const SCREEN_BACKGROUND_MODE_EVENT = "mma:screen-background-mode";
 
 /**
  * Renderer built on Meta's Immersive Web SDK (IWSDK). Outside XR it draws the atom
@@ -130,9 +121,6 @@ export class SceneRenderer {
   private yaw = 0;
   private pitch = 0;
   private distance: number = screenZoomConfig.defaultDistance;
-  private cameraLookYaw = 0;
-  private cameraLookPitch = 0;
-  private cameraOrientationBaseline: { alpha: number; beta: number } | null = null;
   private drag: { pointerId: number; direction: THREE.Vector3 } | null = null;
   private xrScale = 1;
   private xrDistance: number = XR_LAYOUT.atomDistance;
@@ -159,7 +147,6 @@ export class SceneRenderer {
     this.grabSphere.name = "atom-grab-sphere";
     this.anchor.add(this.pivot);
     this.pivot.add(this.atom.root, this.grabSphere);
-    this.host.addEventListener(SCREEN_BACKGROUND_MODE_EVENT, this.onBackgroundMode);
     this.ready = World.create(this.container, options.worldOptions ?? DEFAULT_WORLD_OPTIONS).then((world) => {
       if (this.disposed) {
         world.destroy();
@@ -280,9 +267,6 @@ export class SceneRenderer {
   resetView(): void {
     this.yaw = 0;
     this.pitch = 0;
-    this.cameraLookYaw = 0;
-    this.cameraLookPitch = 0;
-    this.cameraOrientationBaseline = null;
     if (this.xrSession) {
       this.xrScale = 1;
       this.xrDistance = XR_LAYOUT.atomDistance;
@@ -302,27 +286,6 @@ export class SceneRenderer {
   /** Re-place the atom and panels in front of the current head pose (XR). */
   recenter(): void {
     this.xrNeedsPlacement = true;
-  }
-
-  /** Look around in the Android camera view from device orientation. */
-  updateCameraViewOrientation(sample: DeviceOrientationSample): void {
-    if (!this.cameraOrientationBaseline) {
-      this.cameraOrientationBaseline = { alpha: sample.alpha, beta: sample.beta };
-      return;
-    }
-    const wrap = (degrees: number): number => ((degrees + 540) % 360) - 180;
-    this.cameraLookYaw = THREE.MathUtils.degToRad(wrap(sample.alpha - this.cameraOrientationBaseline.alpha));
-    this.cameraLookPitch = THREE.MathUtils.clamp(
-      THREE.MathUtils.degToRad(sample.beta - this.cameraOrientationBaseline.beta),
-      -0.6,
-      0.6,
-    );
-    this.applyPivot();
-  }
-
-  /** Forget the orientation baseline after a screen rotation. */
-  rebaseCameraViewOrientation(): void {
-    this.cameraOrientationBaseline = null;
   }
 
   /** Show or update the world-locked Horizon UI lesson panels (AR/VR only). */
@@ -421,7 +384,6 @@ export class SceneRenderer {
     if (this.disposed) return;
     this.disposed = true;
     this.stopXrFrames?.();
-    this.host.removeEventListener(SCREEN_BACKGROUND_MODE_EVENT, this.onBackgroundMode);
     window.removeEventListener("resize", this.onResize);
     this.resizeObserver?.disconnect();
     this.hideLessonPanels();
@@ -516,12 +478,6 @@ export class SceneRenderer {
     world.camera.updateProjectionMatrix();
   };
 
-  private readonly onBackgroundMode = (event: Event): void => {
-    const detail = (event as CustomEvent<boolean | { transparent: boolean }>).detail;
-    const transparent = typeof detail === "boolean" ? detail : detail.transparent;
-    this.container.classList.toggle("is-transparent", transparent);
-  };
-
   private applyScreenAnchor(): void {
     if (this.xrSession) return;
     // The IWSDK camera stays at eye height looking down -Z; the atom moves instead.
@@ -530,7 +486,7 @@ export class SceneRenderer {
   }
 
   private applyPivot(): void {
-    this.pivot.rotation.set(this.pitch - this.cameraLookPitch, this.yaw - this.cameraLookYaw, 0, "YXZ");
+    this.pivot.rotation.set(this.pitch, this.yaw, 0, "YXZ");
     this.pivot.scale.setScalar(this.xrSession ? XR_ATOM_SCALE * this.xrScale : 1);
   }
 
@@ -656,21 +612,4 @@ async function adoptSession(world: World, session: XRSession, mode: XRSessionMod
     if (world.session === session) world.session = undefined;
   }, { once: true });
   return true;
-}
-
-/** Ask the renderer under `host` to make its background transparent (camera view). */
-export function setScreenRendererTransparentBackground(
-  host: HTMLElement,
-  transparent: boolean,
-  androidCameraLayout = false,
-): void {
-  host.dispatchEvent(new CustomEvent(SCREEN_BACKGROUND_MODE_EVENT, {
-    bubbles: true,
-    detail: androidCameraLayout ? { transparent, androidCameraLayout } : transparent,
-  }));
-}
-
-/** Whether a DOM settings button should be offered while AR or the camera view is active. */
-export function shouldShowSpatialSettingsFallback(arActive: boolean, cameraViewActive: boolean): boolean {
-  return arActive || cameraViewActive;
 }

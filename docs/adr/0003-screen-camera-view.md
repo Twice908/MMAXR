@@ -1,6 +1,6 @@
 # ADR 0003: Screen-only camera view
 
-Status: Accepted
+Status: Superseded by ADR 0006 (Camera view removed)
 
 ## Decision
 

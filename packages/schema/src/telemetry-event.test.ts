@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   arTelemetryEventSchema,
-  cameraViewTelemetryEventSchema,
   telemetryEventSchema,
 } from "./telemetry-event.js";
 
@@ -102,29 +101,11 @@ describe("telemetryEventSchema", () => {
     }).success).toBe(false);
   });
 
-  it("validates local camera view lifecycle telemetry with duration and reason", () => {
-    const started = {
+  it("rejects the removed camera view events", () => {
+    expect(telemetryEventSchema.safeParse({
       ...validEvent,
       type: "camera_view_started",
       payload: { durationSec: 0, errorReasonCode: "none" },
-      device: { mode: "screen", tier: "mid" },
-    };
-    const ended = {
-      ...validEvent,
-      type: "camera_view_ended",
-      payload: { durationSec: 18, errorReasonCode: "none" },
-      device: { mode: "screen", tier: "mid" },
-    };
-    expect(cameraViewTelemetryEventSchema.safeParse(started).success).toBe(true);
-    expect(cameraViewTelemetryEventSchema.safeParse(ended).success).toBe(true);
-    expect(telemetryEventSchema.safeParse(started).success).toBe(true);
-    expect(cameraViewTelemetryEventSchema.safeParse({
-      ...ended,
-      payload: { durationSec: -1, errorReasonCode: "none" },
-    }).success).toBe(false);
-    expect(cameraViewTelemetryEventSchema.safeParse({
-      ...ended,
-      payload: { durationSec: 0, errorReasonCode: "frame_uploaded" },
     }).success).toBe(false);
   });
 });
