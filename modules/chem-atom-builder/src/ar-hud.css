@@ -1,0 +1,395 @@
+/*
+ * Phone AR HUD and the immersive-session chrome (consent dialog, status toast,
+ * comfort reminder, diagnostics). Visual language follows the Horizon UI kit
+ * (light theme) and matches the headset lesson panels' palette; sizes follow
+ * handheld guidance: 48px minimum hit targets, 16px body text, thumb-zone tabs.
+ */
+:root {
+  /* Opaque-leaning surface: readable over any camera backdrop without relying on blur. */
+  --hud-surface: rgba(255, 255, 255, 0.94);
+  /* Card inside a sheet. */
+  --hud-card: #ffffff;
+  /* Hairline borders and dividers. */
+  --hud-line: #e3e8ef;
+  /* Primary text (matches the headset panels' ink). */
+  --hud-ink: #16243a;
+  /* Secondary text; AA on --hud-surface and --hud-card. */
+  --hud-muted: #55627a;
+  /* Primary action and selected state. */
+  --hud-accent: #1d5fd0;
+  /* Tint behind selected and hovered controls. */
+  --hud-accent-tint: #eaf1fd;
+  /* Text on --hud-accent and --hud-danger. */
+  --hud-on-accent: #ffffff;
+  /* Exit and destructive actions. */
+  --hud-danger: #b3261e;
+  /* Correct-answer state. */
+  --hud-positive: #14866d;
+  --hud-positive-tint: #e3f5ee;
+  /* Incorrect-answer state uses --hud-danger on this tint. */
+  --hud-negative-tint: #fbe7e5;
+  /* Elevation for floating surfaces. */
+  --hud-shadow: 0 6px 24px rgba(10, 20, 40, 0.18);
+  /* Radii: sheets/bars, cards, controls. */
+  --hud-radius-lg: 22px;
+  --hud-radius-md: 14px;
+  --hud-radius-sm: 12px;
+  /* Minimum hit target (Horizon kit, 48dp) and the larger tab target. */
+  --hud-hit: 48px;
+  --hud-tab-height: 60px;
+  /* Outer gutter, never inside the device safe areas. */
+  --hud-gap: 12px;
+  --hud-top: max(var(--hud-gap), env(safe-area-inset-top));
+  --hud-right: max(var(--hud-gap), env(safe-area-inset-right));
+  --hud-bottom: max(var(--hud-gap), env(safe-area-inset-bottom));
+  --hud-left: max(var(--hud-gap), env(safe-area-inset-left));
+}
+
+/* ---------- Page while an immersive session runs ---------- */
+.ar-active, html.ar-active, body.ar-active, #app.ar-active { background-color: transparent !important; background-image: none !important; }
+.ar-active .atom-builder,
+.ar-active .builder-content,
+.ar-active .atom-workspace,
+.ar-active .scene-viewport { background-color: transparent !important; background-image: none !important; border-color: transparent !important; }
+.ar-active .builder-header,
+.ar-active .scene-heading,
+.ar-active .ar-support-message,
+.ar-active .chemistry-feedback,
+.ar-active .drop-slot-layer,
+.ar-active .render-diagnostics,
+.ar-active .dev-events-toggle,
+.ar-active .dev-event-panel { display: none !important; }
+.ar-active .builder-content { display: block; min-height: 0; }
+.ar-active .atom-workspace { position: fixed; z-index: 0; inset: 0; padding: 0; pointer-events: none; }
+.ar-active .scene-viewport { position: absolute; inset: 0; min-height: 0; overflow: visible; border: 0; border-radius: 0; }
+.xr-session-active .scene-viewport,
+.xr-session-active .atom-canvas { touch-action: auto !important; }
+/* Headset VR: the page is not visible; nothing in it may catch input. */
+.xr-vr-active * { pointer-events: none !important; }
+.xr-vr-active .atom-canvas { pointer-events: auto !important; }
+.xr-vr-active :is(.ar-hud, .ar-confirmation, .ar-status, .ar-break-reminder, .ar-diagnostics) { display: none !important; }
+
+/* ---------- HUD frame ---------- */
+.ar-hud {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto 1fr auto auto auto;
+  grid-template-areas: "top" "." "caption" "sheet" "tabs";
+  gap: 10px;
+  padding: var(--hud-top) var(--hud-right) var(--hud-bottom) var(--hud-left);
+  box-sizing: border-box;
+  color: var(--hud-ink);
+  font-family: "Avenir Next", "Trebuchet MS", sans-serif;
+  font-size: 16px;
+  line-height: 1.4;
+  pointer-events: none;
+}
+.ar-hud[hidden] { display: none !important; }
+.ar-hud > * { pointer-events: auto; min-width: 0; }
+.ar-hud :is(button, select) { font: inherit; }
+.ar-hud :is(button, select):focus-visible { outline: 3px solid var(--hud-accent); outline-offset: 2px; }
+
+/* ---------- Top bar: status, reset, exit ---------- */
+.ar-hud-top { grid-area: top; display: flex; align-items: center; gap: 8px; pointer-events: none; }
+.ar-hud-top > * { pointer-events: auto; }
+.ar-hud-status {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0 16px;
+  line-height: var(--hud-hit);
+  border-radius: 999px;
+  background: var(--hud-surface);
+  box-shadow: var(--hud-shadow);
+  font-size: 14px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ar-hud-status:empty { visibility: hidden; }
+.ar-hud-round {
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  width: var(--hud-hit);
+  height: var(--hud-hit);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--hud-ink);
+  background: var(--hud-surface);
+  box-shadow: var(--hud-shadow);
+  cursor: pointer;
+}
+.ar-hud-exit-slot { display: contents; }
+.ar-exit {
+  flex: 0 0 auto;
+  min-height: var(--hud-hit);
+  padding: 0 18px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--hud-on-accent);
+  background: var(--hud-danger);
+  box-shadow: var(--hud-shadow);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.ar-exit:disabled { opacity: .8; cursor: wait; }
+
+/* One-time gesture tip, centred under the top bar. */
+.ar-hud-tip {
+  position: absolute;
+  top: calc(var(--hud-top) + var(--hud-hit) + 10px);
+  left: 50%;
+  margin: 0;
+  padding: 8px 14px;
+  border-radius: 999px;
+  color: var(--hud-on-accent);
+  background: rgba(22, 36, 58, 0.86);
+  font-size: 14px;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+/* ---------- Caption (always visible when captions are on) ---------- */
+.ar-hud-caption-slot { grid-area: caption; justify-self: center; width: min(560px, 100%); pointer-events: none; }
+.ar-hud .narration-caption {
+  max-width: none;
+  margin: 0;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: var(--hud-radius-md);
+  color: #ffffff;
+  background: rgba(22, 36, 58, 0.86);
+  font-size: 16px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+/* ---------- Sheet ---------- */
+.ar-hud-sheet {
+  grid-area: sheet;
+  justify-self: center;
+  width: min(560px, 100%);
+  max-height: min(46dvh, 460px);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  border-radius: var(--hud-radius-lg);
+  background: var(--hud-surface);
+  box-shadow: var(--hud-shadow);
+  overflow: hidden;
+  animation: hud-sheet-in 180ms ease-out;
+}
+.ar-hud-sheet[hidden] { display: none !important; }
+@keyframes hud-sheet-in { from { opacity: 0; transform: translateY(12px); } }
+.ar-hud-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 6px 0 18px; }
+.ar-hud-sheet-title { margin: 0; font-size: 18px; font-weight: 700; }
+.ar-hud-close { box-shadow: none; background: transparent; }
+.ar-hud-body {
+  display: grid;
+  gap: 10px;
+  padding: 4px 14px 14px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+.ar-hud-body[hidden] { display: none !important; }
+
+/* Cards inside the sheet reuse the lesson elements, restyled. */
+.ar-hud-body > :is(.lesson-panel, .assessment-card, .lesson-summary, .free-play-status, .particle-rail, .atom-inspector, .narration-hud) {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--hud-line);
+  border-radius: var(--hud-radius-md);
+  color: var(--hud-ink);
+  background: var(--hud-card);
+}
+.ar-hud-body > [hidden] { display: none !important; }
+.ar-hud .lesson-copy { display: grid; gap: 4px; }
+.ar-hud .lesson-copy > * { margin: 0; }
+.ar-hud :is(.lesson-step, #assessment-step) { margin: 0; color: var(--hud-muted); font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.ar-hud :is(#mission-title, #assessment-prompt, .lesson-summary h2) { margin: 0; font-family: inherit; font-size: 18px; font-weight: 700; line-height: 1.3; }
+.ar-hud #mission-goal, .ar-hud #lesson-summary-details { font-size: 16px; }
+.ar-hud .mission-progress { color: var(--hud-muted); font-size: 14px; }
+.ar-hud :is(.hint-feedback, .mission-feedback, .assessment-feedback) { margin: 0; font-size: 15px; }
+.ar-hud :is(.hint-feedback, .mission-feedback, .assessment-feedback):empty { display: none; }
+.ar-hud .lesson-controls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+
+/* Buttons: secondary by default, primary for Check / Continue / Enable sound. */
+.ar-hud :is(.lesson-controls button, .assessment-options button, .assessment-continue, .narration-controls button, .narration-controls select, .stepper button) {
+  min-width: var(--hud-hit);
+  min-height: var(--hud-hit);
+  padding: 0 14px;
+  border: 1px solid var(--hud-line);
+  border-radius: var(--hud-radius-sm);
+  color: var(--hud-ink);
+  background: var(--hud-card);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.ar-hud :is(.lesson-controls [data-command="lesson:check"], .assessment-continue, [data-narration-action="enable"]) {
+  border-color: var(--hud-accent);
+  color: var(--hud-on-accent);
+  background: var(--hud-accent);
+}
+.ar-hud :is(button, select):disabled { opacity: .45; cursor: not-allowed; }
+.ar-hud .lesson-controls [data-command="lesson:check"]:disabled { border-color: var(--hud-line); color: var(--hud-ink); background: var(--hud-card); }
+@media (hover: hover) {
+  .ar-hud :is(.lesson-controls button, .assessment-options button, .narration-controls button, .stepper button):hover:not(:disabled) { background: var(--hud-accent-tint); }
+}
+
+/* Question */
+.ar-hud .assessment-options { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.ar-hud .assessment-options button { padding: 10px 14px; font-weight: 500; line-height: 1.35; text-align: left; }
+.ar-hud .assessment-options button:disabled { opacity: 1; cursor: default; }
+.ar-hud .assessment-options button:is(.is-correct, .is-answer) { border-color: var(--hud-positive); color: var(--hud-positive); background: var(--hud-positive-tint); }
+.ar-hud .assessment-options button.is-incorrect { border-color: var(--hud-danger); color: var(--hud-danger); background: var(--hud-negative-tint); }
+.ar-hud .assessment-continue { justify-self: stretch; margin: 0; }
+
+/* Build: particle steppers (drag-to-place is screen-only). */
+.ar-hud .rail-heading, .ar-hud .rail-footer { display: none; }
+.ar-hud .particle-rail { gap: 0; padding: 4px 14px; }
+.ar-hud .particle-row { display: flex; align-items: center; gap: 12px; min-height: 64px; border-bottom: 1px solid var(--hud-line); }
+.ar-hud .particle-row:last-of-type { border-bottom: 0; }
+.ar-hud .tray-particle { flex: 0 0 22px; width: 22px; height: 22px; pointer-events: none; cursor: default; }
+.ar-hud .particle-label { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 16px; }
+.ar-hud .particle-label span { min-width: 2ch; color: var(--hud-ink); font-size: 20px; font-weight: 700; text-align: right; }
+.ar-hud .stepper { display: flex; gap: 8px; }
+.ar-hud .stepper button { width: 56px; padding: 0; font-size: 22px; }
+
+/* Element */
+.ar-hud .atom-inspector { padding: 14px; }
+.ar-hud .element-summary { display: flex; align-items: center; gap: 14px; padding: 0 0 10px; border-bottom: 1px solid var(--hud-line); }
+.ar-hud .element-symbol { color: var(--hud-accent); font-size: 40px; }
+.ar-hud .element-summary h2 { margin: 0; font-size: 18px; }
+.ar-hud .property-list { display: grid; grid-template-columns: 1fr; margin: 0; }
+.ar-hud .property-list div { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--hud-line); }
+.ar-hud .property-list div:last-child { border-bottom: 0; }
+.ar-hud .property-list dt { color: var(--hud-muted); font-size: 15px; }
+.ar-hud .property-list dd { font-size: 16px; }
+.ar-hud .inspector-foot { display: none; }
+
+/* Sound */
+.ar-hud .narration-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ar-hud .narration-controls label { display: flex; align-items: center; gap: 8px; color: var(--hud-muted); font-size: 15px; }
+.ar-hud .narration-audio-status { flex-basis: 100%; color: var(--hud-muted); font-size: 14px; }
+.ar-hud .narration-audio-status:empty { display: none; }
+.ar-hud [aria-pressed="true"] { border-color: var(--hud-accent); color: var(--hud-accent); background: var(--hud-accent-tint); }
+
+/* ---------- Tab bar (thumb zone) ---------- */
+.ar-hud-tabs {
+  grid-area: tabs;
+  justify-self: center;
+  width: min(560px, 100%);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  box-sizing: border-box;
+  border-radius: var(--hud-radius-lg);
+  background: var(--hud-surface);
+  box-shadow: var(--hud-shadow);
+}
+.ar-hud-tab {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 2px;
+  min-height: var(--hud-tab-height);
+  padding: 4px 2px;
+  border: 0;
+  border-radius: 18px;
+  color: var(--hud-muted);
+  background: transparent;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.ar-hud-tab[aria-selected="true"] { color: var(--hud-accent); background: var(--hud-accent-tint); }
+.ar-hud-badge { position: absolute; top: 8px; right: calc(50% - 20px); width: 10px; height: 10px; border: 2px solid var(--hud-card); border-radius: 50%; background: var(--hud-danger); }
+.ar-hud-badge[hidden] { display: none !important; }
+.ar-hud-icon { display: block; }
+
+/* Landscape phones: sheet on the left, tabs beneath it, centre left clear for the atom. */
+@media (orientation: landscape) and (max-height: 560px) {
+  .ar-hud {
+    grid-template-columns: minmax(300px, 42vw) 1fr;
+    grid-template-rows: auto 1fr auto;
+    grid-template-areas: "top top" "sheet ." "tabs caption";
+  }
+  .ar-hud-sheet { align-self: end; justify-self: stretch; width: auto; max-height: 100%; }
+  .ar-hud-tabs { justify-self: stretch; width: auto; }
+  .ar-hud-tab { min-height: var(--hud-hit); grid-auto-flow: column; gap: 6px; font-size: 12px; }
+  .ar-hud-tab .ar-hud-icon { width: 20px; height: 20px; }
+  .ar-hud-caption-slot { align-self: end; width: auto; }
+}
+
+/* ---------- Consent dialog, toast, comfort reminder, diagnostics ---------- */
+.ar-confirmation {
+  width: min(420px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 22px;
+  border: 0;
+  border-radius: var(--hud-radius-lg);
+  color: var(--hud-ink);
+  background: var(--hud-card);
+  box-shadow: var(--hud-shadow);
+  font: inherit;
+}
+.ar-confirmation::backdrop { background: rgba(10, 20, 40, 0.55); }
+.ar-confirmation h2 { margin: 0; font-size: 21px; font-weight: 700; }
+.ar-confirmation p { margin: 12px 0 18px; font-size: 16px; line-height: 1.5; }
+.ar-confirmation-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.ar-confirmation-actions button {
+  min-width: 96px;
+  min-height: var(--hud-hit);
+  padding: 0 18px;
+  border: 1px solid var(--hud-line);
+  border-radius: var(--hud-radius-sm);
+  color: var(--hud-ink);
+  background: var(--hud-card);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.ar-confirmation-actions [data-ar-action="start"] { border-color: var(--hud-accent); color: var(--hud-on-accent); background: var(--hud-accent); }
+.ar-confirmation-actions button:focus-visible { outline: 3px solid var(--hud-accent); outline-offset: 2px; }
+.ar-status, .ar-break-reminder {
+  position: fixed;
+  z-index: 29;
+  top: calc(var(--hud-top) + var(--hud-hit) + 10px);
+  left: 50%;
+  max-width: min(520px, calc(100vw - 24px));
+  box-sizing: border-box;
+  padding: 10px 16px;
+  border-radius: var(--hud-radius-md);
+  color: #ffffff;
+  background: rgba(22, 36, 58, 0.92);
+  box-shadow: var(--hud-shadow);
+  font-size: 15px;
+  line-height: 1.4;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+/* Outside AR, status messages sit at the bottom of the page. */
+body:not(.ar-active) .ar-status { top: auto; bottom: var(--hud-bottom); }
+.ar-break-reminder { top: calc(var(--hud-top) + var(--hud-hit) + 64px); }
+.ar-diagnostics { pointer-events: auto; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ar-hud-sheet { animation: none; }
+}

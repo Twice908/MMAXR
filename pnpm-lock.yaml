@@ -45,15 +45,6 @@ importers:
       '@mma/chem-atom-builder':
         specifier: workspace:*
         version: link:../../modules/chem-atom-builder
-      '@mma/engine-core':
-        specifier: workspace:*
-        version: link:../../packages/engine-core
-      '@mma/engine-render':
-        specifier: workspace:*
-        version: link:../../packages/engine-render
-      '@mma/schema':
-        specifier: workspace:*
-        version: link:../../packages/schema
       '@pmndrs/uikit':
         specifier: 1.0.78
         version: 1.0.78(super-three@0.181.0)
@@ -188,9 +179,6 @@ importers:
       '@mma/engine-core':
         specifier: workspace:*
         version: link:../engine-core
-      '@mma/engine-input':
-        specifier: workspace:*
-        version: link:../engine-input
 
   packages/kits/chemistry:
     dependencies:

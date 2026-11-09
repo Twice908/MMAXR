@@ -1,12 +1,12 @@
 ---
 name: mmaxr-xr-ui
-description: Build interactive spatial UI (panels, controls, model stages) for MMAXR modules in AR, VR and Camera views using Three.js, the Meta Horizon OS UI Set, shared design tokens and the project's glass style. Use for any XR panel, kit or module UI work.
+description: Build interactive spatial UI (panels, controls, model stages) for MMAXR modules in AR and VR views using Three.js, the Meta Horizon OS UI Set, shared design tokens and the project's glass style. Use for any XR panel, kit or module UI work.
 version: 1.0.0
 ---
 
 # MMAXR XR UI Skill
 
-Applies to every AR / VR / Camera / MR / XR UI task in the MMAXR monorepo (pnpm, TypeScript, Vite, Three.js, GitHub Pages). Read fully before writing code. If a rule here conflicts with a task prompt, stop and ask; do not pick silently.
+Applies to every AR / VR / MR / XR UI task in the MMAXR monorepo (pnpm, TypeScript, Vite, Three.js, GitHub Pages). Read fully before writing code. If a rule here conflicts with a task prompt, stop and ask; do not pick silently.
 
 ---
 
@@ -106,7 +106,7 @@ Shaders and materials
 ### 5.4 Layout
 - Layout comes from the Figma reference for that specific panel/kit/module. Express each layout as data (grid rows/columns, spans, gaps in token units), not hard-coded positions.
 - Desktop/headset layout and Android AR simulated-screen layout share styling and theme but may differ in arrangement. Each has its own layout definition; components are shared.
-- Spatial views (AR, VR, Camera) swap only the background/world. Panel layout stays the same.
+- Spatial views (AR, VR) swap only the background/world. Panel layout stays the same.
 - Fixed order of regions per layout is documented in the layout file header.
 
 ## 6. Interaction (built in, not added later)

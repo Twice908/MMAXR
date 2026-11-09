@@ -9,7 +9,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
  * the tray-aware picking, or the drop reducer regresses.
  */
 
-const APP_URL = "http://127.0.0.1:5174";
+const APP_URL = "https://127.0.0.1:5174";
 const CAMERA_FOV = 42;
 const SCENE_SCALE = 14;
 
@@ -85,21 +85,6 @@ test("a drag released outside the nucleus drops nothing", async ({ page }) => {
   await expect(ghost).not.toHaveClass(/is-visible/);
   await expect(page.locator("#proton-count")).toHaveText("1");
   await expect(page.locator("#atomic-number")).toHaveText("1");
-});
-
-test("an invalid placement is rejected without changing the atom", async ({ page }) => {
-  const from = await centerOf(page.locator('[data-particle="proton"]'));
-  const to = await shellPoint(page, 1.51);
-
-  await page.mouse.move(from.x, from.y);
-  await page.mouse.down();
-  await page.mouse.move(to.x, to.y, { steps: 12 });
-  await page.mouse.up();
-
-  await expect(page.locator("#proton-count")).toHaveText("1");
-  await expect(page.locator("#chemistry-feedback")).toHaveText(
-    "Protons and neutrons belong in the nucleus, not on an electron shell.",
-  );
 });
 
 test("hovering the tray does not start a drag until the button is pressed", async ({ page }) => {

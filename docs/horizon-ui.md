@@ -1,5 +1,7 @@
 # Meta Horizon OS UI Set
 
+> **Note (ADR 0006):** Camera view has been removed on all devices, and the glass panels were removed by ADR 0005. Sections below about Camera view, its dock, and glass panels are historical.
+
 This is the source of truth for XR-facing UI. New spatial panels, in-scene
 controls, AR/camera DOM overlays, dialogs, sheets, and toasts must use the kit
 components and this reference before implementation. Do not infer a component,
@@ -65,8 +67,9 @@ Body 1/Body 2 scale.
 - Dialog, window, and component-specific sizes, spacing, colors, and visual
   treatments: `TODO(kit)`.
 
-The token mirror is [horizon-tokens.ts](../packages/engine-render/src/horizon-tokens.ts)
-and [horizon-tokens.css](../modules/chem-atom-builder/src/horizon-tokens.css).
+Headset panels use the Horizon UI kit's own tokens (`@pmndrs/uikit-horizon`, see
+`packages/engine-render/src/xr-lesson-panels.ts`); the phone AR HUD tokens live in
+`modules/chem-atom-builder/src/ar-hud.css`.
 For handheld/DOM, 1 dp = 1 CSS px. For a spatial headset, size is converted
 with configurable `metresPerDp`, default `0.000958 m/dp`; at 1 m, 48 dp is
 approximately 4.6 cm. Tune this on a device. Device-verified conversion,

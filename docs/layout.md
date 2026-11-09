@@ -1,5 +1,7 @@
 # Layout reference
 
+> **Note (ADR 0006):** Camera view has been removed on all devices, and the glass panels were removed by ADR 0005. Sections below about Camera view, its dock, the AR drawer, settings sheet, and glass panels are historical. The phone AR HUD is described in [ADR 0006](./adr/0006-supported-views.md) and styled in `modules/chem-atom-builder/src/ar-hud.css`.
+
 This reference records the implemented screen and spatial layout. Shared rules
 come from `modules/chem-atom-builder/src/atom-builder.css`,
 `apps/web/src/camera-view.css`,

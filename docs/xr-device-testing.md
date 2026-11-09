@@ -1,8 +1,8 @@
 # XR device testing
 
 This guide covers browser/emulator checks and the manual headset checks that
-automation cannot establish. For existing AR checks, see [AR testing](./ar-testing.md);
-for the screen camera view, see [camera-view testing](./camera-view-testing.md).
+automation cannot establish. For existing AR checks, see [AR testing](./ar-testing.md).
+Supported views per device are listed in [ADR 0006](./adr/0006-supported-views.md).
 Record headset results in the [device matrix](./device-matrix.md).
 
 ## Desktop Chrome: Immersive Web Emulator

@@ -6,6 +6,10 @@ export default defineConfig({
   reporter: "list",
   use: {
     browserName: "chromium",
+    // The IWSDK Vite plugin always serves HTTPS with a local certificate.
+    ignoreHTTPSErrors: true,
+    // iwsdk.config.json skips the Quest emulator for this marker, so tests keep their mock WebXR.
+    userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 MMA-E2E",
     launchOptions: {
       args: [
         "--enable-webgl",
@@ -18,8 +22,9 @@ export default defineConfig({
     },
   },
   webServer: {
-    command: "pnpm --filter @mma/web dev --host 127.0.0.1 --port 5174",
-    url: "http://127.0.0.1:5174",
+    command: "pnpm --filter @mma/web dev:runtime --host 127.0.0.1 --port 5174",
+    url: "https://127.0.0.1:5174",
+    ignoreHTTPSErrors: true,
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,
   },

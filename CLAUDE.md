@@ -12,7 +12,7 @@ Current status (update this block as work completes):
 - Done: Phase 2a screen-mode scripted narration player, ten reviewed English scripts, browser-only Piper generation, MP3 playback, and silent fallback.
 - Done: Phase 3a-4a phone AR lesson flow with a world-fixed atom, DOM controls, a collapsible lesson panel, comfort safeguards, and touch-only view controls (pinch scale, one-finger rotation, reset); AR particle dragging is not enabled.
 - Done: Android handheld WebXR AR/VR selects the measured phone panel layout; world-space headset sessions keep the desktop/headset layout.
-- Done: Desktop screen camera view with local-only video, screen input, and clean media-track teardown; it does not use world tracking.
+- Done: Camera view removed on all devices; supported views per device are in docs/adr/0006-supported-views.md (Screen everywhere, Android ARCore AR with a tab-bar HUD, headset AR/VR, desktop AR/VR for emulator dev only; phone VR viewer hidden).
 - Done: Ported the 3D scene, XR sessions and XR input to IWSDK 1.0.1 (super-three 0.181); XR lesson UI uses the Horizon UI kit; glass panels and the custom input rig are removed (docs/adr/0005-iwsdk-runtime.md). Needs headset and Android AR checks.
 - Next: Review the eight assessment items and verify generated narration on desktop and phone.
 - Not started: Phase 2b live voice guide, remaining XR work (including headset VR and other 3a-4b work), portal link (Phase 4).
@@ -97,7 +97,7 @@ Also: new logic has unit tests; public APIs have TSDoc; no leftover debug code; 
 - XR UI reference and tokens: read `docs/horizon-ui.md` before any AR/VR/MR/XR UI work.
 - Decisions: `docs/adr/`.
 - Device testing record: `docs/device-matrix.md`.
-- Layout reference: `docs/layout.md` (screen, AR/camera overlays, safe zones, and spatial panel slots).
+- Layout reference: `docs/layout.md` (screen, AR overlays, safe zones, and spatial panel slots).
 
 ## 10. Project skills
 

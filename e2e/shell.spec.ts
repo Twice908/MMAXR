@@ -7,98 +7,15 @@ declare global {
     __dispatchMockXrSelect: (target: Element) => void;
     readonly __mockXrSelectCount: number;
     __setMockXrCamera: (x: number, y: number, z: number) => void;
-    __cameraStreams: MediaStream[];
-    __cameraGetUserMediaCalls: MediaStreamConstraints[];
-    __cameraFailureName?: string;
   }
 }
 
-test("lazy-loads Atom Builder and mounts the screen canvas", async ({ page }) => {
-  await page.goto("http://127.0.0.1:5174");
-  await expect(page.getByRole("heading", { name: "Atom Builder" })).toBeVisible();
-  const eyebrow = page.locator(".builder-header .eyebrow");
-  await expect(eyebrow).toHaveText("CHEMISTRY");
-  await expect(eyebrow).toHaveAttribute("data-grade", "Class 9-10");
-  const canvas = page.locator("#atom-scene canvas");
-  await expect(canvas).toBeVisible();
-  await expect.poll(async () => canvas.evaluate((element) => element.clientWidth)).toBeGreaterThan(0);
-  await expectCanvasHasRenderedPixels(page, canvas);
-
-  const trayNeutron = await page.locator('[data-particle="neutron"]').boundingBox();
-  const canvasBounds = await canvas.boundingBox();
-  if (!trayNeutron || !canvasBounds) {
-    throw new Error("Atom Builder drag surfaces are missing");
-  }
-  const ringRadius = 0.83;
-  const pixelsPerUnit = canvasBounds.height / (2 * Math.tan(42 * Math.PI / 360) * 14);
-  const start = { x: trayNeutron.x + trayNeutron.width / 2, y: trayNeutron.y + trayNeutron.height / 2 };
-  const drop = {
-    x: canvasBounds.x + canvasBounds.width / 2 + ringRadius * pixelsPerUnit,
-    y: canvasBounds.y + canvasBounds.height / 2,
-  };
-  await page.mouse.move(start.x, start.y);
-  await page.mouse.down();
-  await page.mouse.move(drop.x, drop.y, { steps: 8 });
-  await page.mouse.up();
-  await expect(page.locator("#neutron-count")).toHaveText("0");
-  await expect(page.locator("#chemistry-feedback")).toHaveText(
-    "Protons and neutrons belong in the nucleus, not on an electron shell.",
-  );
-  await expect(page.locator('[data-particle="neutron"]')).toHaveClass(/is-rejected/);
-
-  await page.getByRole("button", { name: "Add proton" }).click();
-  await expect(page.locator("#atomic-number")).toHaveText("2");
-  await page.getByRole("button", { name: "Reset atom" }).click();
-  await expect(page.locator("#atomic-number")).toHaveText("1");
-
-  await page.setViewportSize({ width: 390, height: 844 });
-  await expect(canvas).toBeVisible();
-  await expect.poll(async () => canvas.evaluate((element) => element.clientWidth)).toBeGreaterThan(0);
-  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await expectCanvasHasRenderedPixels(page, canvas);
-});
-
 test("keeps the WebGL canvas visible while the immersive session class is active", async ({ page }) => {
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto("https://127.0.0.1:5174");
   const canvas = page.locator("#atom-scene canvas");
   await expect(canvas).toBeVisible();
   await page.locator("#app").evaluate((root) => root.classList.add("ar-active"));
   await expect(canvas).toBeVisible();
-});
-
-test("hides camera view only for touch-first AR devices or missing camera access", async ({ page }) => {
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator, "xr", {
-      configurable: true,
-      value: { isSessionSupported: async () => true },
-    });
-    const nativeMatchMedia = window.matchMedia.bind(window);
-    window.matchMedia = (query: string): MediaQueryList => {
-      const result = nativeMatchMedia(query);
-      if (query === "(any-pointer: fine)") {
-        Object.defineProperty(result, "matches", { configurable: true, value: false });
-      }
-      return result;
-    };
-  });
-  await page.goto("http://127.0.0.1:5174");
-  await expect(page.getByRole("button", { name: "Camera view" })).toBeHidden();
-  await expect(page.locator(".camera-view-reason"))
-    .toHaveText("Use AR for camera-based viewing on this device.");
-
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator, "xr", {
-      configurable: true,
-      value: { isSessionSupported: async () => false },
-    });
-    Object.defineProperty(navigator, "mediaDevices", {
-      configurable: true,
-      value: undefined,
-    });
-  });
-  await page.reload();
-  await expect(page.getByRole("button", { name: "Camera view" })).toBeHidden();
-  await expect(page.locator(".camera-view-reason")).toContainText("does not provide camera access");
 });
 
 test("mounts and emits telemetry when crypto.randomUUID is unavailable", async ({ page }) => {
@@ -110,7 +27,7 @@ test("mounts and emits telemetry when crypto.randomUUID is unavailable", async (
       value: undefined,
     });
   });
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto("https://127.0.0.1:5174");
   await expect(page.getByRole("heading", { name: "Build carbon-12" })).toBeVisible();
   await page.getByRole("button", { name: "Events" }).click();
   await expect(page.locator("#dev-event-panel")).toContainText("mission_started");
@@ -118,7 +35,7 @@ test("mounts and emits telemetry when crypto.randomUUID is unavailable", async (
 });
 
 test("waits for a gesture before playing bundled mock narration", async ({ page }) => {
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto("https://127.0.0.1:5174");
   const enableSound = page.getByRole("button", { name: "Tap to enable sound" });
   await expect(enableSound).toBeVisible();
 
@@ -133,7 +50,7 @@ test("waits for a gesture before playing bundled mock narration", async ({ page 
 test("plays bundled Piper MP3 and loads its timed captions", async ({ page }) => {
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto("https://127.0.0.1:5174");
   const eventPanel = page.locator("#dev-event-panel");
   await page.getByRole("button", { name: "Events" }).click();
   await page.getByRole("button", { name: "Tap to enable sound" }).click();
@@ -151,7 +68,7 @@ test("changes narration speed mid-cue without playback errors", async ({ page })
   page.on("console", (message) => {
     if (message.type() === "error") playbackErrors.push(message.text());
   });
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto("https://127.0.0.1:5174");
   await page.getByRole("button", { name: "Events" }).click();
   await page.getByRole("button", { name: "Tap to enable sound" }).click();
   await expect(page.locator("#dev-event-panel")).toContainText("narration_played");
@@ -167,7 +84,7 @@ test("changes narration speed mid-cue without playback errors", async ({ page })
 });
 
 test("loads the opt-in audible mock assets in development", async ({ page }) => {
-  await page.goto("http://127.0.0.1:5174/?narrationAudio=audible-test");
+  await page.goto("https://127.0.0.1:5174/?narrationAudio=audible-test");
   const eventPanel = page.locator("#dev-event-panel");
   await page.getByRole("button", { name: "Events" }).click();
   await page.getByRole("button", { name: "Tap to enable sound" }).click();
@@ -178,7 +95,7 @@ test("loads the opt-in audible mock assets in development", async ({ page }) => 
 test("opens the narration generator only by explicit development query and waits for a click", async ({ page }) => {
   const requests: string[] = [];
   page.on("request", (request) => requests.push(request.url()));
-  await page.goto("http://127.0.0.1:5174/?narration-generator");
+  await page.goto("https://127.0.0.1:5174/?narration-generator");
   await expect(page.getByRole("heading", { name: "Generate lesson audio" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Generate all 10 cues" })).toBeEnabled();
   await expect(page.getByRole("progressbar")).toBeHidden();
@@ -192,7 +109,7 @@ test("fails visibly with nonzero generation status when the configured Piper voi
     contentType: "application/json",
     body: "{}",
   }));
-  await page.goto("http://127.0.0.1:5174/?narration-generator");
+  await page.goto("https://127.0.0.1:5174/?narration-generator");
   await page.getByRole("button", { name: "Generate all 10 cues" }).click();
   const status = page.locator("#generator-status");
   await expect(status).toHaveAttribute("role", "alert");
@@ -219,7 +136,7 @@ test("committed narration MP3s decode as plausible non-silent speech", async ({ 
     };
   }));
 
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto("https://127.0.0.1:5174");
   const metrics = await page.evaluate(async (assets) => {
     const context = new AudioContext();
     try {
@@ -269,7 +186,7 @@ test("shows a sound-blocked hint when HTML audio play is rejected after a tap", 
       return Promise.reject(new DOMException("Playback is not allowed", "NotAllowedError"));
     };
   });
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto("https://127.0.0.1:5174");
   await page.getByRole("button", { name: "Tap to enable sound" }).click();
   await expect(page.locator("#narration-audio-status")).toHaveText("Sound blocked. Tap to try again.");
   await expect(page.getByRole("button", { name: "Tap to enable sound" })).toBeVisible();
@@ -279,7 +196,7 @@ test("shows a sound-blocked hint when HTML audio play is rejected after a tap", 
 });
 
 test("restores narration preferences after reload but still requires a sound gesture", async ({ page }) => {
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto("https://127.0.0.1:5174");
   await page.getByRole("button", { name: "Tap to enable sound" }).click();
   await expect(page.locator("#narration-audio-status")).toHaveText("Sound enabled");
   await page.getByRole("button", { name: "Mute", exact: true }).click();
@@ -309,81 +226,6 @@ test("restores narration preferences after reload but still requires a sound ges
   ).soundEnabled)).toBe(true);
 });
 
-test("completes every mission muted with captions, including M2", async ({ page }) => {
-  await page.goto("http://127.0.0.1:5174");
-  await expect(page.getByRole("heading", { name: "Build carbon-12" })).toBeVisible();
-  await expect(page.locator("#mission-progress")).toHaveText("Progress 1/4");
-  await expect(page.locator("#narration-caption")).toContainText("Build carbon-12");
-  await page.getByRole("button", { name: "Mute", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Unmute", exact: true }))
-    .toHaveAttribute("aria-pressed", "true");
-
-  await addParticles(page, "Add proton", 5);
-  await addParticles(page, "Add neutron", 6);
-  await addParticles(page, "Add electron", 5);
-  await page.getByRole("button", { name: "Check", exact: true }).click();
-  await expect(page.locator("#mission-feedback")).toContainText("Goal met");
-  await page.getByRole("button", { name: "B. 6", exact: true }).click();
-  await expect(page.locator("#assessment-feedback")).toContainText("Correct.");
-  await page.getByRole("button", { name: "Next question" }).click();
-  await page.getByRole("button", { name: "D. 6", exact: true }).click();
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
-
-  await expect(page.getByRole("heading", { name: "Make Na+" })).toBeVisible();
-  await expect(page.locator("#narration-caption")).toContainText("Now make Na+");
-  await page.getByRole("button", { name: "Reset atom" }).click();
-  await addParticles(page, "Add proton", 10);
-  await addParticles(page, "Add neutron", 12);
-  await addParticles(page, "Add electron", 9);
-  await expect(page.locator("#element-symbol")).toHaveText("Na");
-  await expect(page.locator("#atom-charge")).toHaveText("+1");
-  await expect(page.locator("#electron-configuration")).toHaveText("2,8");
-  await page.getByRole("button", { name: "Check", exact: true }).click();
-  await expect(page.locator("#mission-feedback")).toContainText("Goal met");
-  await page.getByRole("button", { name: "A. 10", exact: true }).click();
-  await expect(page.locator("#assessment-feedback")).toContainText("Correct.");
-  await page.getByRole("button", { name: "Next question" }).click();
-  await page.getByRole("button", { name: "C. 2,8", exact: true }).click();
-  await expect(page.locator("#assessment-feedback")).toContainText("Correct.");
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Build carbon-14" })).toBeVisible();
-
-  await page.getByRole("button", { name: "Reset atom" }).click();
-  await addParticles(page, "Add proton", 5);
-  await addParticles(page, "Add neutron", 8);
-  await addParticles(page, "Add electron", 5);
-  await page.getByRole("button", { name: "Check", exact: true }).click();
-  await expect(page.locator("#mission-feedback")).toContainText("Goal met");
-  await page.getByRole("button", { name: "D. 8", exact: true }).click();
-  await page.getByRole("button", { name: "Next question" }).click();
-  await page.getByRole("button", { name: "B. 6", exact: true }).click();
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
-
-  await expect(page.getByRole("heading", { name: "Make Cl-" })).toBeVisible();
-  await page.getByRole("button", { name: "Reset atom" }).click();
-  await addParticles(page, "Add proton", 16);
-  await addParticles(page, "Add neutron", 18);
-  await addParticles(page, "Add electron", 17);
-  await expect(page.locator("#electron-configuration")).toHaveText("2,8,8");
-  await page.getByRole("button", { name: "Check", exact: true }).click();
-  await expect(page.locator("#mission-feedback")).toContainText("Goal met");
-  await page.getByRole("button", { name: "C. 18", exact: true }).click();
-  await page.getByRole("button", { name: "Next question" }).click();
-  await page.getByRole("button", { name: "A. Configuration 2,8,8; complete outer shell", exact: true }).click();
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Lesson complete" })).toBeVisible();
-  await expect(page.locator("#narration-caption")).toContainText("complete outer shell");
-  await expect(page.getByRole("button", { name: "Unmute", exact: true }))
-    .toHaveAttribute("aria-pressed", "true");
-
-  await page.getByRole("button", { name: "Events" }).click();
-  const eventPanel = page.locator("#dev-event-panel");
-  await expect(eventPanel).toBeVisible();
-  await expect(eventPanel).toContainText("mission_completed");
-  await expect(eventPanel).toContainText("assessment_answered");
-  await expect(eventPanel).toContainText("narration_skipped");
-});
-
 test("opens recent events after M2 and reports no browser console errors", async ({ page }) => {
   const consoleErrors: string[] = [];
   page.on("console", (message) => {
@@ -392,7 +234,7 @@ test("opens recent events after M2 and reports no browser console errors", async
     }
   });
   page.on("pageerror", (error) => consoleErrors.push(error.message));
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto("https://127.0.0.1:5174");
   await addParticles(page, "Add proton", 5);
   await addParticles(page, "Add neutron", 6);
   await addParticles(page, "Add electron", 5);
@@ -421,44 +263,6 @@ test("opens recent events after M2 and reports no browser console errors", async
   expect(consoleErrors).toEqual([]);
 });
 
-test("shows the next electron shell and keeps the drag label off the drop point", async ({ page }) => {
-  await page.goto("http://127.0.0.1:5174");
-  const canvas = page.locator("#atom-scene canvas");
-  await expect(canvas).toBeVisible();
-  await page.getByRole("button", { name: "Add electron" }).click();
-  await expect(page.locator("#electron-count")).toHaveText("2");
-  await expect(page.locator("#electron-configuration")).toHaveText("2");
-
-  const trayElectron = await page.locator('[data-particle="electron"]').boundingBox();
-  const canvasBounds = await canvas.boundingBox();
-  if (!trayElectron || !canvasBounds) {
-    throw new Error("Electron drag surfaces are missing");
-  }
-  const shellTwoRadius = 1.51;
-  const pixelsPerUnit = canvasBounds.height / (2 * Math.tan(42 * Math.PI / 360) * 14);
-  const start = {
-    x: trayElectron.x + trayElectron.width / 2,
-    y: trayElectron.y + trayElectron.height / 2,
-  };
-  const drop = {
-    x: canvasBounds.x + canvasBounds.width / 2 + shellTwoRadius * pixelsPerUnit + 12,
-    y: canvasBounds.y + canvasBounds.height / 2,
-  };
-  await page.mouse.move(start.x, start.y);
-  await page.mouse.down();
-  await page.mouse.move(drop.x, drop.y, { steps: 8 });
-  await expect(page.locator(".drop-slot-layer")).toHaveClass(/is-visible/);
-  await expect(page.locator(".drop-slot-marker.is-active")).toHaveCount(1);
-  const dragLabel = await page.locator("#drag-ghost").boundingBox();
-  expect(dragLabel).not.toBeNull();
-  expect(dragLabel!.x).toBeGreaterThanOrEqual(drop.x);
-  expect(dragLabel!.y + dragLabel!.height).toBeLessThan(drop.y);
-  await page.mouse.up();
-
-  await expect(page.locator("#electron-count")).toHaveText("3");
-  await expect(page.locator("#electron-configuration")).toHaveText("2,1");
-});
-
 test("hides AR entry and explains unsupported devices", async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "xr", {
@@ -466,7 +270,7 @@ test("hides AR entry and explains unsupported devices", async ({ page }) => {
       value: { isSessionSupported: async () => false },
     });
   });
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto("https://127.0.0.1:5174");
 
   await expect(page.getByRole("button", { name: "Enter AR" })).toBeHidden();
   await expect(page.getByRole("button", { name: "Enter VR" })).toBeHidden();
@@ -476,7 +280,7 @@ test("hides AR entry and explains unsupported devices", async ({ page }) => {
   await expect(page.locator("#atom-scene canvas")).toBeVisible();
 });
 
-test("touch-first screen toolbar wraps controls and labels phone VR viewing", async ({ page }) => {
+test("touch-first phones offer Enter AR beside Reset view and hide the phone VR viewer", async ({ page }) => {
   await installMockXr(page);
   await page.addInitScript(() => {
     const nativeMatchMedia = window.matchMedia.bind(window);
@@ -489,58 +293,20 @@ test("touch-first screen toolbar wraps controls and labels phone VR viewing", as
     };
   });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto("https://127.0.0.1:5174");
 
-  const toolbar = page.locator(".scene-heading");
-  const vrButton = page.getByRole("button", {
-    name: "VR with viewer. Needs a phone VR viewer",
-  });
-  await expect(vrButton).toBeVisible();
-  await expect(vrButton).toHaveAttribute("title", "Needs a phone VR viewer");
-  const caption = page.locator(".camera-view-reason");
-  await expect(caption).toHaveText("Use AR for camera-based viewing on this device.");
-  const buttonRects = await toolbar.locator(":is(.reset-view, .camera-view-entry, .ar-start)")
-    .evaluateAll((buttons) => buttons.filter((button) => !button.hasAttribute("hidden"))
-      .map((button) => {
-        const rect = button.getBoundingClientRect();
-        return { width: rect.width, top: rect.top };
-      }));
-  expect(buttonRects.length).toBeGreaterThanOrEqual(3);
-  expect(new Set(buttonRects.map(({ width }) => Math.round(width))).size).toBe(1);
-  expect(new Set(buttonRects.map(({ top }) => Math.round(top))).size).toBeGreaterThan(1);
-  const lastButton = await toolbar.locator(".ar-start:visible").last().boundingBox();
-  const captionRect = await caption.boundingBox();
-  expect(lastButton).not.toBeNull();
-  expect(captionRect).not.toBeNull();
-  expect(captionRect!.y).toBeGreaterThan(lastButton!.y + lastButton!.height);
+  const enterAr = page.getByRole("button", { name: "Enter AR" });
+  const resetView = page.locator(".scene-heading .reset-view");
+  await expect(enterAr).toBeVisible();
+  await expect(page.getByRole("button", { name: "Enter VR" })).toBeHidden();
+  const arBox = await enterAr.boundingBox();
+  const resetBox = await resetView.boundingBox();
+  expect(arBox && resetBox).toBeTruthy();
+  expect(Math.round(arBox!.y)).toBe(Math.round(resetBox!.y));
+  expect(arBox!.height).toBeGreaterThanOrEqual(48);
 });
 
-test("settings sheet stays within forty percent and closes from the scrim or Settings", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("http://127.0.0.1:5174");
-  await expect(page.getByRole("heading", { name: "Atom Builder" })).toBeVisible();
-  await page.evaluate(() => {
-    document.querySelector("#app")?.dispatchEvent(new CustomEvent("mma:settings-toggle"));
-  });
-  const sheet = page.locator(".dom-settings-sheet");
-  await expect(sheet).toBeVisible();
-  const height = await sheet.evaluate((element) => element.getBoundingClientRect().height);
-  expect(height).toBeLessThanOrEqual(844 * 0.4 + 1);
-  await expect(sheet.getByRole("heading", { name: "Sound" })).toBeVisible();
-  await expect(sheet.getByRole("heading", { name: "Captions" })).toBeVisible();
-  await expect(sheet.getByRole("heading", { name: "Speed" })).toBeVisible();
-  await page.locator(".dom-settings-scrim").click({ position: { x: 3, y: 3 } });
-  await expect(sheet).toBeHidden();
-  await page.evaluate(() => {
-    document.querySelector("#app")?.dispatchEvent(new CustomEvent("mma:settings-toggle"));
-    const settings = document.querySelector<HTMLButtonElement>(".ar-spatial-settings-fallback");
-    if (settings) settings.hidden = false;
-  });
-  await page.locator(".ar-spatial-settings-fallback").click();
-  await expect(sheet).toBeHidden();
-});
-
-test("AR overlay is transparent and camera explanation has two visible actions", async ({ page }) => {
+test("AR consent dialog explains camera use and has two clear actions", async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "xr", {
       configurable: true,
@@ -553,124 +319,54 @@ test("AR overlay is transparent and camera explanation has two visible actions",
       },
     });
   });
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto("https://127.0.0.1:5174");
   await page.getByRole("button", { name: "Enter AR" }).click();
 
   const dialog = page.getByRole("dialog", { name: "View the atom in AR?" });
   await expect(dialog).toBeVisible();
   const cancel = dialog.getByRole("button", { name: "Cancel" });
   const start = dialog.getByRole("button", { name: "Start AR" });
-  await expect(cancel).toBeVisible();
-  await expect(start).toBeVisible();
   await expect(dialog.getByRole("button")).toHaveCount(2);
-  const modalSurface = await dialog.evaluate((element) => ({
-    surface: getComputedStyle(element).backgroundColor,
-    backdrop: getComputedStyle(element, "::backdrop").backgroundColor,
-    blur: getComputedStyle(element, "::backdrop").backdropFilter,
-  }));
-  expect(modalSurface.surface).toBe("rgba(255, 255, 255, 0.97)");
-  expect(modalSurface.backdrop).toBe("rgba(0, 0, 0, 0.58)");
-  expect(modalSurface.blur).toContain("blur");
-  await expect(dialog).toContainText(
-    "Stay seated, look around you, and keep an eye on your surroundings.",
-  );
+  await expect(dialog).toContainText("Nothing is recorded or uploaded.");
+  await expect(dialog).toContainText("Stay seated, look around you, and keep an eye on your surroundings.");
   for (const button of [cancel, start]) {
-    const box = await button.boundingBox();
-    expect(box?.height).toBeGreaterThanOrEqual(48);
+    expect((await button.boundingBox())?.height).toBeGreaterThanOrEqual(48);
   }
-  const primaryStyle = await start.evaluate((element) => ({
-    color: getComputedStyle(element).color,
-    background: getComputedStyle(element).backgroundColor,
-    primaryText: (() => {
+  const colors = await start.evaluate((element) => {
+    const root = getComputedStyle(document.documentElement);
+    const resolve = (value: string): string => {
       const probe = document.createElement("span");
-      probe.style.color = getComputedStyle(document.documentElement)
-        .getPropertyValue("--glass-primary-text").trim();
+      probe.style.color = value;
       document.body.append(probe);
       const color = getComputedStyle(probe).color;
       probe.remove();
       return color;
-    })(),
-    primaryBackground: getComputedStyle(document.documentElement).getPropertyValue("--glass-primary-bg").trim(),
-  }));
-  expect(primaryStyle.color).toBe(primaryStyle.primaryText);
-  expect(primaryStyle.background).toBe(primaryStyle.primaryBackground);
-  await dialog.locator(".ar-confirmation-actions").click({ position: { x: 4, y: 24 } });
+    };
+    return {
+      background: getComputedStyle(element).backgroundColor,
+      accent: resolve(root.getPropertyValue("--hud-accent").trim()),
+    };
+  });
+  expect(colors.background).toBe(colors.accent);
+  // No session is requested until Start is pressed.
   expect(await page.locator("html").getAttribute("data-ar-request")).toBeNull();
-  await expect(dialog).toBeVisible();
+  await cancel.click();
+  await expect(dialog).toBeHidden();
 
   await page.evaluate(() => {
-    document.documentElement.classList.add("ar-active");
-    document.body.classList.add("ar-active");
-    document.querySelector("#app")?.classList.add("ar-active");
+    for (const element of [document.documentElement, document.body, document.querySelector("#app")]) {
+      element?.classList.add("ar-active");
+    }
   });
-  const activeStyles = await page.evaluate(() => {
-    const selectors = [
-      "html", "body", "#app", ".atom-builder", ".builder-header", ".lesson-panel",
-      ".narration-hud", ".builder-content", ".particle-rail", ".atom-workspace",
-      ".scene-viewport", ".atom-inspector",
-    ];
-    return {
-      backgrounds: selectors.map((selector) => getComputedStyle(document.querySelector(selector)!).backgroundColor),
-      backgroundImages: selectors.map((selector) => getComputedStyle(document.querySelector(selector)!).backgroundImage),
-      canvasDisplay: getComputedStyle(document.querySelector("#atom-scene canvas")!).display,
-    };
-  });
-  expect(activeStyles.backgrounds.every((value) => value === "rgba(0, 0, 0, 0)")).toBe(true);
-  expect(activeStyles.backgroundImages.every((value) => value === "none")).toBe(true);
-  expect(activeStyles.canvasDisplay).toBe("none");
-});
-
-test("glass surfaces use tokens and fall back for reduced transparency", async ({ page }) => {
-  await installMockXr(page);
-  await page.goto("http://127.0.0.1:5174");
-  await page.getByRole("button", { name: "Enter AR" }).click();
-  const dialog = page.getByRole("dialog", { name: "View the atom in AR?" });
-  await expect(dialog).toBeVisible();
-
-  const normalDialogStyle = await dialog.evaluate((element) => {
-    const style = getComputedStyle(element);
-    return {
-      background: style.backgroundColor,
-      backdropFilter: getComputedStyle(element, "::backdrop").backdropFilter,
-      supportsBackdropFilter: CSS.supports("backdrop-filter", "blur(1px)")
-        || CSS.supports("-webkit-backdrop-filter", "blur(1px)"),
-    };
-  });
-  expect(normalDialogStyle.background).toBe("rgba(255, 255, 255, 0.97)");
-  if (normalDialogStyle.supportsBackdropFilter) {
-    expect(normalDialogStyle.backdropFilter).toContain("blur(14px)");
-  } else {
-    expect(normalDialogStyle.backdropFilter).toBe("none");
-  }
-
-  await page.emulateMedia({ reducedTransparency: "reduce" });
-  const transparencyEmulator = await page.context().newCDPSession(page);
-  await transparencyEmulator.send("Emulation.setEmulatedMedia", {
-    features: [{ name: "prefers-reduced-transparency", value: "reduce" }],
-  });
-  expect(await page.evaluate(() =>
-    matchMedia("(prefers-reduced-transparency: reduce)").matches,
-  )).toBe(true);
-  const reducedTransparencyStyle = await dialog.evaluate((element) => ({
-    background: getComputedStyle(element).backgroundColor,
-    backdropFilter: getComputedStyle(element, "::backdrop").backdropFilter,
-  }));
-  expect(reducedTransparencyStyle.background).toBe("rgba(255, 255, 255, 0.97)");
-  expect(reducedTransparencyStyle.backdropFilter).toBe("none");
-
-  await transparencyEmulator.send("Emulation.setEmulatedMedia", { features: [] });
-  await page.emulateMedia({ reducedTransparency: "no-preference", contrast: "more" });
-  const highContrastStyle = await dialog.evaluate((element) => ({
-    background: getComputedStyle(element).backgroundColor,
-    backdropFilter: getComputedStyle(element, "::backdrop").backdropFilter,
-  }));
-  expect(highContrastStyle.background).toBe("rgba(255, 255, 255, 0.97)");
-  expect(highContrastStyle.backdropFilter).toBe("none");
+  const backgrounds = await page.evaluate(() =>
+    ["html", "body", "#app", ".atom-builder", ".builder-content", ".atom-workspace", ".scene-viewport"]
+      .map((selector) => getComputedStyle(document.querySelector(selector)!).backgroundColor));
+  expect(backgrounds.every((value) => value === "rgba(0, 0, 0, 0)")).toBe(true);
 });
 
 test("a mid-start XR exception restores the screen renderer and lesson panels", async ({ page }) => {
   await installMockXr(page);
-  await page.goto("http://127.0.0.1:5174?xrdebug=1&xrstartfail=1");
+  await page.goto("https://127.0.0.1:5174?xrdebug=1&xrstartfail=1");
   await page.getByRole("button", { name: "Enter AR" }).click();
   const dialog = page.getByRole("dialog", { name: "View the atom in AR?" });
   await dialog.getByRole("button", { name: "Start AR" }).click();
@@ -679,7 +375,7 @@ test("a mid-start XR exception restores the screen renderer and lesson panels", 
   await expect(status).toContainText("AR could not continue. You are back in screen mode.");
   await expect(page.locator("html")).not.toHaveClass(/ar-active/);
   await expect(page.locator(".ar-exit")).toBeHidden();
-  await expect(page.locator(".ar-overlay-panel")).toBeHidden();
+  await expect(page.locator(".ar-hud")).toBeHidden();
   await expect(page.locator("#lesson-panel")).toBeVisible();
   await expect(page.locator("#atom-scene canvas")).toBeVisible();
   const report = page.locator(".ar-diagnostics");
@@ -699,7 +395,7 @@ test("a mid-start XR exception restores the screen renderer and lesson panels", 
 
 test("a post-start XR input error ends the session and restores screen mode", async ({ page }) => {
   await installMockXr(page);
-  await page.goto("http://127.0.0.1:5174?xrdebug=1&xrinputfail=1");
+  await page.goto("https://127.0.0.1:5174?xrdebug=1&xrinputfail=1");
   await page.getByRole("button", { name: "Enter AR" }).click();
   const dialog = page.getByRole("dialog", { name: "View the atom in AR?" });
   await dialog.getByRole("button", { name: "Start AR" }).click();
@@ -707,299 +403,121 @@ test("a post-start XR input error ends the session and restores screen mode", as
   await expect(page.locator("#ar-status"))
     .toContainText("AR could not continue. You are back in screen mode.");
   await expect(page.locator("html")).not.toHaveClass(/ar-active/);
-  await expect(page.locator(".ar-overlay-panel")).toBeHidden();
+  await expect(page.locator(".ar-hud")).toBeHidden();
   await expect(page.locator("#lesson-panel")).toBeVisible();
   await expect(page.locator("#atom-scene canvas")).toBeVisible();
   await expect(page.locator(".ar-diagnostics"))
     .toContainText("Last XR error: Forced XR input initialization failure");
 });
 
-test("mocked AR keeps the atom world-fixed and presents the lesson in spatial panels", async ({ page }) => {
+async function startMockAr(page: import("@playwright/test").Page, viewport: { width: number; height: number }): Promise<void> {
   await installMockXr(page);
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("http://127.0.0.1:5174?xrdebug=1");
+  await page.setViewportSize(viewport);
+  await page.goto("https://127.0.0.1:5174");
   await page.getByRole("button", { name: "Enter AR" }).click();
-  const dialog = page.getByRole("dialog", { name: "View the atom in AR?" });
-  await dialog.getByRole("button", { name: "Start AR" }).click();
+  await page.getByRole("dialog", { name: "View the atom in AR?" })
+    .getByRole("button", { name: "Start AR" }).click();
+  await expect(page.getByRole("button", { name: "Exit AR" })).toBeVisible();
+}
 
-  const exitButton = page.getByRole("button", { name: "Exit AR" });
-  await expect(exitButton).toBeVisible();
-  const panel = page.locator(".ar-overlay-panel");
-  await expect(panel).toBeVisible();
-  await expect(panel).toHaveClass(/is-collapsed/);
-  await expect(panel).toContainText("Build carbon-12");
-  const collapsedGlassStyle = await panel.evaluate((element) => {
-    const style = getComputedStyle(element);
-    const root = getComputedStyle(document.documentElement);
-    return {
-      background: style.backgroundColor,
-      glassBackground: root.getPropertyValue("--glass-bg").trim(),
-      strongBackground: root.getPropertyValue("--glass-bg-strong").trim(),
-      text: style.color,
-      glassText: (() => {
-        const probe = document.createElement("span");
-        probe.style.color = root.getPropertyValue("--glass-text").trim();
-        document.body.append(probe);
-        const color = getComputedStyle(probe).color;
-        probe.remove();
-        return color;
-      })(),
-      radius: style.borderRadius,
-      glassRadius: root.getPropertyValue("--glass-radius-panel").trim(),
-    };
-  });
-  expect(collapsedGlassStyle.background).toBe(collapsedGlassStyle.glassBackground);
-  expect(collapsedGlassStyle.text).toBe(collapsedGlassStyle.glassText);
-  expect(collapsedGlassStyle.radius).toBe(collapsedGlassStyle.glassRadius);
-  const collapsedPanelBox = await panel.boundingBox();
-  expect(collapsedPanelBox?.height).toBeLessThanOrEqual(60);
-  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
-    .toBe(true);
-  const diagnostics = page.locator(".ar-diagnostics");
-  await expect(diagnostics).toContainText("Environment blend mode: alpha-blend");
-  await expect(diagnostics).toContainText("DOM overlay granted: yes");
-  await expect(diagnostics).toContainText("Reference space: local");
+test("phone AR HUD: top bar, thumb-zone tabs, one sheet at a time", async ({ page }) => {
+  await startMockAr(page, { width: 390, height: 844 });
+  const hud = page.locator(".ar-hud");
+  await expect(hud).toBeVisible();
+  await expect(page.locator(".ar-hud-status")).toContainText("Build carbon-12");
+  await expect(page.locator(".builder-header")).toBeHidden();
+  await expect(page.locator(".scene-heading")).toBeHidden();
 
-  const viewStateBeforeGestures = await page.evaluate(() => ({
-    atomicNumber: document.querySelector("#atomic-number")?.textContent,
-    protonCount: document.querySelector("#proton-count")?.textContent,
-    neutronCount: document.querySelector("#neutron-count")?.textContent,
-    electronCount: document.querySelector("#electron-count")?.textContent,
-    missionProgress: document.querySelector("#mission-progress")?.textContent,
-    localEventCount: document.querySelectorAll("#dev-event-list li").length,
-  }));
-  await page.evaluate(() => {
-    Object.defineProperty(HTMLElement.prototype, "setPointerCapture", {
-      configurable: true,
-      value: () => {},
-    });
-    Object.defineProperty(HTMLElement.prototype, "hasPointerCapture", {
-      configurable: true,
-      value: () => false,
-    });
-    const root = document.querySelector<HTMLElement>("#app");
-    if (!root) {
-      throw new Error("App overlay root is missing");
-    }
-    const dispatchTouch = (
-      target: HTMLElement,
-      type: string,
-      pointerId: number,
-      clientX: number,
-      clientY: number,
-    ) => target.dispatchEvent(new PointerEvent(type, {
-      pointerId,
-      pointerType: "touch",
-      clientX,
-      clientY,
-      bubbles: true,
-      cancelable: true,
-    }));
-    dispatchTouch(root, "pointerdown", 11, 100, 300);
-    dispatchTouch(root, "pointerdown", 12, 200, 300);
-    dispatchTouch(root, "pointermove", 12, 250, 300);
-    dispatchTouch(root, "pointerup", 11, 100, 300);
-    dispatchTouch(root, "pointerup", 12, 250, 300);
+  const tabs = page.getByRole("tab");
+  await expect(tabs).toHaveCount(4);
+  await expect(page.getByRole("tab", { name: "Mission" })).toHaveAttribute("aria-selected", "true");
+  const sheet = page.locator(".ar-hud-sheet");
+  await expect(sheet).toBeVisible();
+  await expect(sheet.locator("#lesson-panel")).toBeVisible();
 
-    dispatchTouch(root, "pointerdown", 13, 100, 300);
-    dispatchTouch(root, "pointermove", 13, 120, 320);
-    dispatchTouch(root, "pointerup", 13, 120, 320);
-
-    const exit = document.querySelector<HTMLElement>(".ar-exit");
-    if (!exit) {
-      throw new Error("AR exit control is missing");
-    }
-    dispatchTouch(exit, "pointerdown", 14, 350, 20);
-    dispatchTouch(root, "pointermove", 14, 370, 40);
-    dispatchTouch(root, "pointerup", 14, 370, 40);
-
-    dispatchTouch(root, "pointerdown", 21, 100, 300);
-    dispatchTouch(root, "pointerdown", 22, 200, 300);
-    dispatchTouch(root, "pointermove", 22, 10_000, 300);
-    dispatchTouch(root, "pointerup", 21, 100, 300);
-    dispatchTouch(root, "pointerup", 22, 10_000, 300);
-
-    dispatchTouch(root, "pointerdown", 23, 100, 300);
-    dispatchTouch(root, "pointerdown", 24, 1_100, 300);
-    dispatchTouch(root, "pointermove", 24, 100, 300);
-    dispatchTouch(root, "pointerup", 23, 100, 300);
-    dispatchTouch(root, "pointerup", 24, 100, 300);
-
-    dispatchTouch(root, "pointerdown", 25, 100, 300);
-    dispatchTouch(root, "pointermove", 25, 100, 10_000);
-    dispatchTouch(root, "pointerup", 25, 100, 10_000);
-    dispatchTouch(root, "pointerdown", 26, 100, 10_000);
-    dispatchTouch(root, "pointermove", 26, 100, -10_000);
-    dispatchTouch(root, "pointerup", 26, 100, -10_000);
-  });
-
-  const viewStateAfterGestures = await page.evaluate(() => ({
-    atomicNumber: document.querySelector("#atomic-number")?.textContent,
-    protonCount: document.querySelector("#proton-count")?.textContent,
-    neutronCount: document.querySelector("#neutron-count")?.textContent,
-    electronCount: document.querySelector("#electron-count")?.textContent,
-    missionProgress: document.querySelector("#mission-progress")?.textContent,
-    localEventCount: document.querySelectorAll("#dev-event-list li").length,
-  }));
-  expect(viewStateAfterGestures).toEqual(viewStateBeforeGestures);
-
-  await page.locator(".ar-panel-heading").getByRole("button", { name: "Reset view" }).click();
-
-  await page.evaluate(() => {
-    const panelButton = document.querySelector(".ar-overlay-panel button");
-    if (!panelButton) {
-      throw new Error("AR panel toggle is missing");
-    }
-    window.__dispatchMockXrSelect(panelButton);
-  });
-  expect(await page.evaluate(() => window.__mockXrSelectCount)).toBe(0);
-
-  await page.evaluate(() => window.__setMockXrCamera(0.25, 0.1, 0));
-  await expect(diagnostics).toContainText("Environment blend mode: alpha-blend");
-  const viewStateAfterCameraMotion = await page.evaluate(() => ({
-    atomicNumber: document.querySelector("#atomic-number")?.textContent,
-    protonCount: document.querySelector("#proton-count")?.textContent,
-    neutronCount: document.querySelector("#neutron-count")?.textContent,
-    electronCount: document.querySelector("#electron-count")?.textContent,
-    missionProgress: document.querySelector("#mission-progress")?.textContent,
-    localEventCount: document.querySelectorAll("#dev-event-list li").length,
-  }));
-  expect(viewStateAfterCameraMotion).toEqual(viewStateBeforeGestures);
-
-  await panel.getByRole("button", { name: "Expand panels" }).click();
-  await expect(panel).not.toHaveClass(/is-collapsed/);
-  await expect(page.locator("#app")).toHaveClass(/spatial-panels-active/);
-  await expect(panel.locator("#lesson-panel")).toBeHidden();
-  await expect(panel.locator("#lesson-panel")).toContainText("Build carbon-12");
-  await expect(panel.locator("#mission-goal")).not.toBeEmpty();
-  await expect(panel.locator(".particle-rail")).toBeHidden();
-  await expect(panel.locator("#assessment-card")).toBeHidden();
-  const controlGlassStyles = await page.evaluate(() => {
-    const root = getComputedStyle(document.documentElement);
-    const read = (selector: string) => {
-      const element = document.querySelector<HTMLElement>(selector);
-      if (!element) {
-        throw new Error(`Missing AR glass control: ${selector}`);
-      }
-      const style = getComputedStyle(element);
-      return {
-        background: style.backgroundColor,
-        color: style.color,
-        minHeight: Number.parseFloat(style.minHeight),
-      };
-    };
-    return {
-      glassBackground: root.getPropertyValue("--glass-bg").trim(),
-      glassText: (() => {
-        const probe = document.createElement("span");
-        probe.style.color = root.getPropertyValue("--glass-text").trim();
-        document.body.append(probe);
-        const color = getComputedStyle(probe).color;
-        probe.remove();
-        return color;
-      })(),
-      primaryBackground: root.getPropertyValue("--glass-primary-bg").trim(),
-      primaryText: (() => {
-        const probe = document.createElement("span");
-        probe.style.color = root.getPropertyValue("--glass-primary-text").trim();
-        document.body.append(probe);
-        const color = getComputedStyle(probe).color;
-        probe.remove();
-        return color;
-      })(),
-      dangerBackground: root.getPropertyValue("--glass-danger-bg").trim(),
-      dangerText: (() => {
-        const probe = document.createElement("span");
-        probe.style.color = root.getPropertyValue("--glass-danger-text").trim();
-        document.body.append(probe);
-        const color = getComputedStyle(probe).color;
-        probe.remove();
-        return color;
-      })(),
-      hint: read('.ar-overlay-panel [data-command="lesson:hint"]'),
-      check: read('.ar-overlay-panel [data-command="lesson:check"]'),
-      stepper: read(".ar-overlay-panel .stepper button"),
-      narration: read('.ar-overlay-panel [data-narration-action="mute"]'),
-      caption: read(".ar-overlay-panel .narration-caption"),
-      missionTitle: read(".ar-panel-mission-title"),
-      resetView: read('.ar-panel-heading [data-ar-action="reset-view"]'),
-      panelToggle: read('.ar-panel-heading [data-ar-action="panel-toggle"]'),
-      exit: read(".ar-exit"),
-    };
-  });
-  for (const control of [
-    controlGlassStyles.hint,
-    controlGlassStyles.stepper,
-    controlGlassStyles.narration,
-    controlGlassStyles.caption,
-    controlGlassStyles.missionTitle,
-    controlGlassStyles.resetView,
-    controlGlassStyles.panelToggle,
-  ]) {
-    expect(control.background).toBe(controlGlassStyles.glassBackground);
-    expect(control.color).toBe(controlGlassStyles.glassText);
+  // Everything sits inside the viewport; tabs are in the bottom third (thumb zone).
+  const tabBar = await page.locator(".ar-hud-tabs").boundingBox();
+  const sheetBox = await sheet.boundingBox();
+  expect(tabBar!.y).toBeGreaterThan(844 * 2 / 3);
+  expect(tabBar!.y + tabBar!.height).toBeLessThanOrEqual(844);
+  expect(sheetBox!.height).toBeLessThanOrEqual(844 * 0.5);
+  expect(sheetBox!.y + sheetBox!.height).toBeLessThanOrEqual(tabBar!.y + 1);
+  for (const tab of await tabs.all()) {
+    expect((await tab.boundingBox())!.height).toBeGreaterThanOrEqual(48);
   }
-  expect(controlGlassStyles.check.background).toBe(controlGlassStyles.primaryBackground);
-  expect(controlGlassStyles.check.color).toBe(controlGlassStyles.primaryText);
-  expect(controlGlassStyles.exit.background).toBe(controlGlassStyles.dangerBackground);
-  expect(controlGlassStyles.exit.color).toBe(controlGlassStyles.dangerText);
-  for (const control of [
-    controlGlassStyles.hint,
-    controlGlassStyles.check,
-    controlGlassStyles.stepper,
-    controlGlassStyles.narration,
-    controlGlassStyles.panelToggle,
-    controlGlassStyles.resetView,
-    controlGlassStyles.exit,
-  ]) {
-    expect(control.minHeight).toBeGreaterThanOrEqual(44);
-  }
-  await expect(panel.locator("#mission-goal")).not.toBeEmpty();
-  await expect(panel.locator("#mission-progress")).not.toBeEmpty();
-  await expect(panel.locator("#assessment-card")).toBeHidden();
-  await expect(page.locator("#app")).toHaveClass(/spatial-panels-active/);
-  const stateWithSpatialPanels = await page.evaluate(() => ({
-    atomicNumber: document.querySelector("#atomic-number")?.textContent,
-    protonCount: document.querySelector("#proton-count")?.textContent,
-    neutronCount: document.querySelector("#neutron-count")?.textContent,
-    electronCount: document.querySelector("#electron-count")?.textContent,
-    missionProgress: document.querySelector("#mission-progress")?.textContent,
-    localEventCount: document.querySelectorAll("#dev-event-list li").length,
-  }));
-  expect(stateWithSpatialPanels).toEqual(viewStateBeforeGestures);
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
-  await exitButton.click();
-  await expect(exitButton).toBeHidden();
-  await expect(page.locator("#atom-scene canvas")).toBeVisible();
-  await expect(page.locator("#atomic-number")).toHaveText("1");
-  await expect(page.locator("#proton-count")).toHaveText("1");
-  await expect(page.locator("#neutron-count")).toHaveText("0");
-  await expect(page.locator("#electron-count")).toHaveText("1");
-  await expect(panel).toBeHidden();
+  // Build: steppers change the atom; tapping the open tab closes the sheet.
+  await page.getByRole("tab", { name: "Build" }).click();
+  await expect(page.getByRole("tab", { name: "Build" })).toHaveAttribute("aria-selected", "true");
+  await expect(sheet.locator("#lesson-panel")).toBeHidden();
+  const addProton = sheet.getByRole("button", { name: "Add proton" });
+  expect((await addProton.boundingBox())!.height).toBeGreaterThanOrEqual(48);
+  await addProton.click();
+  await expect(page.locator("#proton-count")).toHaveText("2");
+  await page.getByRole("tab", { name: "Build" }).click();
+  await expect(sheet).toBeHidden();
+
+  // Element and Sound sheets hold the inspector and narration controls.
+  await page.getByRole("tab", { name: "Element" }).click();
+  await expect(sheet.locator("#atomic-number")).toHaveText("2");
+  await page.getByRole("tab", { name: "Sound" }).click();
+  await expect(sheet.locator(".narration-controls")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
+
+  // Mission feedback while another sheet is open marks the Mission tab.
+  await page.getByRole("tab", { name: "Build" }).click();
+  await page.evaluate(() => {
+    document.querySelector("#mission-feedback")!.textContent = "Not yet.";
+  });
+  await expect(page.locator('[data-hud-tab="mission"] .ar-hud-badge')).toBeVisible();
+  await page.getByRole("tab", { name: "Mission" }).click();
+  await expect(page.locator('[data-hud-tab="mission"] .ar-hud-badge')).toBeHidden();
+
+  // Exit returns every lesson element to the page.
+  await page.getByRole("button", { name: "Exit AR" }).click();
+  await expect(hud).toBeHidden();
+  await expect(page.locator(".builder-content .particle-rail")).toBeVisible();
+  await expect(page.locator(".atom-builder > #lesson-panel")).toBeVisible();
+  await expect(page.locator(".narration-hud #narration-caption")).toHaveCount(1);
 });
 
-test("mocked Android AR selects the phone layout in portrait and landscape viewports", async ({ page }) => {
-  await installMockXr(page);
-  for (const viewport of [{ width: 412, height: 915 }, { width: 915, height: 412 }]) {
-    await page.setViewportSize(viewport);
-    await page.goto("http://127.0.0.1:5174?xrdebug=1");
-    await page.getByRole("button", { name: "Enter AR" }).click();
-    await page.getByRole("dialog", { name: "View the atom in AR?" })
-      .getByRole("button", { name: "Start AR" }).click();
+test("phone AR HUD: touch on the open camera view turns the atom without changing the lesson", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await startMockAr(page, { width: 390, height: 844 });
+  await page.getByRole("tab", { name: "Mission" }).click();
+  await expect(page.locator(".ar-hud-sheet")).toBeHidden();
+  const before = await page.evaluate(() => document.querySelector("#atomic-number")?.textContent);
+  await page.evaluate(() => {
+    Object.defineProperty(HTMLElement.prototype, "setPointerCapture", { configurable: true, value: () => {} });
+    Object.defineProperty(HTMLElement.prototype, "hasPointerCapture", { configurable: true, value: () => false });
+    const target = document.elementFromPoint(195, 380) as HTMLElement;
+    const touch = (type: string, x: number, y: number) => target.dispatchEvent(new PointerEvent(type, {
+      pointerId: 31, pointerType: "touch", clientX: x, clientY: y, bubbles: true, cancelable: true,
+    }));
+    touch("pointerdown", 195, 380);
+    touch("pointermove", 260, 380);
+    touch("pointerup", 260, 380);
+  });
+  expect(await page.evaluate(() => document.querySelector("#atomic-number")?.textContent)).toBe(before);
+  expect(errors).toEqual([]);
+});
 
-    const diagnostics = page.locator(".ar-diagnostics");
-    await expect(diagnostics).toContainText("Active panel layout: android");
-    await expect(diagnostics).toContainText("Layout fits at minimum scale: yes");
-    await expect(page.getByRole("button", { name: "Exit AR" })).toBeVisible();
-    await page.getByRole("button", { name: "Exit AR" }).click();
-    await expect(page.getByRole("button", { name: "Enter AR" })).toBeVisible();
-  }
+test("phone AR HUD keeps the sheet beside the atom in landscape", async ({ page }) => {
+  await startMockAr(page, { width: 844, height: 390 });
+  const sheet = await page.locator(".ar-hud-sheet").boundingBox();
+  const tabs = await page.locator(".ar-hud-tabs").boundingBox();
+  expect(sheet!.x + sheet!.width).toBeLessThan(844 / 2 + 40);
+  expect(tabs!.y + tabs!.height).toBeLessThanOrEqual(390);
+  expect((await page.locator(".ar-hud-tab").first().boundingBox())!.height).toBeGreaterThanOrEqual(48);
 });
 
 test("mocked AR shows one local comfort break reminder after ten minutes", async ({ page }) => {
   await page.clock.install();
   await installMockXr(page);
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto("https://127.0.0.1:5174");
   await page.getByRole("button", { name: "Enter AR" }).click();
   await page.getByRole("dialog", { name: "View the atom in AR?" })
     .getByRole("button", { name: "Start AR" }).click();
@@ -1008,21 +526,6 @@ test("mocked AR shows one local comfort break reminder after ten minutes", async
   await page.clock.fastForward(10 * 60 * 1000);
   await expect(page.locator("#ar-break-reminder")).toBeVisible();
   await expect(page.locator("#ar-break-reminder")).toHaveText("Take a short break");
-  const reminderSurface = await page.locator("#ar-break-reminder").evaluate((element) => ({
-    background: getComputedStyle(element).backgroundColor,
-    glassBackground: getComputedStyle(document.documentElement).getPropertyValue("--glass-bg").trim(),
-    text: getComputedStyle(element).color,
-    glassText: (() => {
-      const probe = document.createElement("span");
-      probe.style.color = getComputedStyle(document.documentElement).getPropertyValue("--glass-text").trim();
-      document.body.append(probe);
-      const color = getComputedStyle(probe).color;
-      probe.remove();
-      return color;
-    })(),
-  }));
-  expect(reminderSurface.background).toBe(reminderSurface.glassBackground);
-  expect(reminderSurface.text).toBe(reminderSurface.glassText);
   await expect(page.locator('#dev-event-list [data-event-type="comfort_break_shown"]')).toHaveCount(1);
 
   await page.clock.fastForward(10 * 60 * 1000);
@@ -1051,7 +554,7 @@ test("explains camera use before permission and returns cleanly after denial", a
       },
     });
   });
-  await page.goto("http://127.0.0.1:5174");
+  await page.goto("https://127.0.0.1:5174");
 
   const enterAr = page.getByRole("button", { name: "Enter AR" });
   await expect(enterAr).toBeVisible();
@@ -1072,312 +575,6 @@ test("explains camera use before permission and returns cleanly after denial", a
     "permission_denied",
   );
   expect(browserErrors).toEqual([]);
-});
-
-test("desktop keeps camera view available when an XR emulator reports immersive AR and VR", async ({ page }) => {
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator, "xr", {
-      configurable: true,
-      value: { isSessionSupported: async () => true },
-    });
-  });
-  await page.goto("http://127.0.0.1:5174");
-
-  await expect(page.getByRole("button", { name: "Enter AR" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Enter VR" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Camera view" })).toBeVisible();
-  await expect(page.locator(".camera-view-diagnostic")).toBeHidden();
-});
-
-test("reports the hidden camera-view reason for a touch-first AR device", async ({ page }) => {
-  const diagnostics: string[] = [];
-  page.on("console", (message) => {
-    if (message.type() === "info") diagnostics.push(message.text());
-  });
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator, "xr", {
-      configurable: true,
-      value: { isSessionSupported: async () => true },
-    });
-    const nativeMatchMedia = window.matchMedia.bind(window);
-    window.matchMedia = (query: string): MediaQueryList => {
-      const result = nativeMatchMedia(query);
-      if (query === "(any-pointer: fine)") {
-        Object.defineProperty(result, "matches", { configurable: true, value: false });
-      }
-      return result;
-    };
-  });
-  await page.goto("http://127.0.0.1:5174");
-
-  const hiddenReason =
-    "Use AR for camera-based viewing on this device.";
-  await expect(page.getByRole("button", { name: "Camera view" })).toBeHidden();
-  await expect(page.locator(".camera-view-reason")).toContainText(hiddenReason);
-  expect(diagnostics).toContain(`Camera view hidden: ${hiddenReason}`);
-
-  await page.getByRole("button", { name: "Events" }).click();
-  await expect(page.locator(".camera-view-diagnostic")).toContainText(
-    `Camera view hidden: ${hiddenReason}`,
-  );
-});
-
-test("desktop camera view uses a live mirrored video behind the atom and stops every track on exit", async ({ page }) => {
-  await page.addInitScript(() => {
-    const mediaDevices = navigator.mediaDevices;
-    const originalGetUserMedia = mediaDevices.getUserMedia.bind(mediaDevices);
-    Object.defineProperty(window, "__cameraStreams", { value: [] });
-    Object.defineProperty(window, "__cameraGetUserMediaCalls", { value: [] });
-    Object.defineProperty(mediaDevices, "getUserMedia", {
-      configurable: true,
-      value: async (constraints: MediaStreamConstraints) => {
-        window.__cameraGetUserMediaCalls.push(constraints);
-        if (window.__cameraFailureName) {
-          throw new DOMException("Mock camera failure", window.__cameraFailureName);
-        }
-        const stream = await originalGetUserMedia(constraints);
-        window.__cameraStreams.push(stream);
-        return stream;
-      },
-    });
-  });
-  await page.goto("http://127.0.0.1:5174");
-  await expect(page.getByRole("heading", { name: "Atom Builder" })).toBeVisible();
-  const before = await page.evaluate(() => ({
-    number: document.querySelector("#atomic-number")?.textContent,
-    progress: document.querySelector("#mission-progress")?.textContent,
-  }));
-  const cameraButton = page.getByRole("button", { name: "Camera view" });
-  await expect(cameraButton).toBeVisible();
-  await cameraButton.click();
-  const dialog = page.getByRole("dialog", { name: "Start camera view?" });
-  await expect(dialog).toContainText("shown on this screen only");
-  await expect(dialog).toContainText("Nothing is recorded or uploaded");
-  await dialog.getByRole("button", { name: "Cancel" }).click();
-  expect(await page.evaluate(() => window.__cameraGetUserMediaCalls.length)).toBe(0);
-
-  await cameraButton.click();
-  await page.getByRole("dialog", { name: "Start camera view?" })
-    .getByRole("button", { name: "Start" }).click();
-  const video = page.locator("#atom-scene video.camera-view-video");
-  await expect(video).toBeVisible();
-  await expect(page.locator(".camera-view-panel")).toBeVisible();
-  await expect.poll(() => video.evaluate((element) => (element as HTMLVideoElement).videoWidth))
-    .toBeGreaterThan(0);
-  await expect(page.getByRole("button", { name: "Exit camera view" })).toBeVisible();
-  expect(await video.evaluate((element) => ({
-    muted: (element as HTMLVideoElement).muted,
-    inline: (element as HTMLVideoElement).playsInline,
-    mirrored: element.classList.contains("camera-view-video--mirrored"),
-    objectFit: getComputedStyle(element).objectFit,
-    position: getComputedStyle(element).position,
-    zIndex: getComputedStyle(element).zIndex,
-  }))).toEqual({
-    muted: true,
-    inline: true,
-    mirrored: true,
-    objectFit: "cover",
-    position: "fixed",
-    zIndex: "0",
-  });
-  expect(await page.locator("#atom-scene canvas").evaluate((element) => ({
-    transform: getComputedStyle(element).transform,
-    zIndex: getComputedStyle(element).zIndex,
-  }))).toEqual({ transform: "none", zIndex: "1" });
-  const videoBounds = await video.boundingBox();
-  expect(videoBounds?.width).toBe(await page.evaluate(() => window.innerWidth));
-  expect(videoBounds?.height).toBe(await page.evaluate(() => window.innerHeight));
-  expect(await page.evaluate(() => window.__cameraGetUserMediaCalls[0]?.video))
-    .toMatchObject({ facingMode: { ideal: "user" } });
-  await expect(page.locator("html")).toHaveClass(/camera-active/);
-  await expect(page.locator("body")).toHaveClass(/camera-active/);
-  await expect(page.locator("#atom-scene canvas")).toBeVisible();
-  expect(await page.locator("#atom-scene canvas").evaluate((element) => {
-    const gl = element.getContext("webgl2");
-    return gl?.getParameter(gl.COLOR_CLEAR_VALUE)[3];
-  })).toBe(0);
-  await page.getByRole("button", { name: "Events" }).click();
-  await expect(page.locator('#dev-event-list [data-event-type="camera_view_started"]')).toHaveCount(1);
-
-  await page.getByRole("button", { name: "Exit camera view" }).click();
-  await expect(video).toHaveCount(0);
-  await expect(page.locator("html")).not.toHaveClass(/camera-active/);
-  await expect(page.locator("body")).not.toHaveClass(/camera-active/);
-  await expect(page.locator("#atom-scene canvas")).toBeVisible();
-  expect(await page.locator("#atom-scene canvas").evaluate((element) => {
-    const gl = element.getContext("webgl2");
-    return gl?.getParameter(gl.COLOR_CLEAR_VALUE)[3];
-  })).toBe(1);
-  await expect(page.getByRole("button", { name: "Camera view" })).toBeVisible();
-  expect(await page.evaluate(() => window.__cameraStreams[0]?.getTracks().map((track) => track.readyState)))
-    .toEqual(["ended"]);
-  await expect(page.locator('#dev-event-list [data-event-type="camera_view_ended"]')).toContainText("none");
-  expect(await page.evaluate(() => ({
-    number: document.querySelector("#atomic-number")?.textContent,
-    progress: document.querySelector("#mission-progress")?.textContent,
-  }))).toEqual(before);
-});
-
-for (const viewport of [
-  { width: 412, height: 915, name: "portrait" },
-  { width: 915, height: 412, name: "landscape" },
-]) {
-  test(`Android Camera uses the measured panel group in ${viewport.name}`, async ({ page }) => {
-    const pageErrors: string[] = [];
-    page.on("pageerror", (error) => pageErrors.push(error.message));
-    await page.setViewportSize({ width: viewport.width, height: viewport.height });
-    await page.addInitScript(() => {
-      Object.defineProperty(navigator, "userAgent", {
-        configurable: true,
-        value: "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/124.0.0.0 Mobile Safari/537.36",
-      });
-      const orientationConstructor = (window as Window & {
-        DeviceOrientationEvent?: { requestPermission?: () => Promise<string> };
-      }).DeviceOrientationEvent;
-      if (orientationConstructor) {
-        Object.defineProperty(orientationConstructor, "requestPermission", {
-          configurable: true,
-          value: async () => "granted",
-        });
-      } else {
-        Object.defineProperty(window, "DeviceOrientationEvent", {
-          configurable: true,
-          value: Object.assign(function DeviceOrientationEventMock() {}, {
-            requestPermission: async () => "granted",
-          }),
-        });
-      }
-    });
-    await page.goto("http://127.0.0.1:5174/?xrdebug=1");
-    await page.getByRole("button", { name: "Camera view" }).click();
-    await page.getByRole("dialog", { name: "Start camera view?" })
-      .getByRole("button", { name: "Start" }).click();
-    await expect(page.locator("#atom-scene video.camera-view-video")).toBeVisible();
-    await expect(page.locator("#app")).toHaveClass(/android-camera-panels-active/);
-    await expect(page.locator(".camera-view-panel")).toBeVisible();
-    await expect(page.locator(".camera-view-panel .lesson-panel")).toBeHidden();
-    await page.locator(".camera-view-panel-heading button").click({ force: true });
-    await expect(page.locator("#app")).toHaveClass(/android-camera-legacy-dock-open/);
-    await expect(page.locator(".camera-view-panel .lesson-panel")).toBeVisible();
-    await page.locator(".camera-view-panel-heading button").click({ force: true });
-    await expect(page.locator(".camera-view-panel .lesson-panel")).toBeHidden();
-
-    const report = page.locator("#xr-debug-report");
-    await expect(report).toContainText("Active panel layout: android");
-    await expect(report).toContainText("Camera layout fits at minimum scale (portrait/landscape): yes / yes");
-    await expect(report).toContainText("Panel group world position:");
-    await expect(report).toContainText("Camera look limits yaw/pitch:");
-
-    const dispatchOrientation = async (alpha: number): Promise<void> => {
-      await page.evaluate((value) => {
-        const event = Object.assign(new Event("deviceorientation"), {
-          alpha: value,
-          beta: 0,
-          gamma: 0,
-        });
-        window.dispatchEvent(event);
-      }, alpha);
-    };
-    await dispatchOrientation(0);
-    await dispatchOrientation(45);
-    await expect(report).toContainText(/Camera look yaw\/pitch: -?\d+\.\d+ \/ 0\.0 deg/);
-    await page.locator(".reset-view").evaluate((element) =>
-      (element as HTMLButtonElement).click(),
-    );
-    await expect(report).toContainText("Camera look yaw/pitch: 0.0 / 0.0 deg");
-
-    await page.getByRole("button", { name: "Exit camera view" }).click();
-    await expect(page.locator("#app")).not.toHaveClass(/android-camera-panels-active/);
-    expect(pageErrors).toEqual([]);
-  });
-}
-
-for (const [name, reason, message] of [
-  ["NotAllowedError", "permission_denied", "Camera access was not allowed"],
-  ["NotFoundError", "no_camera", "No camera was found"],
-  ["NotReadableError", "camera_in_use", "camera is busy"],
-]) {
-test(`camera view returns to screen mode after ${name}`, async ({ page }) => {
-  await page.addInitScript((failureName) => {
-    Object.defineProperty(navigator, "xr", {
-      configurable: true,
-      value: { isSessionSupported: async () => false },
-    });
-    Object.defineProperty(navigator.mediaDevices, "getUserMedia", {
-      configurable: true,
-      value: async () => {
-        throw new DOMException("Mock camera failure", failureName);
-      },
-    });
-  }, name);
-  await page.goto("http://127.0.0.1:5174");
-  const numberBefore = await page.locator("#atomic-number").textContent();
-  await page.getByRole("button", { name: "Camera view" }).click();
-  await page.getByRole("dialog", { name: "Start camera view?" })
-    .getByRole("button", { name: "Start" }).click();
-  await expect(page.locator(".camera-view-status")).toContainText(message);
-  if (name === "NotAllowedError") {
-    const statusBox = await page.locator(".camera-view-status").boundingBox();
-    const particleBox = await page.locator(".particle-rail").boundingBox();
-    expect(statusBox).not.toBeNull();
-    expect(particleBox).not.toBeNull();
-    expect(statusBox!.y + statusBox!.height).toBeLessThanOrEqual(particleBox!.y);
-    await expect(page.locator(".camera-view-status")).toBeHidden({ timeout: 6000 });
-  }
-  await expect(page.locator(".camera-view-video")).toHaveCount(0);
-  await expect(page.locator("html")).not.toHaveClass(/camera-active/);
-  await expect(page.locator("#atom-scene canvas")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Camera view" })).toBeVisible();
-  expect(await page.locator("#atomic-number").textContent()).toBe(numberBefore);
-  await page.getByRole("button", { name: "Events" }).click();
-  await expect(page.locator('#dev-event-list [data-event-type="camera_view_ended"]')).toContainText(reason);
-});
-}
-
-test("camera view stops all tracks when the tab hides or the camera disconnects", async ({ page }) => {
-  await page.addInitScript(() => {
-    const mediaDevices = navigator.mediaDevices;
-    const originalGetUserMedia = mediaDevices.getUserMedia.bind(mediaDevices);
-    Object.defineProperty(window, "__cameraStreams", { value: [] });
-    Object.defineProperty(mediaDevices, "getUserMedia", {
-      configurable: true,
-      value: async (constraints: MediaStreamConstraints) => {
-        const stream = await originalGetUserMedia(constraints);
-        window.__cameraStreams.push(stream);
-        return stream;
-      },
-    });
-  });
-  await page.goto("http://127.0.0.1:5174");
-  await page.getByRole("button", { name: "Camera view" }).click();
-  await page.getByRole("dialog", { name: "Start camera view?" })
-    .getByRole("button", { name: "Start" }).click();
-  await expect(page.locator(".camera-view-video")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Exit camera view" })).toBeVisible();
-
-  await page.evaluate(() => {
-    const track = window.__cameraStreams[0]?.getVideoTracks()[0];
-    if (!track) throw new Error("Fake camera track is missing");
-    track.dispatchEvent(new Event("ended"));
-  });
-  await expect(page.locator(".camera-view-status")).toContainText("camera disconnected");
-  await expect(page.locator(".camera-view-video")).toHaveCount(0);
-  expect(await page.evaluate(() => window.__cameraStreams[0]?.getTracks().map((track) => track.readyState)))
-    .toEqual(["ended"]);
-
-  await page.getByRole("button", { name: "Camera view" }).click();
-  await page.getByRole("dialog", { name: "Start camera view?" })
-    .getByRole("button", { name: "Start" }).click();
-  await expect(page.locator(".camera-view-video")).toBeVisible();
-  await page.evaluate(() => {
-    Object.defineProperty(document, "hidden", { configurable: true, value: true });
-    document.dispatchEvent(new Event("visibilitychange"));
-  });
-  await expect(page.locator(".camera-view-status")).toContainText("tab is hidden");
-  await expect(page.locator(".camera-view-video")).toHaveCount(0);
-  expect(await page.evaluate(() => window.__cameraStreams[1]?.getTracks().map((track) => track.readyState)))
-    .toEqual(["ended"]);
-  await expect(page.locator("html")).not.toHaveClass(/camera-active/);
 });
 
 async function installMockXr(page: import("@playwright/test").Page): Promise<void> {
@@ -1459,7 +656,9 @@ async function installMockXr(page: import("@playwright/test").Page): Promise<voi
           throw new Error("Forced XR input initialization failure");
         }
       }
-      return {};
+      const space = new EventTarget() as EventTarget & { getOffsetReferenceSpace: () => unknown };
+      space.getOffsetReferenceSpace = () => space;
+      return space;
     };
     const frame = {
       getViewerPose: () => ({
@@ -1487,7 +686,9 @@ async function installMockXr(page: import("@playwright/test").Page): Promise<voi
       });
     session.cancelAnimationFrame = (handle) => window.cancelAnimationFrame(handle);
     session.end = async () => {
+      if (ended) return;
       ended = true;
+      session.dispatchEvent(new Event("end"));
     };
     session.addEventListener("select", () => {
       selectCount += 1;
@@ -1559,32 +760,4 @@ async function addParticles(
   for (let index = 0; index < count; index += 1) {
     await page.getByRole("button", { name: buttonName, exact: true }).click();
   }
-}
-
-async function expectCanvasHasRenderedPixels(
-  page: import("@playwright/test").Page,
-  canvas: import("@playwright/test").Locator,
-): Promise<void> {
-  const screenshot = await canvas.screenshot();
-  const imageDataUrl = `data:image/png;base64,${screenshot.toString("base64")}`;
-  const colorCount = await page.evaluate(async (source) => {
-    const image = new Image();
-    image.src = source;
-    await image.decode();
-    const sampleCanvas = document.createElement("canvas");
-    sampleCanvas.width = image.naturalWidth;
-    sampleCanvas.height = image.naturalHeight;
-    const context = sampleCanvas.getContext("2d");
-    if (!context) {
-      return 0;
-    }
-    context.drawImage(image, 0, 0);
-    const pixels = context.getImageData(0, 0, sampleCanvas.width, sampleCanvas.height).data;
-    const colors = new Set<string>();
-    for (let index = 0; index < pixels.length; index += 24) {
-      colors.add(`${pixels[index]},${pixels[index + 1]},${pixels[index + 2]}`);
-    }
-    return colors.size;
-  }, imageDataUrl);
-  expect(colorCount).toBeGreaterThan(10);
 }

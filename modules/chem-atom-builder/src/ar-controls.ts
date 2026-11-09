@@ -1,5 +1,5 @@
 import type { TelemetryContext } from "@mma/engine-core";
-import { shouldShowSpatialSettingsFallback, type SceneRenderer } from "@mma/engine-render";
+import type { SceneRenderer } from "@mma/engine-render";
 import {
   ArSessionController,
   ArSessionStartError,
@@ -11,6 +11,7 @@ import {
 } from "@mma/engine-xr";
 import type { XrSceneDiagnostics } from "@mma/engine-render";
 import { arTelemetryEventSchema } from "@mma/schema";
+import { createArHud } from "./ar-hud.js";
 
 export interface ArControlsOptions {
   readonly root: HTMLElement;
@@ -26,7 +27,6 @@ export interface ArControlsOptions {
     sessionInfo: ArSessionRuntimeInfo,
     session: ArSessionHandle | null,
   ) => void;
-  readonly onSpatialExpandedChange?: (expanded: boolean) => void;
   readonly diagnostics?: boolean;
 }
 
@@ -155,120 +155,16 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
   status.hidden = true;
   root.append(status);
 
-  const arPanel = document.createElement("section");
-  arPanel.className = "ar-overlay-panel is-collapsed";
-  arPanel.setAttribute("aria-label", "Lesson controls");
-  arPanel.hidden = true;
-  arPanel.innerHTML = `
-    <header class="ar-panel-heading">
-      <p class="ar-panel-mission-title" id="ar-panel-mission-title"></p>
-      <button type="button" data-ar-action="reset-view">Reset view</button>
-      <button type="button" data-ar-action="panel-toggle" aria-expanded="false">Expand panels</button>
-    </header>
-  `;
-  builder.append(arPanel);
 
-  const settingsScrim = document.createElement("button");
-  settingsScrim.type = "button";
-  settingsScrim.className = "dom-settings-scrim";
-  settingsScrim.setAttribute("aria-label", "Close settings");
-  settingsScrim.dataset.settingsAction = "close";
-  settingsScrim.hidden = true;
-  const settingsSheet = document.createElement("section");
-  settingsSheet.className = "dom-settings-sheet";
-  settingsSheet.setAttribute("aria-label", "Settings");
-  settingsSheet.hidden = true;
-  settingsSheet.innerHTML = `
-    <h2>Settings</h2>
-    <button type="button" class="dom-settings-close" data-settings-action="close">Close</button>
-    <section class="dom-settings-group">
-      <h3>Sound</h3>
-      <button type="button" data-settings-action="enable">Enable sound</button>
-      <button type="button" data-settings-action="mute" aria-pressed="false">Mute</button>
-      <button type="button" data-settings-action="replay">Replay last cue</button>
-    </section>
-    <section class="dom-settings-group">
-      <h3>Captions</h3>
-      <button type="button" data-settings-action="captions" aria-pressed="true">Captions on</button>
-    </section>
-    <section class="dom-settings-group">
-      <h3>Speed</h3>
-      <div class="dom-settings-speed" role="group" aria-label="Narration speed">
-        <button type="button" data-settings-speed="0.75">0.75x</button>
-        <button type="button" data-settings-speed="1" aria-pressed="true">1x</button>
-        <button type="button" data-settings-speed="1.25">1.25x</button>
-      </div>
-    </section>
-  `;
-  builder.append(settingsScrim, settingsSheet);
-
-  const panelContents = [
-    root.querySelector<HTMLElement>("#lesson-panel"),
-    root.querySelector<HTMLElement>(".narration-hud"),
-    root.querySelector<HTMLElement>("#assessment-card"),
-    root.querySelector<HTMLElement>("#lesson-summary"),
-    root.querySelector<HTMLElement>("#free-play-status"),
-    root.querySelector<HTMLElement>(".particle-rail"),
-  ];
-  if (panelContents.some((element) => !element)) {
-    throw new Error("The Atom Builder lesson controls could not be found.");
-  }
-  const panelPlacements = panelContents.map((element) => {
-    const parent = element!.parentNode;
-    if (!parent) {
-      throw new Error("An Atom Builder lesson control is detached.");
-    }
-    return { element: element!, parent, nextSibling: element!.nextSibling };
-  });
-  const panelToggle = arPanel.querySelector<HTMLButtonElement>("[data-ar-action='panel-toggle']");
-  const panelMissionTitle = arPanel.querySelector<HTMLElement>("#ar-panel-mission-title");
-  if (!panelToggle || !panelMissionTitle) {
-    throw new Error("The AR lesson panel could not be created.");
-  }
-  let panelMounted = false;
-  const setPanelCollapsed = (collapsed: boolean): void => {
-    arPanel.classList.toggle("is-collapsed", collapsed);
-    panelToggle.textContent = collapsed ? "Expand panels" : "Collapse panels";
-    panelToggle.setAttribute("aria-expanded", String(!collapsed));
-    options.onSpatialExpandedChange?.(!collapsed);
-  };
-  const mountPanel = (showDomOverlay: boolean): void => {
-    if (panelMounted) {
-      return;
-    }
-    for (const { element } of panelPlacements) {
-      arPanel.append(element);
-    }
-    arPanel.hidden = !showDomOverlay;
-    setPanelCollapsed(true);
-    panelMounted = true;
-  };
-  const unmountPanel = (): void => {
-    if (!panelMounted) {
-      return;
-    }
-    for (const { element, parent, nextSibling } of [...panelPlacements].reverse()) {
-      parent.insertBefore(element, nextSibling?.parentNode === parent ? nextSibling : null);
-    }
-    arPanel.hidden = true;
-    arPanel.classList.add("is-collapsed");
-    panelMounted = false;
-  };
-
+  const hud = createArHud(root, builder, () => renderer.resetArView());
   const exitButton = document.createElement("button");
   exitButton.type = "button";
   exitButton.className = "ar-exit";
   exitButton.dataset.arAction = "exit";
   exitButton.textContent = "Exit AR";
   exitButton.hidden = true;
-  root.append(exitButton);
+  hud.exitSlot.append(exitButton);
 
-  const settingsFallbackButton = document.createElement("button");
-  settingsFallbackButton.type = "button";
-  settingsFallbackButton.className = "spatial-settings-fallback ar-spatial-settings-fallback";
-  settingsFallbackButton.textContent = "Settings";
-  settingsFallbackButton.hidden = true;
-  root.append(settingsFallbackButton);
 
   const debugEnabled = isXrDiagnosticsEnabled(globalThis.location?.search ?? "");
   const diagnostics = debugEnabled ? document.createElement("section") : null;
@@ -341,23 +237,6 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
     root.dispatchEvent(new Event("mma:xr-diagnostics-update"));
     return report;
   };
-  const onSpatialPresentationDiagnostics = (event: Event): void => {
-    const detail = (event as CustomEvent<{
-      active?: boolean;
-      androidLayout?: boolean;
-    }>).detail;
-    if (!diagnostics) return;
-    if (detail?.active && detail.androidLayout) {
-      if (diagnosticsRefresh === null) {
-        diagnosticsRefresh = globalThis.setInterval(() => {
-          if (!disposed) updateDiagnostics();
-        }, 500);
-      }
-    } else if (!spatialActive && diagnosticsRefresh !== null) {
-      globalThis.clearInterval(diagnosticsRefresh);
-      diagnosticsRefresh = null;
-    }
-  };
   const onInputSourcesChange = (): void => {
     latestSessionInfo = controller.sessionInfo;
     updateDiagnostics();
@@ -375,13 +254,6 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
       }, autoDismissMs);
     }
   };
-  const setSettingsOpen = (open: boolean): void => {
-    root.classList.toggle("spatial-dom-settings-open", open);
-    settingsScrim.hidden = !open;
-    settingsSheet.hidden = !open;
-  };
-  const onSettingsToggle = (): void => setSettingsOpen(settingsSheet.hasAttribute("hidden"));
-  const onSettingsClose = (): void => setSettingsOpen(false);
   const recordEvent = (type: "ar_session_started" | "ar_session_ended" | "ar_error", payload: Record<string, unknown>): void => {
     if (disposed) {
       return;
@@ -429,7 +301,7 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
       grantedFeatures = state.status === "active" ? state.grantedFeatures : [];
       setArActiveState(inAr, activeTargets);
       if (inAr) {
-        mountPanel(sessionInfo.overlayGranted === true);
+        hud.mount(sessionInfo.overlayGranted === true);
       } else {
         if (diagnosticsSnapshotTimeout !== null) {
           globalThis.clearTimeout(diagnosticsSnapshotTimeout);
@@ -439,16 +311,13 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
         if (state.status === "idle") {
           activeMode = "immersive-ar";
         }
-        setSettingsOpen(false);
-        unmountPanel();
+        hud.unmount();
         breakReminder.hidden = true;
         cancelComfortBreak?.();
         cancelComfortBreak = null;
       }
       exitButton.textContent = sessionInfo.mode === "immersive-vr" ? "Exit VR" : "Exit AR";
       exitButton.hidden = !inAr || sessionInfo.overlayGranted !== true;
-      settingsFallbackButton.hidden = sessionInfo.overlayGranted !== true
-        || !shouldShowSpatialSettingsFallback(spatialShouldBeActive, false);
       exitButton.disabled = state.status !== "active";
       startButton.disabled = state.status === "requesting" || inAr;
       vrButton.disabled = state.status === "requesting" || inAr;
@@ -537,7 +406,6 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
     });
   };
   root.addEventListener("mma:xr-runtime-error", onSpatialRuntimeError);
-  root.addEventListener("mma:spatial-presentation", onSpatialPresentationDiagnostics);
 
   if (diagnostics) {
     updateDiagnostics();
@@ -553,26 +421,6 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
   root.append(breakReminder);
 
   const onAction = (event: MouseEvent): void => {
-    const settingsTarget = (event.target as Element | null)?.closest<HTMLElement>(
-      "[data-settings-action], [data-settings-speed]",
-    );
-    if (settingsTarget?.dataset.settingsAction === "close") {
-      setSettingsOpen(false);
-      return;
-    }
-    if (settingsTarget?.dataset.settingsAction) {
-      const action = settingsTarget.dataset.settingsAction;
-      root.querySelector<HTMLButtonElement>(`[data-narration-action="${action}"]`)?.click();
-      return;
-    }
-    if (settingsTarget?.dataset.settingsSpeed) {
-      const speed = root.querySelector<HTMLSelectElement>("#narration-speed");
-      if (speed) {
-        speed.value = settingsTarget.dataset.settingsSpeed;
-        speed.dispatchEvent(new Event("change", { bubbles: true }));
-      }
-      return;
-    }
     const action = (event.target as Element | null)
       ?.closest<HTMLElement>("[data-ar-action]")?.dataset.arAction;
     if (action === "explain") {
@@ -625,21 +473,12 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
           setStatus("AR has ended. You are back in screen mode.", 6000);
         }
       });
-    } else if (action === "panel-toggle") {
-      setPanelCollapsed(!arPanel.classList.contains("is-collapsed"));
-    } else if (action === "reset-view") {
-      renderer.resetArView();
-    } else if (action === "settings-fallback") {
-      onSettingsToggle();
     }
   };
   const onBeforeXrSelect = (event: Event): void => {
     event.preventDefault();
   };
   root.addEventListener("click", onAction);
-  root.addEventListener("mma:settings-toggle", onSettingsToggle);
-  root.addEventListener("mma:settings-close", onSettingsClose);
-  settingsFallbackButton.dataset.arAction = "settings-fallback";
   root.addEventListener("beforexrselect", onBeforeXrSelect);
 
   void detectArSupport().then((result) => {
@@ -649,16 +488,8 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
     supportedModes = result.supported ? result.modes : [];
     updateDiagnostics();
     startButton.hidden = !result.supported || !result.modes.includes("immersive-ar");
-    vrButton.hidden = !result.supported || !result.modes.includes("immersive-vr");
-    const touchFirst = !globalThis.matchMedia("(any-pointer: fine)").matches;
-    vrButton.textContent = touchFirst ? "VR with viewer" : "Enter VR";
-    if (touchFirst) {
-      vrButton.title = "Needs a phone VR viewer";
-      vrButton.setAttribute("aria-label", "VR with viewer. Needs a phone VR viewer");
-    } else {
-      vrButton.removeAttribute("title");
-      vrButton.removeAttribute("aria-label");
-    }
+    // Phone VR needs a Cardboard-style viewer; hidden until that mode is designed.
+    vrButton.hidden = !result.supported || !result.modes.includes("immersive-vr") || isTouchFirstDevice();
     supportMessage.textContent = result.supported ? "" : result.reason;
     supportMessage.hidden = result.supported;
   }).catch(() => {
@@ -671,14 +502,9 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
   return async () => {
     disposed = true;
     root.removeEventListener("mma:xr-runtime-error", onSpatialRuntimeError);
-    root.removeEventListener("mma:spatial-presentation", onSpatialPresentationDiagnostics);
-    if (statusDismissTimeout !== null) globalThis.clearTimeout(statusDismissTimeout);
+      if (statusDismissTimeout !== null) globalThis.clearTimeout(statusDismissTimeout);
     statusDismissTimeout = null;
     root.removeEventListener("click", onAction);
-    root.removeEventListener("mma:settings-toggle", onSettingsToggle);
-    root.removeEventListener("mma:settings-close", onSettingsClose);
-    settingsScrim.remove();
-    settingsSheet.remove();
     root.removeEventListener("beforexrselect", onBeforeXrSelect);
     cancelComfortBreak?.();
     cancelComfortBreak = null;
@@ -690,15 +516,13 @@ export function mountArControls(options: ArControlsOptions): () => Promise<void>
     }
     await controller.stop();
     if (spatialActive) options.onSpatialActiveChange?.(false, controller.sessionInfo, null);
-    unmountPanel();
+    hud.dispose();
     setArActiveState(false, activeTargets);
     actions.remove();
     supportMessage.remove();
     dialog.remove();
-    arPanel.remove();
     status.remove();
     exitButton.remove();
-    settingsFallbackButton.remove();
     breakReminder.remove();
     diagnostics?.remove();
   };
@@ -733,4 +557,11 @@ function arFailureMessage(
     case "unknown":
       return "AR could not continue. You are back in screen mode.";
   }
+}
+
+/** Touch-only devices (phones, tablets) have no fine pointer. Phone VR stays hidden on them for now. */
+export function isTouchFirstDevice(
+  matchMedia: (query: string) => { matches: boolean } = (query) => globalThis.matchMedia(query),
+): boolean {
+  return !matchMedia("(any-pointer: fine)").matches;
 }

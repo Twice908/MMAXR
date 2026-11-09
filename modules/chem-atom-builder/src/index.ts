@@ -53,9 +53,8 @@ import {
 } from "./learning.js";
 import { layoutAtom } from "./layout.js";
 import { NARRATION_COMMAND, buildXrLessonContent } from "./xr-lesson.js";
-import "./glass-tokens.css";
-import "./horizon-tokens.css";
 import "./atom-builder.css";
+import "./ar-hud.css";
 
 interface LocalEventEntry {
   readonly type: string;
@@ -361,7 +360,9 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     recordLocalEvent: recordLocalArEvent,
     onSpatialActiveChange: (active, sessionInfo) => {
       xrSessionActive = active;
-      input?.setEnabled(!active);
+      // Phone AR (DOM overlay) keeps touch input for pinch and turn gestures;
+      // headsets use IWSDK input instead.
+      input?.setEnabled(!active || sessionInfo.overlayGranted === true);
       root.classList.toggle("xr-session-active", active);
       root.classList.toggle(
         "xr-vr-active",
@@ -562,45 +563,6 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     if (typeof command !== "string" || command.length === 0) return;
     runCommand(command);
   };
-  const onSpatialPresentation = (event: Event): void => {
-    const detail = (event as CustomEvent<{
-      active?: boolean;
-      expanded?: boolean;
-      androidLayout?: boolean;
-      orientation?: {
-        alpha: number;
-        beta: number;
-        gamma: number;
-        screenAngleDegrees: number;
-      } | null;
-    }>).detail;
-    if (typeof detail?.active !== "boolean") return;
-    if (detail.active && detail.androidLayout && detail.orientation) {
-      renderer.updateCameraViewOrientation(detail.orientation);
-    }
-  };
-  const onCameraLookOrientation = (event: Event): void => {
-    const detail = (event as CustomEvent<{
-      alpha?: number;
-      beta?: number;
-      gamma?: number;
-      screenAngleDegrees?: number;
-    }>).detail;
-    if (
-      typeof detail?.alpha === "number" &&
-      typeof detail.beta === "number" &&
-      typeof detail.gamma === "number" &&
-      typeof detail.screenAngleDegrees === "number"
-    ) {
-      renderer.updateCameraViewOrientation({
-        alpha: detail.alpha,
-        beta: detail.beta,
-        gamma: detail.gamma,
-        screenAngleDegrees: detail.screenAngleDegrees,
-      });
-    }
-  };
-  const onCameraLookOrientationChange = (): void => renderer.rebaseCameraViewOrientation();
 
   const onInput = (action: InputAction): void => {
     const payload = asPayload(action.payload);
@@ -702,9 +664,6 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   });
 
   root.addEventListener("click", onCommandClick);
-  root.addEventListener("mma:spatial-presentation", onSpatialPresentation);
-  root.addEventListener("mma:camera-look-orientation", onCameraLookOrientation);
-  root.addEventListener("mma:camera-look-orientation-change", onCameraLookOrientationChange);
   renderState(store.getState());
   store.events.emit("module_started", {
     type: "module_started",
@@ -721,9 +680,6 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     root.removeEventListener("click", onEventsAction);
     root.removeEventListener("mma:local-telemetry", onLocalTelemetry);
     root.removeEventListener("click", onCommandClick);
-    root.removeEventListener("mma:spatial-presentation", onSpatialPresentation);
-    root.removeEventListener("mma:camera-look-orientation", onCameraLookOrientation);
-    root.removeEventListener("mma:camera-look-orientation-change", onCameraLookOrientationChange);
     narrationPlayer.dispose();
     void disposeArControls().finally(() => renderer.dispose());
     root.replaceChildren();
@@ -1030,10 +986,10 @@ function bounceParticle(element: HTMLElement | null): void {
 }
 
 function isArHudTarget(target: EventTarget | null): boolean {
-  // Tray particles stay draggable: their gestures must reach the input adapter,
-  // while every other panel gesture is left to native overlay scrolling.
-  return target instanceof Element && target.closest("[data-particle]") === null && target.closest(
-    ".ar-overlay-panel, .ar-exit, .spatial-settings-fallback, .spatial-edge-hints, " +
+  // Gestures on HUD controls stay with the controls (taps, sheet scrolling);
+  // gestures on the open camera view turn and resize the atom.
+  return target instanceof Element && target.closest(
+    ".ar-hud-top, .ar-hud-sheet, .ar-hud-tabs, .ar-hud-caption-slot, " +
     ".ar-status, .ar-break-reminder, .ar-diagnostics, .ar-confirmation",
   ) !== null;
 }
