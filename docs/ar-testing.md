@@ -44,3 +44,33 @@ Desktop (IWSDK emulator, `pnpm --filter @mma/web dev`) and headsets:
    cards update to Na+ / Cl- and **Join the ions** becomes the main action.
 3. Press Join the ions, Check, and answer the questions on the lesson panel.
 4. **Recenter** re-places the model and panels; **Exit AR** returns to the web view.
+
+## Ohm's Law AR and VR checklist (added 2026-11-10)
+
+Android phone with ARCore (Chrome), handheld AR with the DOM overlay:
+
+1. Open Ohm's Law, press **Enter AR**, read the consent text, press **Start AR**. The
+   circuit (loop about 30 cm wide) appears in front of the camera, with the top bar
+   (status, Reset view, red Exit AR) and the Mission / Circuit / Readings / Sound tabs.
+2. Open **Circuit**, choose **Ammeter**: pulsing rings appear on the gap, beside the
+   resistor and below the battery, and stay on them as you move the phone. Tap the gap
+   ring. Choose **Voltmeter** and tap the ring beside the resistor. Try the voltmeter
+   in the gap: it is refused with the reason in the result line.
+3. Close the switch: the charges move round the loop (+ to −), the meter readings show
+   under the meters, and the bulb glows when it is the part to test.
+4. Record readings; open **Readings**: the table and the V–I graph update.
+5. One-finger drag on an empty part of the view turns the circuit; pinch resizes it;
+   Reset view puts it back. Captions stay visible above the sheet.
+6. Exit AR returns to the web view with the same progress and readings.
+
+Desktop (IWSDK emulator, `pnpm --filter @mma/web dev`) and headsets, AR and VR:
+
+1. **Enter AR** (or **Enter VR**) starts the session. Lesson panel on the left, Circuit
+   panel on the right (battery stepper, meter readings, latest readings, actions),
+   narration / Recenter / Exit dock under the circuit. No page overlays show.
+2. With a controller ray: **Place the ammeter**, then **In the gap (in series)**;
+   **Place the voltmeter**, then **Across the 10 ohm resistor (in parallel)**; **Close
+   the switch**. The charges move and the Meters card shows the readings.
+3. Use + / - on the battery and **Record reading**; **Part:** cycles 2, 5, 10 ohm and
+   the bulb. Press Check and answer on the lesson panel.
+4. **Recenter** re-places the circuit and panels; **Exit** returns to the web view.

@@ -27,3 +27,22 @@ export {
   type NarrationBar,
   type NarrationBarHandlers,
 } from "./narration-bar.js";
+export {
+  createDataTable,
+  type DataTable,
+  type DataTableColumn,
+  type DataTableOptions,
+} from "./data-table.js";
+export {
+  GRAPH_BOX,
+  buildGraphGeometry,
+  createXyGraph,
+  graphSummary,
+  niceTicks,
+  type GraphData,
+  type GraphGeometry,
+  type GraphMarker,
+  type GraphSeries,
+  type XyGraph,
+  type XyGraphOptions,
+} from "./xy-graph.js";

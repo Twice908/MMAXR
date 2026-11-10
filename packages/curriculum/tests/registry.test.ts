@@ -7,17 +7,26 @@ import {
 } from "../src/index.js";
 
 describe("concept registry", () => {
-  it("maps all requested concepts to Class 9-10 and the three boards", () => {
+  it("maps the chemistry concepts to Class 9-10 and the electricity concepts to Classes 10 and 12, on the three boards", () => {
     expect(validateConceptRegistry(concepts)).toEqual([]);
-    expect(Object.keys(conceptRegistry)).toEqual([
+    const chemistry = [
       "sci.chem.atom.structure",
       "sci.chem.atom.shells",
       "sci.chem.atom.ions",
       "sci.chem.atom.isotopes",
       "sci.chem.bonding.ionic",
-    ]);
-    for (const definition of Object.values(conceptRegistry)) {
-      expect(definition.classes).toEqual([9, 10]);
+    ];
+    const electricity = [
+      "sci.phys.electricity.current",
+      "sci.phys.electricity.potential-difference",
+      "sci.phys.electricity.resistance",
+      "sci.phys.electricity.ohms-law",
+      "sci.phys.electricity.meters",
+      "sci.phys.electricity.non-ohmic",
+    ];
+    expect(Object.keys(conceptRegistry)).toEqual([...chemistry, ...electricity]);
+    for (const [id, definition] of Object.entries(conceptRegistry)) {
+      expect(definition.classes).toEqual(chemistry.includes(id) ? [9, 10] : [10, 12]);
       expect(definition.boards).toEqual(["CBSE", "ICSE", "STATE"]);
     }
   });

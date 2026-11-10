@@ -1,0 +1,265 @@
+{
+  "schemaVersion": "1.0",
+  "releaseStatus": "draft",
+  "id": "phys.ohms-law",
+  "title": {
+    "en": "Ohm's Law"
+  },
+  "subject": "physics",
+  "kit": "physics",
+  "concepts": [
+    "sci.phys.electricity.ohms-law",
+    "sci.phys.electricity.current",
+    "sci.phys.electricity.potential-difference",
+    "sci.phys.electricity.resistance",
+    "sci.phys.electricity.meters",
+    "sci.phys.electricity.non-ohmic"
+  ],
+  "boards": [
+    "CBSE",
+    "ICSE",
+    "STATE"
+  ],
+  "levels": [
+    {
+      "id": "current-electricity",
+      "classes": [
+        10,
+        12
+      ],
+      "features": [
+        "series-circuit",
+        "meters",
+        "ohms-law",
+        "filament-bulb"
+      ]
+    }
+  ],
+  "modes": [
+    "screen",
+    "ar",
+    "vr"
+  ],
+  "estimatedMinutes": 10,
+  "assets": [],
+  "interactions": {
+    "manipulate": [
+      "place-meter",
+      "set-cells",
+      "toggle-switch",
+      "swap-load",
+      "record-reading",
+      "orbit-camera"
+    ],
+    "simulate": [
+      "solve-circuit",
+      "show-current-flow",
+      "update-meter-readings",
+      "plot-v-i-graph",
+      "bulb-glow"
+    ],
+    "missions": [
+      "build-circuit",
+      "vary-potential-difference",
+      "vary-resistance",
+      "filament-bulb"
+    ],
+    "check": [
+      "assess.ohm.meters.01",
+      "assess.ohm.meters.02",
+      "assess.ohm.voltage.01",
+      "assess.ohm.voltage.02",
+      "assess.ohm.resistance.01",
+      "assess.ohm.resistance.02",
+      "assess.ohm.bulb.01",
+      "assess.ohm.bulb.02"
+    ]
+  },
+  "missions": [
+    {
+      "id": "build-circuit",
+      "title": "Connect the meters",
+      "goalText": "Put the ammeter in series and the voltmeter across the resistor. Then close the switch so current flows.",
+      "goal": {
+        "ammeterInSeries": true,
+        "voltmeterAcrossLoad": true,
+        "switchClosed": true
+      },
+      "hints": [
+        "An ammeter measures the current, so the current must flow through it. It goes in series, in the gap in the loop.",
+        "A voltmeter measures the potential difference between the two ends of a part. It goes across (in parallel with) the resistor.",
+        "Choose Ammeter and place it in the gap. Choose Voltmeter and place it across the resistor. Close the switch, then press Check."
+      ],
+      "onComplete": {
+        "triggerAssessments": [
+          "assess.ohm.meters.01",
+          "assess.ohm.meters.02"
+        ]
+      }
+    },
+    {
+      "id": "vary-potential-difference",
+      "title": "Change the potential difference",
+      "goalText": "Keep one resistor. Record readings with at least three different numbers of cells, and watch how the current changes.",
+      "goal": {
+        "variedPotentialDifference": true
+      },
+      "hints": [
+        "Each cell adds 1.5 V of potential difference across the resistor.",
+        "Add a cell with +, then press Record reading. Do this for at least three different numbers of cells.",
+        "Look at the V ÷ I column. For the same resistor it stays the same, and the graph is a straight line through the origin."
+      ],
+      "onComplete": {
+        "triggerAssessments": [
+          "assess.ohm.voltage.01",
+          "assess.ohm.voltage.02"
+        ]
+      }
+    },
+    {
+      "id": "vary-resistance",
+      "title": "Change the resistance",
+      "goalText": "Keep the same number of cells. Record a reading with each resistor: 2 Ω, 5 Ω and 10 Ω.",
+      "goal": {
+        "variedResistance": true
+      },
+      "hints": [
+        "Do not change the cells this time. Only change the resistor.",
+        "Choose a resistor under Part to test, then press Record reading. Do this for all three resistors.",
+        "Compare the currents. The larger the resistance, the smaller the current for the same potential difference."
+      ],
+      "onComplete": {
+        "triggerAssessments": [
+          "assess.ohm.resistance.01",
+          "assess.ohm.resistance.02"
+        ]
+      }
+    },
+    {
+      "id": "filament-bulb",
+      "title": "Test a filament bulb",
+      "goalText": "Swap the resistor for the bulb. Record readings with at least three different numbers of cells, then compare its graph with the resistor's.",
+      "goal": {
+        "bulbTested": true
+      },
+      "hints": [
+        "Choose Bulb under Part to test. The voltmeter stays across it.",
+        "Record a reading, add a cell, and record again. Do this at least three times.",
+        "Look at V ÷ I for the bulb. It grows as the bulb gets brighter and hotter, so its graph curves."
+      ],
+      "onComplete": {
+        "triggerAssessments": [
+          "assess.ohm.bulb.01",
+          "assess.ohm.bulb.02"
+        ]
+      }
+    }
+  ],
+  "narration": {
+    "languages": [
+      "en"
+    ],
+    "cues": [
+      {
+        "id": "module-started",
+        "trigger": "module_started",
+        "script": "narration/en/module-started.json",
+        "audio": "narration/en/generated/module-started.mp3",
+        "captions": "narration/en/generated/module-started.vtt",
+        "interruptible": true
+      },
+      {
+        "id": "build-circuit-start",
+        "trigger": "mission_started",
+        "missionId": "build-circuit",
+        "script": "narration/en/build-circuit-start.json",
+        "audio": "narration/en/generated/build-circuit-start.mp3",
+        "captions": "narration/en/generated/build-circuit-start.vtt",
+        "interruptible": true
+      },
+      {
+        "id": "build-circuit-complete",
+        "trigger": "mission_completed",
+        "missionId": "build-circuit",
+        "script": "narration/en/build-circuit-complete.json",
+        "audio": "narration/en/generated/build-circuit-complete.mp3",
+        "captions": "narration/en/generated/build-circuit-complete.vtt",
+        "interruptible": true
+      },
+      {
+        "id": "vary-potential-difference-start",
+        "trigger": "mission_started",
+        "missionId": "vary-potential-difference",
+        "script": "narration/en/vary-potential-difference-start.json",
+        "audio": "narration/en/generated/vary-potential-difference-start.mp3",
+        "captions": "narration/en/generated/vary-potential-difference-start.vtt",
+        "interruptible": true
+      },
+      {
+        "id": "vary-potential-difference-complete",
+        "trigger": "mission_completed",
+        "missionId": "vary-potential-difference",
+        "script": "narration/en/vary-potential-difference-complete.json",
+        "audio": "narration/en/generated/vary-potential-difference-complete.mp3",
+        "captions": "narration/en/generated/vary-potential-difference-complete.vtt",
+        "interruptible": true
+      },
+      {
+        "id": "vary-resistance-start",
+        "trigger": "mission_started",
+        "missionId": "vary-resistance",
+        "script": "narration/en/vary-resistance-start.json",
+        "audio": "narration/en/generated/vary-resistance-start.mp3",
+        "captions": "narration/en/generated/vary-resistance-start.vtt",
+        "interruptible": true
+      },
+      {
+        "id": "vary-resistance-complete",
+        "trigger": "mission_completed",
+        "missionId": "vary-resistance",
+        "script": "narration/en/vary-resistance-complete.json",
+        "audio": "narration/en/generated/vary-resistance-complete.mp3",
+        "captions": "narration/en/generated/vary-resistance-complete.vtt",
+        "interruptible": true
+      },
+      {
+        "id": "filament-bulb-start",
+        "trigger": "mission_started",
+        "missionId": "filament-bulb",
+        "script": "narration/en/filament-bulb-start.json",
+        "audio": "narration/en/generated/filament-bulb-start.mp3",
+        "captions": "narration/en/generated/filament-bulb-start.vtt",
+        "interruptible": true
+      },
+      {
+        "id": "filament-bulb-complete",
+        "trigger": "mission_completed",
+        "missionId": "filament-bulb",
+        "script": "narration/en/filament-bulb-complete.json",
+        "audio": "narration/en/generated/filament-bulb-complete.mp3",
+        "captions": "narration/en/generated/filament-bulb-complete.vtt",
+        "interruptible": true
+      },
+      {
+        "id": "invalid-placement",
+        "trigger": "invalid_placement",
+        "script": "narration/en/invalid-placement.json",
+        "audio": "narration/en/generated/invalid-placement.mp3",
+        "captions": "narration/en/generated/invalid-placement.vtt",
+        "interruptible": true
+      }
+    ],
+    "guide": {
+      "enabled": false,
+      "allowedActions": [
+        "highlight",
+        "show_hint",
+        "focus_camera",
+        "open_panel",
+        "start_mission"
+      ],
+      "groundingDocs": []
+    }
+  },
+  "rulesPlugin": "./src/index.ts"
+}

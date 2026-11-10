@@ -19,7 +19,11 @@ Current status (update this block as work completes):
 - Done: Ionic Bonding AR: phone AR (ARCore, DOM overlay HUD, in-model electron drag) and desktop emulator / headset AR (Horizon module panels with move buttons); shared `mountXrSession`, `createXrHud` (engine-ui) and `createXrModulePanels` (engine-render). Needs Android and headset checks (docs/ar-testing.md).
 - Done: Ionic Bonding VR (same shared session and Horizon panels), in-scene Na/Na+ and Cl/Cl- labels for headsets and the emulator, and an opt-in `xrLift` so the model sits just above eye level. Owner checked AR and VR in the emulator.
 - Done: Ionic Bonding narration (6 Piper cues, scripts pending review) in web, phone AR and headset views. Narration generator is global (any module via `?narration-generator=<id>`); narration asset loading and telemetry are shared in `engine-voice` and used by both modules; shared narration bar in `engine-ui`.
-- Next: Android and headset checks for Ionic Bonding; review the Atom Builder and Ionic Bonding assessment items and narration scripts.
+- Done: Ohm's Law stage 2: `packages/kits/physics` (`@mma/kit-physics`) with one-liner circuit parts, DC solver, filament bulb curve (pending review), meter-placement checks and a circuit bench reducer (docs/adr/0009-physics-kit-circuits.md).
+- Done: Ohm's Law stage 3: screen module `modules/physics-ohms-law` (draft; 4 missions, 8 pending questions), kit `layoutSeriesLoop`, `CircuitView` (engine-render), `createDataTable` / `createXyGraph` (engine-ui), e2e spec (docs/adr/0010-ohms-law-screen-module.md).
+- Done: Ohm's Law stage 4: 10 narration cues (scripts pending review, draft Piper audio), shared narration bar in the page.
+- Done: Ohm's Law stage 5: phone AR (HUD: Mission, Circuit, Readings, Sound) and headset / emulator AR and VR (Horizon panels); checked in the emulator only.
+- Next: Android and headset checks for Ohm's Law (docs/ar-testing.md); teacher review of Ohm's Law questions, bulb curve, graph axes and concept classes; Android and headset checks for Ionic Bonding; review the Atom Builder and Ionic Bonding assessment items and narration scripts.
 - Not started: Phase 2b live voice guide, remaining XR work (including headset VR and other 3a-4b work), portal link (Phase 4).
 
 ## 2. Phase gates (do not build ahead)
