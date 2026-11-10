@@ -14,7 +14,7 @@ Current status (update this block as work completes):
 - Done: Android handheld WebXR AR/VR selects the measured phone panel layout; world-space headset sessions keep the desktop/headset layout.
 - Done: Camera view removed on all devices; supported views per device are in docs/adr/0006-supported-views.md (Screen everywhere, Android ARCore AR with a tab-bar HUD, headset AR/VR, desktop AR/VR for emulator dev only; phone VR viewer hidden).
 - Done: Ported the 3D scene, XR sessions and XR input to IWSDK 1.0.1 (super-three 0.181); XR lesson UI uses the Horizon UI kit; glass panels and the custom input rig are removed (docs/adr/0005-iwsdk-runtime.md). Needs headset and Android AR checks.
-- Done: Web-view access-code login, student dashboard (Physics, Chemistry, Biology sections; settings drawer) and hash routing (`#/login`, `#/dashboard`, `#/experiment/<id>`). Temporary gate, see docs/adr/0007-temporary-access-code-gate.md. Production accepts no code until the teacher's hashes are added with `pnpm generate:access-codes`.
+- Done: Web-view access-code login, student dashboard (Physics, Chemistry, Biology sections; settings drawer) and hash routing (`#/login`, `#/dashboard`, `#/experiment/<id>`). Temporary gate, see docs/adr/0007-temporary-access-code-gate.md. The accepted code(s) are plain text in `apps/web/src/auth/access-codes.ts`, the same in dev and production.
 - Done: Ionic Bonding web view (`modules/chem-ionic-bonding`, draft, NaCl): shared `engine-lesson` and `engine-ui` packages, kit compound table and bonding rules, multi-atom `MoleculeView` (docs/adr/0008-shared-lesson-packages-and-ionic-bonding.md). The liquid-glass UI skill is removed; use the Horizon UI kit and standard UX rules.
 - Done: Ionic Bonding AR: phone AR (ARCore, DOM overlay HUD, in-model electron drag) and desktop emulator / headset AR (Horizon module panels with move buttons); shared `mountXrSession`, `createXrHud` (engine-ui) and `createXrModulePanels` (engine-render). Needs Android and headset checks (docs/ar-testing.md).
 - Done: Ionic Bonding VR (same shared session and Horizon panels), in-scene Na/Na+ and Cl/Cl- labels for headsets and the emulator, and an opt-in `xrLift` so the model sits just above eye level. Owner checked AR and VR in the emulator.
@@ -61,7 +61,6 @@ pnpm typecheck                     # all packages
 pnpm lint                          # includes dependency-boundary rules
 pnpm test                          # Vitest
 pnpm generate:narration             # generate local mock audio and captions
-pnpm generate:access-codes <file>   # hash a plain access-code list (kept outside the repo) into access-codes.json
 pnpm --filter @mma/web dev         # IWSDK dev session: Runtime/Editor browser + Quest emulator (https://localhost:5173)
 pnpm --filter @mma/web dev:runtime # plain Vite dev server only
 pnpm --filter @mma/web dev:down    # stop the IWSDK dev session

@@ -3,8 +3,8 @@ import { el } from "./dom.js";
 
 /** What the login page needs from the app. */
 export interface LoginDeps {
-  /** True when the code is on the access list. May throw if the browser cannot hash. */
-  readonly verifyCode: (code: string) => Promise<boolean>;
+  /** True when the code is on the access list. Sync or async. */
+  readonly verifyCode: (code: string) => boolean | Promise<boolean>;
   readonly limiter: AttemptLimiter;
   /** Called with the cleaned name once the code is accepted. */
   readonly onSignedIn: (username: string) => void;

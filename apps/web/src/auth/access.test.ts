@@ -1,25 +1,6 @@
-import { pbkdf2Sync } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import {
-  createAttemptLimiter,
-  hashAccessCode,
-  normalizeAccessCode,
-  validateUsername,
-  verifyAccessCode,
-  type AccessCodeList,
-} from "./access.js";
-
-const SALT = "00ff00ff00ff00ff";
-const ITERATIONS = 1000;
-
-async function listWith(codes: readonly string[], devCodes: readonly string[] = []): Promise<AccessCodeList> {
-  return {
-    salt: SALT,
-    iterations: ITERATIONS,
-    hashes: await Promise.all(codes.map((code) => hashAccessCode(code, SALT, ITERATIONS))),
-    devHashes: await Promise.all(devCodes.map((code) => hashAccessCode(code, SALT, ITERATIONS))),
-  };
-}
+import { ACCESS_CODES } from "./access-codes.js";
+import { createAttemptLimiter, normalizeAccessCode, validateUsername, verifyAccessCode } from "./access.js";
 
 describe("normalizeAccessCode", () => {
   it("trims and upper-cases", () => {
@@ -27,47 +8,26 @@ describe("normalizeAccessCode", () => {
   });
 });
 
-describe("hashAccessCode", () => {
-  it("is stable for the same input and differs by code and by salt", async () => {
-    const first = await hashAccessCode("CODE-1", SALT, ITERATIONS);
-    expect(first).toMatch(/^[0-9a-f]{64}$/);
-    expect(await hashAccessCode("CODE-1", SALT, ITERATIONS)).toBe(first);
-    expect(await hashAccessCode("CODE-2", SALT, ITERATIONS)).not.toBe(first);
-    expect(await hashAccessCode("CODE-1", "aa", ITERATIONS)).not.toBe(first);
-  });
-
-  it("ignores case and surrounding spaces", async () => {
-    expect(await hashAccessCode(" code-1 ", SALT, ITERATIONS)).toBe(
-      await hashAccessCode("CODE-1", SALT, ITERATIONS),
-    );
-  });
-
-  it("matches Node's own PBKDF2-SHA256, so the browser and the hashing script agree", async () => {
-    const expected = pbkdf2Sync("ABC", "salt", 2, 32, "sha256").toString("hex");
-    expect(await hashAccessCode("abc", "salt", 2)).toBe(expected);
-  });
-});
-
 describe("verifyAccessCode", () => {
-  it("accepts a listed code, in any case, and rejects others", async () => {
-    const list = await listWith(["MMA-ALPHA", "MMA-BETA"]);
-    expect(await verifyAccessCode("MMA-ALPHA", list)).toBe(true);
-    expect(await verifyAccessCode("mma-beta ", list)).toBe(true);
-    expect(await verifyAccessCode("MMA-GAMMA", list)).toBe(false);
+  const accepted = ["MMA-ALPHA", "Tree@bamboo"];
+
+  it("accepts a listed code, in any case, and rejects others", () => {
+    expect(verifyAccessCode("MMA-ALPHA", accepted)).toBe(true);
+    expect(verifyAccessCode("tree@bamboo ", accepted)).toBe(true);
+    expect(verifyAccessCode("Tree@bamboo1", accepted)).toBe(false);
+    expect(verifyAccessCode("MMA-GAMMA", accepted)).toBe(false);
   });
 
-  it("rejects empty and blank input even when the list is empty", async () => {
-    const list = await listWith([]);
-    expect(await verifyAccessCode("", list)).toBe(false);
-    expect(await verifyAccessCode("   ", list)).toBe(false);
+  it("rejects empty and blank input, even against an empty or blank list entry", () => {
+    expect(verifyAccessCode("", accepted)).toBe(false);
+    expect(verifyAccessCode("   ", accepted)).toBe(false);
+    expect(verifyAccessCode("", [""])).toBe(false);
+    expect(verifyAccessCode("anything", [])).toBe(false);
   });
 
-  it("honours dev codes only when asked", async () => {
-    const list = await listWith(["REAL-1"], ["TEST-1"]);
-    expect(await verifyAccessCode("TEST-1", list)).toBe(false);
-    expect(await verifyAccessCode("TEST-1", list, { allowDevCodes: false })).toBe(false);
-    expect(await verifyAccessCode("TEST-1", list, { allowDevCodes: true })).toBe(true);
-    expect(await verifyAccessCode("REAL-1", list, { allowDevCodes: true })).toBe(true);
+  it("the shipped list accepts the academy code", () => {
+    expect(ACCESS_CODES.length).toBeGreaterThan(0);
+    expect(verifyAccessCode("Tree@bamboo", ACCESS_CODES)).toBe(true);
   });
 });
 

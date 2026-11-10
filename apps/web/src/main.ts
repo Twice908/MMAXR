@@ -1,6 +1,6 @@
 import "./shell.css";
 import "./views/views.css";
-import accessCodes from "./auth/access-codes.json";
+import { ACCESS_CODES } from "./auth/access-codes.js";
 import { createAttemptLimiter, verifyAccessCode } from "./auth/access.js";
 import { createSessionStore } from "./auth/session.js";
 import { findExperiment } from "./catalogue.js";
@@ -61,8 +61,7 @@ function startApp(): void {
     if (route.name === "login" || !session) {
       document.title = "Sign in | Math Maam Academy";
       teardown = mountLogin(app, {
-        verifyCode: (code) =>
-          verifyAccessCode(code, accessCodes, { allowDevCodes: import.meta.env.DEV }),
+        verifyCode: (code) => verifyAccessCode(code, ACCESS_CODES),
         limiter,
         onSignedIn: (username) => {
           sessions.signIn(username);

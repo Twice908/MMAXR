@@ -1,8 +1,5 @@
-/**
- * Test-only login values. The matching hash sits in `devHashes` of
- * `apps/web/src/auth/access-codes.json`, which production builds ignore.
- */
-export const TEST_ACCESS_CODE = "MMA-TEST-4821";
+/** Login values for the browser tests. The code must be one of `ACCESS_CODES` in the app. */
+export const TEST_ACCESS_CODE = "Tree@bamboo";
 export const TEST_USERNAME = "Test Student";
 /** Base URL of the e2e dev server (see playwright.config.ts). */
 export const BASE_URL = "https://127.0.0.1:5174";
