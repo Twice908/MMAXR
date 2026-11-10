@@ -77,12 +77,13 @@ export {
   type XrLessonContent,
   type XrParticleRow,
 } from "./xr-lesson-content.js";
-export { createXrLessonPanels, type XrLessonPanels } from "./xr-lesson-panels.js";
 export {
   createXrModulePanels,
   type XrModulePanels,
   type XrModulePanelsContent,
   type XrPanelAction,
   type XrPanelCard,
+  type XrPanelInfo,
+  type XrPanelStepper,
 } from "./xr-module-panels.js";
 export type { WorldOptions } from "@iwsdk/core";

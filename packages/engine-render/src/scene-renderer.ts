@@ -20,9 +20,7 @@ import {
   type ScreenPoint,
 } from "./screen-snap.js";
 import { screenZoomConfig } from "./zoom-controls.js";
-import { createXrLessonPanels, type XrLessonPanels } from "./xr-lesson-panels.js";
 import { createXrModulePanels, type XrModulePanels, type XrModulePanelsContent } from "./xr-module-panels.js";
-import type { XrLessonContent } from "./xr-lesson-content.js";
 
 /** Options for {@link SceneRenderer}. */
 export interface SceneRendererOptions {
@@ -177,11 +175,9 @@ export class SceneRenderer {
   private xrNeedsPlacement = false;
   private xrFrames = 0;
   private stopXrFrames: (() => void) | null = null;
-  private lessonPanels: XrLessonPanels | XrModulePanels | null = null;
-  /** Which panel set is shown: the Atom Builder lesson panels or the shared module panels. */
-  private panelKind: "lesson" | "module" | null = null;
+  private lessonPanels: XrModulePanels | null = null;
   private lessonEntities: Entity[] = [];
-  private pendingLesson: { kind: "lesson" | "module"; create: () => XrLessonPanels | XrModulePanels } | null = null;
+  private pendingLesson: (() => XrModulePanels) | null = null;
   private disposed = false;
 
   constructor(options: SceneRendererOptions) {
@@ -404,42 +400,20 @@ export class SceneRenderer {
     this.xrNeedsPlacement = true;
   }
 
-  /** Show or update the world-locked Horizon UI lesson panels (AR/VR only). */
-  setLessonPanels(content: XrLessonContent, onCommand: (command: string) => void): void {
-    this.showPanels(
-      "lesson",
-      () => createXrLessonPanels(content, onCommand),
-      (panels) => (panels as XrLessonPanels).update(content),
-    );
-  }
-
   /**
    * Show or update the shared module panels (lesson card, a side panel of info cards and
    * actions, and a dock) for modules other than the Atom Builder (AR/VR only).
    */
   setModulePanels(content: XrModulePanelsContent, onCommand: (command: string) => void): void {
-    this.showPanels(
-      "module",
-      () => createXrModulePanels(content, onCommand),
-      (panels) => (panels as XrModulePanels).update(content),
-    );
-  }
-
-  private showPanels(
-    kind: "lesson" | "module",
-    create: () => XrLessonPanels | XrModulePanels,
-    update: (panels: XrLessonPanels | XrModulePanels) => void,
-  ): void {
-    if (this.lessonPanels && this.panelKind === kind) {
-      update(this.lessonPanels);
+    if (this.lessonPanels) {
+      this.lessonPanels.update(content);
       return;
     }
-    if (this.lessonPanels) this.hideLessonPanels();
     if (!this.world) {
-      this.pendingLesson = { kind, create };
+      this.pendingLesson = () => createXrModulePanels(content, onCommand);
       return;
     }
-    this.mountPanels(this.world, kind, create());
+    this.mountPanels(this.world, createXrModulePanels(content, onCommand));
   }
 
   /** Remove the lesson panels. */
@@ -448,7 +422,6 @@ export class SceneRenderer {
     this.lessonEntities = [];
     this.lessonPanels?.dispose();
     this.lessonPanels = null;
-    this.panelKind = null;
     this.pendingLesson = null;
   }
 
@@ -581,12 +554,11 @@ export class SceneRenderer {
     this.onResize();
     const pending = this.pendingLesson;
     this.pendingLesson = null;
-    if (pending) this.mountPanels(world, pending.kind, pending.create());
+    if (pending) this.mountPanels(world, pending());
   }
 
-  private mountPanels(world: World, kind: "lesson" | "module", panels: XrLessonPanels | XrModulePanels): void {
+  private mountPanels(world: World, panels: XrModulePanels): void {
     this.lessonPanels = panels;
-    this.panelKind = kind;
     this.lessonEntities = panels.roots.map((root, index) => {
       const holder = [panels.lesson, panels.build, panels.dock][index]!;
       holder.add(new UIKitDocument(root));

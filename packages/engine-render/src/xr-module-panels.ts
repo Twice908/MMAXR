@@ -30,6 +30,24 @@ export interface XrPanelCard {
   readonly rows: readonly { readonly label: string; readonly value: string }[];
 }
 
+/** A stepper row: a colour swatch, a label and count, and minus / plus buttons. */
+export interface XrPanelStepper {
+  readonly label: string;
+  readonly count: number;
+  /** CSS colour of the swatch. */
+  readonly color: string;
+  readonly addCommand: string;
+  readonly removeCommand: string;
+}
+
+/** A dark summary card with a large symbol, a name and label/value rows. */
+export interface XrPanelInfo {
+  readonly eyebrow: string;
+  readonly symbol: string;
+  readonly name: string;
+  readonly rows: readonly { readonly label: string; readonly value: string }[];
+}
+
 /** Everything the module panels show. Plain data; commands go back to the module. */
 export interface XrModulePanelsContent {
   readonly lesson: {
@@ -48,9 +66,15 @@ export interface XrModulePanelsContent {
     /** The next step or the latest result, in plain words. */
     readonly status: string;
     readonly statusTone: "info" | "error" | "success";
+    /** Optional stepper card (for example particle counts), shown first. */
+    readonly steppers?: { readonly title: string; readonly rows: readonly XrPanelStepper[] };
+    /** Optional dark summary card (for example the element), shown after the steppers. */
+    readonly info?: XrPanelInfo;
     readonly cards: readonly XrPanelCard[];
     readonly actions: readonly XrPanelAction[];
   };
+  /** Extra dock buttons shown before Recenter (for example Reset atom). */
+  readonly dockActions?: readonly XrCommandButton[];
   readonly exitLabel: string;
   /** Narration caption and controls in the dock; omit for a module without narration. */
   readonly narration?: {
@@ -87,6 +111,9 @@ const COLOR = {
   negativeBg: "#fbe7e5",
   hover: "#eaf1fd",
   infoBg: "#eaf1fd",
+  infoCard: "#14243d",
+  infoInk: "#ffffff",
+  infoMuted: "#9fb3d1",
 } as const;
 
 function text(value: string, fontSize: number, extra: Record<string, unknown> = {}): Text {
@@ -208,12 +235,61 @@ export function createXrModulePanels(
   const actionsHolder = new Container({ flexDirection: "column", gap: GAP } as never);
   sideRoot.add(sideTitle, status, cardsHolder, actionsHolder);
   let cardViews: { heading: Text; rows: { label: Text; value: Text }[] }[] = [];
+  let stepperViews: { eyebrow: Text; rows: { label: Text; count: Text }[] } | null = null;
+  let infoView: { eyebrow: Text; symbol: Text; name: Text; rows: { label: Text; value: Text }[] } | null = null;
   let actionViews: { button: Button; label: Text }[] = [];
   let shape = "";
 
   const rebuildSide = (side: XrModulePanelsContent["side"]): void => {
     for (const child of [...cardsHolder.children, ...actionsHolder.children]) {
       (child as Container).removeFromParent();
+    }
+    stepperViews = null;
+    if (side.steppers) {
+      const view = card();
+      const eyebrow = eyebrowText("");
+      view.add(eyebrow);
+      const rows = side.steppers.rows.map((row, index) => {
+        const swatch = new Container({ width: 28, height: 28, borderRadius: 14, backgroundColor: row.color } as never);
+        const label = text("", 20, { color: COLOR.muted });
+        const count = text("", 34, { fontWeight: "bold" });
+        const labels = new Container({ flexDirection: "column", flexGrow: 1 } as never);
+        labels.add(label, count);
+        const minus = makeButton("-", "secondary", () => {
+          const current = content.side.steppers?.rows[index];
+          if (current) onCommand(current.removeCommand);
+        }, { width: TARGET, paddingX: 0 });
+        const plus = makeButton("+", "primary", () => {
+          const current = content.side.steppers?.rows[index];
+          if (current) onCommand(current.addCommand);
+        }, { width: TARGET, paddingX: 0 });
+        const container = new Container({ flexDirection: "row", alignItems: "center", gap: 16 } as never);
+        container.add(swatch, labels, minus.button, plus.button);
+        view.add(container);
+        return { label, count };
+      });
+      cardsHolder.add(view);
+      stepperViews = { eyebrow, rows };
+    }
+    infoView = null;
+    if (side.info) {
+      const view = new Container({ flexDirection: "column", gap: 10, padding: 22, borderRadius: 20, backgroundColor: COLOR.infoCard } as never);
+      const eyebrow = eyebrowText("");
+      const symbol = text("", 56, { fontWeight: "bold", color: COLOR.infoInk });
+      const name = text("", 24, { fontWeight: "semi-bold", color: COLOR.infoInk });
+      const header = new Container({ flexDirection: "row", alignItems: "center", gap: 18 } as never);
+      header.add(symbol, name);
+      view.add(eyebrow, header);
+      const rows = side.info.rows.map(() => {
+        const label = text("", 18, { color: COLOR.infoMuted, flexGrow: 1 });
+        const value = text("", 20, { fontWeight: "semi-bold", color: COLOR.infoInk });
+        const row = new Container({ flexDirection: "row", justifyContent: "space-between", gap: 12 } as never);
+        row.add(label, value);
+        view.add(row);
+        return { label, value };
+      });
+      cardsHolder.add(view);
+      infoView = { eyebrow, symbol, name, rows };
     }
     cardViews = side.cards.map((info) => {
       const view = card();
@@ -254,11 +330,15 @@ export function createXrModulePanels(
   });
   const narrationGroup = new Container({ flexDirection: "row", gap: GAP } as never);
   narrationGroup.add(sound.button, captions.button, replay.button);
+  const dockExtras = (initial.dockActions ?? []).map((action, index) => makeButton(action.label, "secondary", () => {
+    const current = content.dockActions?.[index];
+    if (current) onCommand(current.command);
+  }));
   const recenter = makeButton("Recenter", "secondary", () => onCommand(XR_COMMAND.recenter));
   // Exit stays visible and visually separate (comfort rule: a clear way out).
   const exit = makeButton(initial.exitLabel, "negative", () => onCommand(XR_COMMAND.exit));
   const viewGroup = new Container({ flexDirection: "row", gap: GAP } as never);
-  viewGroup.add(recenter.button, exit.button);
+  viewGroup.add(...dockExtras.map((extra) => extra.button), recenter.button, exit.button);
   const dockRow = new Container({ flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 20 } as never);
   dockRow.add(narrationGroup, viewGroup);
   dockRoot.add(caption, dockRow);
@@ -305,12 +385,32 @@ export function createXrModulePanels(
     }
 
     const side = next.side;
-    const nextShape = `${side.cards.map((info) => info.rows.length).join(",")}|${side.actions.length}`;
+    const nextShape = `${side.steppers?.rows.length ?? -1}|${side.info?.rows.length ?? -1}|${side.cards.map((info) => info.rows.length).join(",")}|${side.actions.length}`;
     if (nextShape !== shape) {
       shape = nextShape;
       rebuildSide(side);
     }
     sideTitle.setProperties({ text: side.title } as never);
+    show(sideTitle, side.title.length > 0);
+    if (side.steppers && stepperViews) {
+      stepperViews.eyebrow.setProperties({ text: side.steppers.title } as never);
+      side.steppers.rows.forEach((row, index) => {
+        stepperViews?.rows[index]?.label.setProperties({ text: row.label } as never);
+        stepperViews?.rows[index]?.count.setProperties({ text: String(row.count) } as never);
+      });
+    }
+    if (side.info && infoView) {
+      infoView.eyebrow.setProperties({ text: side.info.eyebrow } as never);
+      infoView.symbol.setProperties({ text: side.info.symbol || "\u2013" } as never);
+      infoView.name.setProperties({ text: side.info.name } as never);
+      side.info.rows.forEach((row, index) => {
+        infoView?.rows[index]?.label.setProperties({ text: row.label } as never);
+        infoView?.rows[index]?.value.setProperties({ text: row.value } as never);
+      });
+    }
+    (next.dockActions ?? []).forEach((action, index) => {
+      dockExtras[index]?.label.setProperties({ text: action.label } as never);
+    });
     statusText.setProperties({
       text: side.status,
       color: side.statusTone === "error" ? COLOR.negative : side.statusTone === "success" ? COLOR.positive : COLOR.ink,

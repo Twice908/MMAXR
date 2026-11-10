@@ -21,11 +21,12 @@ import {
   type WorldOptions,
 } from "@mma/engine-render";
 import {
+  arHudStatusText,
+  createArHud,
   createLessonPanel,
   createNarrationBar,
-  createXrHud,
   el,
-  mountXrSession,
+  mountArControls,
   narrationButtonLabels,
 } from "@mma/engine-ui";
 import "@mma/engine-ui/lesson-ui.css";
@@ -222,7 +223,6 @@ export function mountIonicBonding(root: HTMLElement, options: IonicBondingOption
   let xrActive = false;
   let xrPanels = false;
   let xrExitLabel = "Exit AR";
-  let shownQuestion = "";
   let narrationView: NarrationViewState | null = null;
   const labels = new Map<string, HTMLElement>();
   const handleElements = new Map<string, HTMLElement>();
@@ -273,7 +273,7 @@ export function mountIonicBonding(root: HTMLElement, options: IonicBondingOption
       return;
     }
     if (command === XR_COMMAND.exit) {
-      void xrSession.exit();
+      page.querySelector<HTMLButtonElement>("[data-ar-action='exit']")?.click();
       return;
     }
     if (command === XR_COMMAND.recenter) {
@@ -432,7 +432,8 @@ export function mountIonicBonding(root: HTMLElement, options: IonicBondingOption
     toggleCaptions: () => narrationPlayer.toggleCaptions(),
     setSpeed: (speed) => narrationPlayer.setSpeed(speed),
   });
-  slot<HTMLElement>("lesson").append(narrationBar.controls);
+  slot<HTMLElement>("lesson").append(narrationBar.element);
+  // On the web the caption sits under the model; in AR the HUD keeps it on screen.
   slot<HTMLElement>("caption").append(narrationBar.caption);
   const narrationPlayer = new NarrationPlayer({
     cues: manifest.narration?.cues ?? [],
@@ -450,47 +451,58 @@ export function mountIonicBonding(root: HTMLElement, options: IonicBondingOption
   });
 
   // --- AR and VR --------------------------------------------------------------
-  const hud = createXrHud({
+  const questionElement = lessonPanel.element.querySelector<HTMLElement>(".mma-question");
+  const hud = createArHud({
     host: page,
     tabs: [
       { id: "mission", label: "Mission", icon: MISSION_ICON, sections: [lessonPanel.element] },
       { id: "atoms", label: "Atoms", icon: ATOMS_ICON, sections: [slot<HTMLElement>("bench")] },
-      { id: "sound", label: "Sound", icon: SOUND_ICON, sections: [narrationBar.controls] },
+      { id: "sound", label: "Sound", icon: SOUND_ICON, sections: [narrationBar.element] },
     ],
-    live: [narrationBar.caption, instruction, statusLine],
+    caption: narrationBar.caption,
+    live: [instruction, statusLine],
     tip: "Drag the glowing electron onto chlorine. Pinch to resize.",
+    status: () => {
+      const view = buildLessonView(store.getState(), manifest.missions, assessmentItems, lastHintText, LESSON_COPY);
+      return store.getState().mode === "free-play" ? "Free play" : arHudStatusText(view.eyebrow, view.title, false);
+    },
+    statusSources: [lessonPanel.element],
+    missionSignals: [lessonPanel.element],
+    ...(questionElement ? { question: questionElement } : {}),
     onResetView: () => renderer.resetArView(),
   });
-  const xrSession = mountXrSession({
+  const disposeXrSession = mountArControls({
     root: page,
-    entrySlot: slot<HTMLElement>("xr-entry"),
-    exitSlot: hud.exitSlot,
+    entryHost: slot<HTMLElement>("xr-entry"),
+    dialogHost: page,
     subject: "the model",
+    hud,
     renderer,
     telemetryContext,
     clock: () => new Date().toISOString(),
     idGenerator,
-    onComfortBreak: () => {
+    getActiveMissionId: () => store.getState().activeMissionId,
+    publishComfortBreakShown: (missionId) => {
       const event = telemetryEventSchema.parse({
         ...telemetryContext,
         eventId: idGenerator(),
         ts: new Date().toISOString(),
         type: "comfort_break_shown",
-        payload: { missionId: store.getState().activeMissionId },
+        payload: { missionId },
         device: { ...telemetryContext.device, mode: xrExitLabel === "Exit VR" ? "vr" : "ar" },
       });
       store.events.emit("comfort_break_shown", event as LearningEventMap["comfort_break_shown"]);
     },
-    onActiveChange: (active, info) => {
+    recordLocalEvent: () => undefined,
+    onSpatialActiveChange: (active, info) => {
       xrActive = active;
-      xrPanels = active && !info.overlay;
+      // Headsets and the emulator (no DOM overlay) use in-scene panels; phones use the HUD.
+      xrPanels = active && info.overlayGranted !== true;
       page.classList.toggle("ionic--xr-panels", xrPanels);
       xrExitLabel = info.mode === "immersive-vr" ? "Exit VR" : "Exit AR";
       // Phone AR keeps touch on the page overlay; headsets and the emulator use IWSDK input.
-      input.setEnabled(!active || info.overlay);
+      input.setEnabled(!active || info.overlayGranted === true);
       if (carried) drop();
-      if (active && info.overlay) hud.mount();
-      else hud.unmount();
       if (!xrPanels) renderer.hideLessonPanels();
       render();
     },
@@ -529,11 +541,6 @@ export function mountIonicBonding(root: HTMLElement, options: IonicBondingOption
       : []);
 
     const lessonView = buildLessonView(state, manifest.missions, assessmentItems, lastHintText, LESSON_COPY);
-    hud.setStatus(state.mode === "free-play" ? "Free play" : [lessonView.eyebrow, lessonView.title].filter(Boolean).join(" \u00b7 "));
-    // A new question needs an answer before the lesson goes on, so open the Mission sheet once.
-    const questionKey = lessonView.assessment ? `${lessonView.assessment.step}:${lessonView.assessment.prompt}` : "";
-    if (questionKey && questionKey !== shownQuestion) hud.open("mission");
-    shownQuestion = questionKey;
     if (xrPanels) refreshPanels(lessonView, bench);
   }
 
@@ -692,10 +699,12 @@ export function mountIonicBonding(root: HTMLElement, options: IonicBondingOption
     page.removeEventListener("click", onClick);
     page.removeEventListener("pointerdown", onPointerDown, { capture: true });
     exitButton.removeEventListener("click", onExit);
-    hud.dispose();
     narrationPlayer.dispose();
-    narrationBar.dispose();
-    void xrSession.dispose().finally(() => renderer.dispose());
+    void disposeXrSession().finally(() => {
+      hud.dispose();
+      narrationBar.dispose();
+      renderer.dispose();
+    });
     root.replaceChildren();
   };
 }

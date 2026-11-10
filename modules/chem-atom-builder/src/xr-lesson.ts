@@ -7,7 +7,7 @@ import {
   elementByAtomicNumber,
   hasCompleteOuterShell,
 } from "@mma/kit-chemistry";
-import type { XrLessonContent } from "@mma/engine-render";
+import type { XrLessonContent, XrModulePanelsContent } from "@mma/engine-render";
 import type { AtomBuilderLearningState } from "./learning.js";
 
 /** Inputs that are not part of learning state but appear in the immersive UI. */
@@ -105,4 +105,32 @@ function particle(
 
 function formatCharge(charge: number): string {
   return charge > 0 ? `+${charge}` : String(charge);
+}
+
+/**
+ * Show the Atom Builder content on the shared headset panels with its original layout:
+ * lesson card on the left; particle steppers and the dark element card on the right;
+ * caption, narration, Reset atom, Recenter and Exit in the dock.
+ */
+export function toModulePanelsContent(content: XrLessonContent): XrModulePanelsContent {
+  return {
+    lesson: content,
+    side: {
+      title: "",
+      status: "",
+      statusTone: "info",
+      steppers: { title: "SUBATOMIC PARTICLES", rows: content.particles },
+      info: { eyebrow: "ELEMENT", symbol: content.element.symbol, name: content.element.name, rows: content.element.rows },
+      cards: [],
+      actions: [],
+    },
+    dockActions: [content.resetAtom],
+    exitLabel: content.exitLabel,
+    narration: {
+      caption: content.caption,
+      sound: content.narration.sound,
+      captions: content.narration.captions,
+      replay: content.narration.replay,
+    },
+  };
 }
