@@ -19,3 +19,10 @@ export {
   type XrSessionOptions,
   type XrSessionRenderer,
 } from "./xr-session.js";
+export {
+  createNarrationBar,
+  narrationButtonLabels,
+  narrationStatusText,
+  type NarrationBar,
+  type NarrationBarHandlers,
+} from "./narration-bar.js";

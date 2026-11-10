@@ -11,9 +11,9 @@ The development-only generator runs Piper in the browser. The Node CLI remains t
    pnpm --filter @mma/web dev
    ```
 
-3. Open `http://localhost:5173/?narration-generator` and select **Generate all 10 cues**. Generation does not start until that button is pressed. The browser checks the selected voice catalog, downloads missing model/config files, and reports model download progress.
+3. Open `http://localhost:5173/?narration-generator` (Atom Builder) or `?narration-generator=<module id>` (for example `chem.ionic-bonding`), or pick the module in the **Module** list, then select **Generate all N cues**. The generator reads every module's `module.json` cues and scripts, so new modules need no generator changes. Scripts still pending teacher review are refused unless **Include scripts still pending teacher review** is ticked; those clips are labelled as drafts. Generation does not start until that button is pressed. The browser checks the selected voice catalog, downloads missing model/config files, and reports model download progress.
 4. Piper model files and generated MP3 cache entries are stored in the browser's origin-private file system (OPFS). With the default voice, the Jenny ONNX model already in `audio/` is served locally; its JSON config and the Piper catalog are fetched from the official Piper voice repository. The first run needs network access. No audio is uploaded.
-5. Download each cue's MP3 and VTT from the result list. Put them in `modules/chem-atom-builder/narration/en/generated/`, replacing the matching caption files, and commit the MP3/VTT assets. Keep the existing `.wav.gz` files as the silent playback fallback.
+5. Download each cue's MP3 and VTT from the result list. Put them in the folder the generator shows (`modules/<module>/narration/en/generated/`), replacing the matching caption files, and commit the MP3/VTT assets. Keep the existing `.wav.gz` files as the silent playback fallback.
 
 MP3 output is mono at 64 kbps, and generation stops if the lesson would exceed 5 MiB. The browser decodes both Piper's WAV and the encoded MP3 before offering downloads. Each must be non-silent (peak above `0.02`, RMS above `0.005`) and last `0.2` to `0.8` seconds per spoken word. Failed checks show an alert and set `data-exit-status="1"`; no failed clip is offered for download. Successful generation sets it to `0`.
 

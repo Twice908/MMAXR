@@ -1,7 +1,12 @@
 import { Container, Text } from "@pmndrs/uikit";
 import { Button, Panel, ProgressBar } from "@pmndrs/uikit-horizon";
 import * as THREE from "three";
-import { XR_COMMAND, type XrAssessmentContent, type XrAssessmentOption } from "./xr-lesson-content.js";
+import {
+  XR_COMMAND,
+  type XrAssessmentContent,
+  type XrAssessmentOption,
+  type XrCommandButton,
+} from "./xr-lesson-content.js";
 
 /**
  * Subject-neutral in-scene lesson UI for headsets and the desktop emulator, built with
@@ -47,6 +52,14 @@ export interface XrModulePanelsContent {
     readonly actions: readonly XrPanelAction[];
   };
   readonly exitLabel: string;
+  /** Narration caption and controls in the dock; omit for a module without narration. */
+  readonly narration?: {
+    /** Current caption, or an empty string. */
+    readonly caption: string;
+    readonly sound: XrCommandButton;
+    readonly captions: XrCommandButton;
+    readonly replay: XrCommandButton;
+  };
 }
 
 /** The three panel groups and how to update or dispose them. */
@@ -228,13 +241,27 @@ export function createXrModulePanels(
   };
 
   // --- Dock (below the model) -------------------------------------------------
-  const dockRoot = backplate(420, { alignItems: "center", padding: 18, gap: GAP, borderRadius: 36 });
+  const dockRoot = backplate(initial.narration ? 640 : 420, { alignItems: "center", padding: 18, gap: GAP, borderRadius: 36 });
+  const caption = text("", 18, { color: COLOR.muted, textAlign: "center", lineHeight: "130%", width: "100%" });
+  const sound = makeButton("Sound", "secondary", () => {
+    if (content.narration) onCommand(content.narration.sound.command);
+  });
+  const captions = makeButton("Captions", "secondary", () => {
+    if (content.narration) onCommand(content.narration.captions.command);
+  });
+  const replay = makeButton("Replay", "tertiary", () => {
+    if (content.narration) onCommand(content.narration.replay.command);
+  });
+  const narrationGroup = new Container({ flexDirection: "row", gap: GAP } as never);
+  narrationGroup.add(sound.button, captions.button, replay.button);
   const recenter = makeButton("Recenter", "secondary", () => onCommand(XR_COMMAND.recenter));
   // Exit stays visible and visually separate (comfort rule: a clear way out).
   const exit = makeButton(initial.exitLabel, "negative", () => onCommand(XR_COMMAND.exit));
-  const dockRow = new Container({ flexDirection: "row", gap: 20 } as never);
-  dockRow.add(recenter.button, exit.button);
-  dockRoot.add(dockRow);
+  const viewGroup = new Container({ flexDirection: "row", gap: GAP } as never);
+  viewGroup.add(recenter.button, exit.button);
+  const dockRow = new Container({ flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 20 } as never);
+  dockRow.add(narrationGroup, viewGroup);
+  dockRoot.add(caption, dockRow);
 
   const setOption = (target: (typeof options)[number], option: XrAssessmentOption | undefined): void => {
     show(target.row, option !== undefined);
@@ -308,6 +335,15 @@ export function createXrModulePanels(
       view.button.setProperties({ disabled: !action.enabled } as never);
     });
     exit.label.setProperties({ text: next.exitLabel } as never);
+    const narration = next.narration;
+    show(narrationGroup, narration !== undefined);
+    caption.setProperties({ text: narration?.caption ?? "" } as never);
+    show(caption, (narration?.caption ?? "").length > 0);
+    if (narration) {
+      sound.label.setProperties({ text: narration.sound.label } as never);
+      captions.label.setProperties({ text: narration.captions.label } as never);
+      replay.label.setProperties({ text: narration.replay.label } as never);
+    }
   };
   update(initial);
 

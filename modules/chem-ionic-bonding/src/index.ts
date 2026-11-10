@@ -20,10 +20,23 @@ import {
   type ScreenZoomDistances,
   type WorldOptions,
 } from "@mma/engine-render";
-import { createLessonPanel, createXrHud, el, mountXrSession } from "@mma/engine-ui";
+import {
+  createLessonPanel,
+  createNarrationBar,
+  createXrHud,
+  el,
+  mountXrSession,
+  narrationButtonLabels,
+} from "@mma/engine-ui";
 import "@mma/engine-ui/lesson-ui.css";
 import "@mma/engine-ui/xr-hud.css";
 import { telemetryEventSchema } from "@mma/schema";
+import {
+  NarrationPlayer,
+  createNarrationAssetLoader,
+  publishNarrationTelemetry,
+  type NarrationViewState,
+} from "@mma/engine-voice";
 import {
   IONIC_BONDING_ACTION,
   ionicBondingCheckState,
@@ -58,6 +71,12 @@ const IONIC_ZOOM: ScreenZoomDistances = { minDistance: 12, maxDistance: 40, defa
 const XR_CONTENT_SCALE = 0.025;
 /** Lift the model and panels so the model sits just above eye level in AR and VR. */
 const XR_LIFT = 0.15;
+const SOUND_ICON = '<path d="M4 10v4h4l5 4V6L8 10z"/><path d="M16.5 9a4 4 0 0 1 0 6M19 6.5a7.5 7.5 0 0 1 0 11"/>';
+/** Narration commands from the headset panel dock. */
+const NARRATION_COMMAND = { sound: "narration:sound", captions: "narration:captions", replay: "narration:replay" } as const;
+/** Generated narration (MP3 from the shared Piper generator) and captions, bundled by Vite. */
+const narrationAudioUrls = import.meta.glob<string>("../narration/en/generated/*.mp3", { eager: true, import: "default" });
+const narrationCaptionFiles = import.meta.glob<string>("../narration/en/generated/*.vtt", { eager: true, query: "?raw", import: "default" });
 const MISSION_ICON = '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="0.6"/>';
 const ATOMS_ICON = '<circle cx="8" cy="12" r="4"/><circle cx="16.5" cy="12" r="5"/><path d="M12 12h0.5"/>';
 /** `data-particle` prefix of the grab rings; the input adapter reports it as `tray:give:<atom>:<index>`. */
@@ -115,6 +134,7 @@ export function mountIonicBonding(root: HTMLElement, options: IonicBondingOption
         </div>
         <p class="ionic-tip">Drag an empty part of the model to turn it. Scroll or pinch to zoom.</p>
         <p class="ionic-status" data-slot="status" role="status" aria-live="polite"></p>
+        <div class="ionic-caption" data-slot="caption"></div>
         <div class="ionic-moves" data-slot="moves" aria-label="Move electrons with the keyboard"></div>
       </section>
       <section class="ionic-bench mma-card" data-slot="bench" aria-labelledby="ionic-bench-title">
@@ -203,6 +223,7 @@ export function mountIonicBonding(root: HTMLElement, options: IonicBondingOption
   let xrPanels = false;
   let xrExitLabel = "Exit AR";
   let shownQuestion = "";
+  let narrationView: NarrationViewState | null = null;
   const labels = new Map<string, HTMLElement>();
   const handleElements = new Map<string, HTMLElement>();
 
@@ -257,6 +278,19 @@ export function mountIonicBonding(root: HTMLElement, options: IonicBondingOption
     }
     if (command === XR_COMMAND.recenter) {
       renderer.recenter();
+      return;
+    }
+    if (command === NARRATION_COMMAND.sound) {
+      if (!narrationView?.audioEnabled) void narrationPlayer.enableSound();
+      else narrationPlayer.toggleMuted();
+      return;
+    }
+    if (command === NARRATION_COMMAND.captions) {
+      narrationPlayer.toggleCaptions();
+      return;
+    }
+    if (command === NARRATION_COMMAND.replay) {
+      narrationPlayer.replayLastCue();
       return;
     }
     if (command === "view:reset") {
@@ -390,14 +424,40 @@ export function mountIonicBonding(root: HTMLElement, options: IonicBondingOption
     onDragEnd: () => ghost.classList.remove("is-visible"),
   });
 
+  // --- Narration (shared player, loader and bar) ---------------------------------
+  const narrationBar = createNarrationBar({
+    enableSound: () => void narrationPlayer.enableSound(),
+    toggleMuted: () => narrationPlayer.toggleMuted(),
+    replay: () => narrationPlayer.replayLastCue(),
+    toggleCaptions: () => narrationPlayer.toggleCaptions(),
+    setSpeed: (speed) => narrationPlayer.setSpeed(speed),
+  });
+  slot<HTMLElement>("lesson").append(narrationBar.controls);
+  slot<HTMLElement>("caption").append(narrationBar.caption);
+  const narrationPlayer = new NarrationPlayer({
+    cues: manifest.narration?.cues ?? [],
+    events: store.events,
+    moduleId: manifest.id,
+    activityTarget: page,
+    ...createNarrationAssetLoader({ audioUrls: narrationAudioUrls, captions: narrationCaptionFiles }),
+    onViewChange: (view) => {
+      narrationView = view;
+      narrationBar.update(view);
+      if (xrPanels) refreshPanels();
+    },
+    onTelemetry: (draft) =>
+      publishNarrationTelemetry(draft, store.events, telemetryContext, () => new Date().toISOString(), idGenerator),
+  });
+
   // --- AR and VR --------------------------------------------------------------
   const hud = createXrHud({
     host: page,
     tabs: [
       { id: "mission", label: "Mission", icon: MISSION_ICON, sections: [lessonPanel.element] },
       { id: "atoms", label: "Atoms", icon: ATOMS_ICON, sections: [slot<HTMLElement>("bench")] },
+      { id: "sound", label: "Sound", icon: SOUND_ICON, sections: [narrationBar.controls] },
     ],
-    live: [instruction, statusLine],
+    live: [narrationBar.caption, instruction, statusLine],
     tip: "Drag the glowing electron onto chlorine. Pinch to resize.",
     onResetView: () => renderer.resetArView(),
   });
@@ -474,9 +534,27 @@ export function mountIonicBonding(root: HTMLElement, options: IonicBondingOption
     const questionKey = lessonView.assessment ? `${lessonView.assessment.step}:${lessonView.assessment.prompt}` : "";
     if (questionKey && questionKey !== shownQuestion) hud.open("mission");
     shownQuestion = questionKey;
-    if (xrPanels) {
-      renderer.setModulePanels(buildXrPanelsContent(lessonView, bench, xrExitLabel), runCommand);
-    }
+    if (xrPanels) refreshPanels(lessonView, bench);
+  }
+
+  /** Update the headset / emulator panels, including narration controls and caption. */
+  function refreshPanels(
+    lessonView = buildLessonView(store.getState(), manifest.missions, assessmentItems, lastHintText, LESSON_COPY),
+    bench = buildBenchView(store.getState().bonding, selectedGiver, compound!.name),
+  ): void {
+    const labels = narrationButtonLabels(narrationView ?? {
+      audioEnabled: false,
+      settings: { muted: false, speed: 1, captionsEnabled: true, soundEnabled: false },
+    });
+    renderer.setModulePanels({
+      ...buildXrPanelsContent(lessonView, bench, xrExitLabel),
+      narration: {
+        caption: narrationView?.settings.captionsEnabled ? narrationView.captionText : "",
+        sound: { label: labels.sound, command: NARRATION_COMMAND.sound },
+        captions: { label: labels.captions, command: NARRATION_COMMAND.captions },
+        replay: { label: labels.replay, command: NARRATION_COMMAND.replay },
+      },
+    }, runCommand);
   }
 
   function renderAtomCards(atoms: readonly BenchAtomView[]): void {
@@ -615,6 +693,8 @@ export function mountIonicBonding(root: HTMLElement, options: IonicBondingOption
     page.removeEventListener("pointerdown", onPointerDown, { capture: true });
     exitButton.removeEventListener("click", onExit);
     hud.dispose();
+    narrationPlayer.dispose();
+    narrationBar.dispose();
     void xrSession.dispose().finally(() => renderer.dispose());
     root.replaceChildren();
   };

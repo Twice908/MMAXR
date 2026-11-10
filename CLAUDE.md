@@ -18,7 +18,8 @@ Current status (update this block as work completes):
 - Done: Ionic Bonding web view (`modules/chem-ionic-bonding`, draft, NaCl): shared `engine-lesson` and `engine-ui` packages, kit compound table and bonding rules, multi-atom `MoleculeView` (docs/adr/0008-shared-lesson-packages-and-ionic-bonding.md). The liquid-glass UI skill is removed; use the Horizon UI kit and standard UX rules.
 - Done: Ionic Bonding AR: phone AR (ARCore, DOM overlay HUD, in-model electron drag) and desktop emulator / headset AR (Horizon module panels with move buttons); shared `mountXrSession`, `createXrHud` (engine-ui) and `createXrModulePanels` (engine-render). Needs Android and headset checks (docs/ar-testing.md).
 - Done: Ionic Bonding VR (same shared session and Horizon panels), in-scene Na/Na+ and Cl/Cl- labels for headsets and the emulator, and an opt-in `xrLift` so the model sits just above eye level. Owner checked AR and VR in the emulator.
-- Next: Android and headset checks for Ionic Bonding; narration audio for Ionic Bonding; review the Atom Builder and Ionic Bonding assessment items and narration scripts.
+- Done: Ionic Bonding narration (6 Piper cues, scripts pending review) in web, phone AR and headset views. Narration generator is global (any module via `?narration-generator=<id>`); narration asset loading and telemetry are shared in `engine-voice` and used by both modules; shared narration bar in `engine-ui`.
+- Next: Android and headset checks for Ionic Bonding; review the Atom Builder and Ionic Bonding assessment items and narration scripts.
 - Not started: Phase 2b live voice guide, remaining XR work (including headset VR and other 3a-4b work), portal link (Phase 4).
 
 ## 2. Phase gates (do not build ahead)

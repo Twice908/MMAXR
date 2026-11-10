@@ -1,15 +1,4 @@
 import { PiperWebTtsAdapter } from "@mma/generate-narration/piper-web-adapter";
-import manifest from "../../../modules/chem-atom-builder/module.json";
-import moduleStarted from "../../../modules/chem-atom-builder/narration/en/module-started.json";
-import carbon12Start from "../../../modules/chem-atom-builder/narration/en/build-carbon-12-start.json";
-import carbon12Complete from "../../../modules/chem-atom-builder/narration/en/build-carbon-12-complete.json";
-import sodiumStart from "../../../modules/chem-atom-builder/narration/en/make-na-plus-start.json";
-import sodiumComplete from "../../../modules/chem-atom-builder/narration/en/make-na-plus-complete.json";
-import carbon14Start from "../../../modules/chem-atom-builder/narration/en/build-carbon-14-start.json";
-import carbon14Complete from "../../../modules/chem-atom-builder/narration/en/build-carbon-14-complete.json";
-import chlorideStart from "../../../modules/chem-atom-builder/narration/en/make-cl-minus-start.json";
-import chlorideComplete from "../../../modules/chem-atom-builder/narration/en/make-cl-minus-complete.json";
-import invalidPlacement from "../../../modules/chem-atom-builder/narration/en/invalid-placement.json";
 import "./narration-generator.css";
 
 interface Script {
@@ -18,39 +7,77 @@ interface Script {
   readonly reviewStatus: "pending" | "reviewed";
 }
 
-const scripts: Readonly<Record<string, Script>> = {
-  "narration/en/module-started.json": asScript(moduleStarted),
-  "narration/en/build-carbon-12-start.json": asScript(carbon12Start),
-  "narration/en/build-carbon-12-complete.json": asScript(carbon12Complete),
-  "narration/en/make-na-plus-start.json": asScript(sodiumStart),
-  "narration/en/make-na-plus-complete.json": asScript(sodiumComplete),
-  "narration/en/build-carbon-14-start.json": asScript(carbon14Start),
-  "narration/en/build-carbon-14-complete.json": asScript(carbon14Complete),
-  "narration/en/make-cl-minus-start.json": asScript(chlorideStart),
-  "narration/en/make-cl-minus-complete.json": asScript(chlorideComplete),
-  "narration/en/invalid-placement.json": asScript(invalidPlacement),
-};
+interface Cue {
+  readonly id: string;
+  readonly trigger: string;
+  readonly script: string;
+}
 
-const cues = manifest.narration?.cues ?? [];
+/** One module that has narration cues, found from its manifest. */
+interface NarrationModule {
+  readonly id: string;
+  readonly title: string;
+  /** Folder under `modules/`, where the downloads belong. */
+  readonly folder: string;
+  readonly cues: readonly Cue[];
+  /** Scripts by their manifest path, such as `narration/en/module-started.json`. */
+  readonly scripts: Readonly<Record<string, Script>>;
+}
+
+interface RawManifest {
+  readonly id: string;
+  readonly title: Readonly<Record<string, string>>;
+  readonly narration?: { readonly cues: readonly Cue[] };
+}
+
+// Every module's manifest and narration scripts, so one tool serves all modules.
+const manifestFiles = import.meta.glob<RawManifest>("../../../modules/*/module.json", { eager: true, import: "default" });
+const scriptFiles = import.meta.glob<Script>("../../../modules/*/narration/en/*.json", { eager: true, import: "default" });
+
+/** Modules with narration, Atom Builder first (the default). */
+export const narrationModules: readonly NarrationModule[] = Object.entries(manifestFiles)
+  .flatMap(([path, manifest]): NarrationModule[] => {
+    const folder = path.split("/").at(-2) ?? "";
+    const cues = manifest.narration?.cues ?? [];
+    if (cues.length === 0) return [];
+    const scripts = Object.fromEntries(Object.entries(scriptFiles)
+      .filter(([scriptPath]) => scriptPath.startsWith(`../../../modules/${folder}/`))
+      .map(([scriptPath, script]) => [scriptPath.slice(`../../../modules/${folder}/`.length), asScript(script)]));
+    return [{ id: manifest.id, title: manifest.title.en ?? manifest.id, folder, cues, scripts }];
+  })
+  .sort((left, right) => Number(right.id === "chem.atom-builder") - Number(left.id === "chem.atom-builder") || left.id.localeCompare(right.id));
+
 const lessonAudioBudgetBytes = 5 * 1024 * 1024;
 
+/** Mount the generator. `?narration-generator=<module id>` picks the module; Atom Builder is the default. */
 export function mountNarrationGenerator(root: HTMLElement): void {
+  const requested = new URLSearchParams(window.location.search).get("narration-generator");
+  const initial = narrationModules.find((module) => module.id === requested) ?? narrationModules[0];
+  if (!initial) throw new Error("No module has narration cues.");
+  let selected: NarrationModule = initial;
   root.innerHTML = `
     <main class="narration-generator" aria-labelledby="generator-title">
       <header class="generator-header">
-        <a href="/" aria-label="Return to Atom Builder">Atom Builder</a>
+        <a href="/" aria-label="Return to the experiments">Experiments</a>
         <span>Local narration tool</span>
       </header>
       <section class="generator-content">
         <h1 id="generator-title">Generate lesson audio</h1>
+        <label class="generator-module">Module
+          <select id="generator-module">${narrationModules.map((module) => `<option value="${module.id}">${module.title}</option>`).join("")}</select>
+        </label>
         <dl class="generator-settings">
           <div><dt>Voice</dt><dd id="generator-voice"></dd></div>
           <div><dt>Format</dt><dd>MP3, mono, 64 kbps</dd></div>
           <div><dt>Voice storage</dt><dd>Browser OPFS</dd></div>
+          <div><dt>Save files to</dt><dd id="generator-folder"></dd></div>
         </dl>
-        <button id="generate-narration" type="button">Generate all 10 cues</button>
+        <label class="generator-draft" id="generator-draft-row" hidden>
+          <input type="checkbox" id="generator-draft"> Include scripts still pending teacher review (draft audio)
+        </label>
+        <button id="generate-narration" type="button"></button>
         <p id="generator-status" role="status" aria-live="polite">Ready. Generation starts only when requested.</p>
-        <progress id="generator-progress" max="10" value="0" hidden></progress>
+        <progress id="generator-progress" max="1" value="0" hidden></progress>
         <ol id="generator-results" class="generator-results"></ol>
       </section>
     </main>
@@ -62,17 +89,37 @@ export function mountNarrationGenerator(root: HTMLElement): void {
   const status = root.querySelector<HTMLElement>("#generator-status");
   const progress = root.querySelector<HTMLProgressElement>("#generator-progress");
   const results = root.querySelector<HTMLOListElement>("#generator-results");
-  if (!voiceLabel || !button || !status || !progress || !results) {
+  const moduleSelect = root.querySelector<HTMLSelectElement>("#generator-module");
+  const folder = root.querySelector<HTMLElement>("#generator-folder");
+  const draftRow = root.querySelector<HTMLElement>("#generator-draft-row");
+  const draft = root.querySelector<HTMLInputElement>("#generator-draft");
+  if (!voiceLabel || !button || !status || !progress || !results || !moduleSelect || !folder || !draftRow || !draft) {
     throw new Error("Narration generator controls could not be initialized.");
   }
   voiceLabel.textContent = voice;
+  const showModule = (module: NarrationModule): void => {
+    selected = module;
+    moduleSelect.value = module.id;
+    folder.textContent = `modules/${module.folder}/narration/en/generated/`;
+    button.textContent = `Generate all ${module.cues.length} cues`;
+    progress.max = module.cues.length;
+    const pending = module.cues.filter((cue) => module.scripts[cue.script]?.reviewStatus !== "reviewed").length;
+    draftRow.hidden = pending === 0;
+    draft.checked = false;
+    results.replaceChildren();
+  };
+  showModule(selected);
+  moduleSelect.addEventListener("change", () => {
+    const module = narrationModules.find((candidate) => candidate.id === moduleSelect.value);
+    if (module) showModule(module);
+  });
   status.dataset.exitStatus = "0";
   button.addEventListener("click", () => {
     button.disabled = true;
     status.setAttribute("role", "status");
     status.dataset.exitStatus = "1";
     progress.hidden = false;
-    void generateAll(voice, status, progress, results)
+    void generateAll(selected, draft.checked, voice, status, progress, results)
       .catch((error: unknown) => {
         status.textContent = error instanceof Error ? error.message : "Narration generation failed.";
         status.setAttribute("role", "alert");
@@ -85,13 +132,16 @@ export function mountNarrationGenerator(root: HTMLElement): void {
 }
 
 async function generateAll(
+  module: NarrationModule,
+  allowPending: boolean,
   voiceId: string,
   status: HTMLElement,
   progress: HTMLProgressElement,
   results: HTMLOListElement,
 ): Promise<void> {
+  const { cues, scripts } = module;
   const unresolved = cues.filter((cue) => scripts[cue.script]?.reviewStatus !== "reviewed");
-  if (unresolved.length > 0) {
+  if (unresolved.length > 0 && !allowPending) {
     throw new Error(`Generation stopped: ${unresolved.length} narration scripts are not reviewed.`);
   }
 
@@ -133,7 +183,15 @@ async function generateAll(
       if (output.peak === undefined || output.rms === undefined) {
         throw new Error(`Narration quality metrics are missing for cue ${cue.id}.`);
       }
-      results.append(createCueResult(cue.id, output.audioBytes, output.captionsVtt, output.durationMs, output.peak, output.rms));
+      results.append(createCueResult(
+        cue.id,
+        output.audioBytes,
+        output.captionsVtt,
+        output.durationMs,
+        output.peak,
+        output.rms,
+        script.reviewStatus === "pending",
+      ));
       progress.value = index + 1;
     }
     status.textContent = `Ready: ${cues.length} cues, ${formatBytes(totalAudioBytes)} total. Download the MP3 and VTT files below.`;
@@ -150,10 +208,11 @@ function createCueResult(
   durationMs: number,
   peak: number,
   rms: number,
+  pendingReview: boolean,
 ): HTMLLIElement {
   const item = document.createElement("li");
   const heading = document.createElement("h2");
-  heading.textContent = cueId;
+  heading.textContent = pendingReview ? `${cueId} (draft: script pending review)` : cueId;
   const details = document.createElement("p");
   details.textContent = `${(durationMs / 1_000).toFixed(1)} seconds · ${formatBytes(audioBytes.byteLength)} · peak ${peak.toFixed(3)} · RMS ${rms.toFixed(3)}`;
   const audioBlob = new Blob([Uint8Array.from(audioBytes).buffer as ArrayBuffer], { type: "audio/mpeg" });

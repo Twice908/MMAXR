@@ -14,4 +14,9 @@ export {
   configureNarrationAudioElement,
   createBrowserNarrationAudioEngine,
   type BrowserNarrationAudioEngineOptions,
-} from "./media-audio.js";
+} from "./media-audio.js";export {
+  createNarrationAssetLoader,
+  publishNarrationTelemetry,
+  type NarrationAssetLoader,
+  type NarrationAssetSources,
+} from "./assets.js";

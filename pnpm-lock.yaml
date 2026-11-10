@@ -130,6 +130,9 @@ importers:
       '@mma/engine-ui':
         specifier: workspace:*
         version: link:../../packages/engine-ui
+      '@mma/engine-voice':
+        specifier: workspace:*
+        version: link:../../packages/engine-voice
       '@mma/kit-chemistry':
         specifier: workspace:*
         version: link:../../packages/kits/chemistry
@@ -216,6 +219,9 @@ importers:
       '@mma/engine-lesson':
         specifier: workspace:*
         version: link:../engine-lesson
+      '@mma/engine-voice':
+        specifier: workspace:*
+        version: link:../engine-voice
       '@mma/engine-xr':
         specifier: workspace:*
         version: link:../engine-xr

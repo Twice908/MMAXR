@@ -30,7 +30,8 @@ import {
 } from "@mma/engine-render";
 import {
   NarrationPlayer,
-  type NarrationTelemetryDraft,
+  createNarrationAssetLoader,
+  publishNarrationTelemetry,
   type NarrationViewState,
 } from "@mma/engine-voice";
 import {
@@ -389,41 +390,12 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     events: store.events,
     moduleId: manifest.id,
     activityTarget: root,
-    loadAudio: async (assetPath) => {
-      const useAudibleTest = import.meta.env.DEV &&
-        new URLSearchParams(window.location.search).get("narrationAudio") === "audible-test";
-      const selectedAssetPath = useAudibleTest
-        ? assetPath.replace("/generated/", "/generated/audible-test/").replace(/\.mp3$/, ".wav.gz")
-        : assetPath;
-      const assetUrl = narrationAudioUrls[`../${selectedAssetPath}`];
-      if (!assetUrl) {
-        throw new Error(`Narration audio asset is missing: ${assetPath}`);
-      }
-      if (!assetUrl.startsWith("data:")) {
-        const response = await fetch(assetUrl);
-        if (!response.ok) {
-          throw new Error(`Narration audio request failed with HTTP ${response.status}: ${assetPath}`);
-        }
-        return response.arrayBuffer();
-      }
-      const encodedAudio = assetUrl.split(",", 2)[1];
-      if (!assetUrl.startsWith("data:") || !encodedAudio) {
-        throw new Error(`Narration audio is not bundled inline: ${assetPath}`);
-      }
-      const binaryAudio = atob(encodedAudio);
-      const bytes = new Uint8Array(binaryAudio.length);
-      for (let index = 0; index < binaryAudio.length; index += 1) {
-        bytes[index] = binaryAudio.charCodeAt(index);
-      }
-      return bytes.buffer;
-    },
-    loadCaptions: async (assetPath) => {
-      const captionText = narrationCaptionFiles[`../${assetPath}`];
-      if (!captionText) {
-        throw new Error(`Narration captions are missing: ${assetPath}`);
-      }
-      return captionText;
-    },
+    ...createNarrationAssetLoader({
+      audioUrls: narrationAudioUrls,
+      captions: narrationCaptionFiles,
+      audibleTest: import.meta.env.DEV &&
+        new URLSearchParams(window.location.search).get("narrationAudio") === "audible-test",
+    }),
     onViewChange: (state) => {
       renderNarrationView(root, state);
       narrationCaption = state.settings.captionsEnabled ? state.captionText : "";
@@ -870,33 +842,6 @@ function nextElectronShell(shells: readonly number[], count: number): number {
 
 function formatCharge(charge: number): string {
   return charge > 0 ? `+${charge}` : String(charge);
-}
-
-function publishNarrationTelemetry(
-  draft: NarrationTelemetryDraft,
-  events: ReturnType<typeof createStore<AtomBuilderLearningState, EngineAction>>["events"],
-  context: TelemetryContext,
-  clock: () => string,
-  idGenerator: () => string,
-): void {
-  const event = telemetryEventSchema.parse({
-    ...context,
-    eventId: idGenerator(),
-    ts: clock(),
-    type: draft.type,
-    payload: draft.payload,
-  });
-  switch (draft.type) {
-    case "narration_played":
-      events.emit("narration_played", event as LearningEventMap["narration_played"]);
-      break;
-    case "narration_skipped":
-      events.emit("narration_skipped", event as LearningEventMap["narration_skipped"]);
-      break;
-    case "voice_fallback_used":
-      events.emit("voice_fallback_used", event as LearningEventMap["voice_fallback_used"]);
-      break;
-  }
 }
 
 function renderNarrationView(root: HTMLElement, state: NarrationViewState): void {
