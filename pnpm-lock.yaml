@@ -48,6 +48,9 @@ importers:
       '@mma/chem-ionic-bonding':
         specifier: workspace:*
         version: link:../../modules/chem-ionic-bonding
+      '@mma/engine-ambience':
+        specifier: workspace:*
+        version: link:../../packages/engine-ambience
       '@mma/physics-ohms-law':
         specifier: workspace:*
         version: link:../../modules/physics-ohms-law
@@ -171,6 +174,16 @@ importers:
         version: link:../../packages/schema
 
   packages/curriculum: {}
+
+  packages/engine-ambience:
+    dependencies:
+      three:
+        specifier: npm:super-three@0.181.0
+        version: super-three@0.181.0
+    devDependencies:
+      '@types/three':
+        specifier: 0.181.0
+        version: 0.181.0
 
   packages/engine-assess:
     dependencies:

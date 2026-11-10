@@ -12,6 +12,7 @@
   "dependencies": {
     "@iwsdk/core": "1.0.1",
     "@mma/chem-atom-builder": "workspace:*",
+    "@mma/engine-ambience": "workspace:*",
     "@mma/chem-ionic-bonding": "workspace:*",
     "@mma/physics-ohms-law": "workspace:*",
     "@pmndrs/uikit": "1.0.78",

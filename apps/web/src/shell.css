@@ -13,3 +13,11 @@ body { min-height: 100dvh; }
 .app-shell { min-height: 100dvh; }
 .shell-loading, .shell-error { min-height: 100dvh; display: grid; place-items: center; padding: 24px; font-family: "Avenir Next", "Trebuchet MS", sans-serif; }
 .shell-error { color: #7c3225; }
+
+/* The cosmos sits behind the login and dashboard only. Lessons keep their own look. */
+.cosmos-layer { position: fixed; inset: 0; z-index: 0; pointer-events: none; background: #02030a; }
+.cosmos-layer[hidden] { display: none; }
+body.is-cosmic { background: #02030a; color-scheme: dark; }
+body.is-cosmic #app { position: relative; z-index: 1; }
+body.is-cosmic .shell-error { color: #ffb3bd; }
+body.is-cosmic .shell-error a { color: #c9d4ff; }

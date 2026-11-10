@@ -23,6 +23,7 @@ Current status (update this block as work completes):
 - Done: Ohm's Law stage 3: screen module `modules/physics-ohms-law` (draft; 4 missions, 8 pending questions), kit `layoutSeriesLoop`, `CircuitView` (engine-render), `createDataTable` / `createXyGraph` (engine-ui), e2e spec (docs/adr/0010-ohms-law-screen-module.md).
 - Done: Ohm's Law stage 4: 10 narration cues (scripts pending review, draft Piper audio), shared narration bar in the page.
 - Done: Ohm's Law stage 5: phone AR (HUD: Mission, Circuit, Readings, Sound) and headset / emulator AR and VR (Horizon panels); checked in the emulator only.
+- Done: Immersive shell for login and dashboard: `@mma/engine-ambience` (WebGL cosmos with nebula, star field, planets and stars anchored to DOM elements; live-synthesised soundscape; veil and shared motion). Subjects are star systems, experiments are planets; navigation is carried by colour and sound; sign-in warps, opening a lesson dives into its planet (docs/adr/0011-immersive-shell-cosmos-and-soundscape.md). Needs phone performance and headset checks.
 - Next: Android and headset checks for Ohm's Law (docs/ar-testing.md); teacher review of Ohm's Law questions, bulb curve, graph axes and concept classes; Android and headset checks for Ionic Bonding; review the Atom Builder and Ionic Bonding assessment items and narration scripts.
 - Not started: Phase 2b live voice guide, remaining XR work (including headset VR and other 3a-4b work), portal link (Phase 4).
 
@@ -104,6 +105,7 @@ Also: new logic has unit tests; public APIs have TSDoc; no leftover debug code; 
 - Chemistry rules: `packages/kits/chemistry`.
 - Narration: `packages/engine-voice`; mock asset generator: `tools/generate-narration`.
 - Shared lesson flow and lesson view model: `packages/engine-lesson`; shared screen lesson UI: `packages/engine-ui`.
+- Immersive shell (cosmos, soundscape, veil, screen motion): `packages/engine-ambience`; app palettes, moods and planet looks: `apps/web/src/stage`.
 - XR UI reference and tokens: read `docs/horizon-ui.md` before any AR/VR/MR/XR UI work.
 - Decisions: `docs/adr/`.
 - Device testing record: `docs/device-matrix.md`.
