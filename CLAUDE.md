@@ -14,6 +14,7 @@ Current status (update this block as work completes):
 - Done: Android handheld WebXR AR/VR selects the measured phone panel layout; world-space headset sessions keep the desktop/headset layout.
 - Done: Camera view removed on all devices; supported views per device are in docs/adr/0006-supported-views.md (Screen everywhere, Android ARCore AR with a tab-bar HUD, headset AR/VR, desktop AR/VR for emulator dev only; phone VR viewer hidden).
 - Done: Ported the 3D scene, XR sessions and XR input to IWSDK 1.0.1 (super-three 0.181); XR lesson UI uses the Horizon UI kit; glass panels and the custom input rig are removed (docs/adr/0005-iwsdk-runtime.md). Needs headset and Android AR checks.
+- Done: Web-view access-code login, student dashboard (Physics, Chemistry, Biology sections; settings drawer) and hash routing (`#/login`, `#/dashboard`, `#/experiment/<id>`). Temporary gate, see docs/adr/0007-temporary-access-code-gate.md. Production accepts no code until the teacher's hashes are added with `pnpm generate:access-codes`.
 - Next: Review the eight assessment items and verify generated narration on desktop and phone.
 - Not started: Phase 2b live voice guide, remaining XR work (including headset VR and other 3a-4b work), portal link (Phase 4).
 
@@ -56,6 +57,7 @@ pnpm typecheck                     # all packages
 pnpm lint                          # includes dependency-boundary rules
 pnpm test                          # Vitest
 pnpm generate:narration             # generate local mock audio and captions
+pnpm generate:access-codes <file>   # hash a plain access-code list (kept outside the repo) into access-codes.json
 pnpm --filter @mma/web dev         # IWSDK dev session: Runtime/Editor browser + Quest emulator (https://localhost:5173)
 pnpm --filter @mma/web dev:runtime # plain Vite dev server only
 pnpm --filter @mma/web dev:down    # stop the IWSDK dev session

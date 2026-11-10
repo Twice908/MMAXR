@@ -1,0 +1,33 @@
+import { manifest as atomBuilder } from "@mma/chem-atom-builder/manifest";
+import type { Experiment } from "./catalogue.js";
+
+/**
+ * Every experiment the dashboard lists. Add a module here when it ships; its title, subject,
+ * time and status come from its manifest. The module code itself loads only when it is opened.
+ */
+export const experiments: readonly Experiment[] = [
+  {
+    id: atomBuilder.id,
+    subject: atomBuilder.subject,
+    title: atomBuilder.title.en ?? Object.values(atomBuilder.title)[0] ?? atomBuilder.id,
+    estimatedMinutes: atomBuilder.estimatedMinutes,
+    releaseStatus: atomBuilder.releaseStatus,
+    load: async () => {
+      const [{ mountAtomBuilder }, { default: projectOptions }] = await Promise.all([
+        import("@mma/chem-atom-builder"),
+        import("virtual:iwsdk-project"),
+      ]);
+      return (root, context) => {
+        if (atomBuilder.modes[0] !== "screen") {
+          throw new Error("This build supports the screen mode only.");
+        }
+        // World options come from iwsdk.config.json, shared with the IWSDK editor.
+        return mountAtomBuilder(root, {
+          diagnostics: import.meta.env.DEV,
+          worldOptions: projectOptions,
+          onExit: context.onExit,
+        });
+      };
+    },
+  },
+];

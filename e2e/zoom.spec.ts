@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-const APP_URL = "https://127.0.0.1:5174";
+const APP_URL = "https://127.0.0.1:5174#/experiment/chem.atom-builder";
 
 async function setTestHooks(page: Page): Promise<void> {
   await page.addInitScript(() => {

@@ -35,15 +35,12 @@ import {
 import {
   mountArControls,
 } from "./ar-controls.js";
-import {
-  moduleManifestSchema,
-  telemetryEventSchema,
-} from "@mma/schema";
+import { telemetryEventSchema } from "@mma/schema";
 import carbon12Items from "../assessments/m1-carbon-12.json";
 import sodiumItems from "../assessments/m2-sodium-ion.json";
 import carbon14Items from "../assessments/m3-carbon-14.json";
 import chlorideItems from "../assessments/m4-chloride-ion.json";
-import rawManifest from "../module.json";
+import { manifest } from "./manifest.js";
 import {
   createAtomBuilderLearningReducer,
   createAtomBuilderLearningState,
@@ -86,7 +83,7 @@ const narrationCaptionFiles = import.meta.glob("../narration/en/generated/*.vtt"
 }) as Record<string, string>;
 
 /** Validated manifest for the screen-mode Atom Builder module. */
-export const manifest = moduleManifestSchema.parse(rawManifest);
+export { manifest };
 const assessmentItems: readonly AssessmentItem[] = [
   ...carbon12Items,
   ...sodiumItems,
@@ -99,6 +96,11 @@ export interface AtomBuilderOptions {
   readonly diagnostics?: boolean;
   /** IWSDK project options (`virtual:iwsdk-project`); renderer defaults are used when omitted. */
   readonly worldOptions?: WorldOptions;
+  /**
+   * Called when the student presses "Experiments". The host app decides where to go;
+   * when omitted the button is hidden.
+   */
+  readonly onExit?: () => void;
 }
 
 /** Mount the Class 9-10 atom builder and return its complete teardown. */
@@ -106,7 +108,10 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   root.innerHTML = `
     <section class="atom-builder" aria-label="Atom Builder" tabindex="0">
       <header class="builder-header">
-        <div class="builder-brand"><span class="brand-mark" aria-hidden="true">M</span><span>Math Maam Academy</span></div>
+        <div class="builder-brand">
+          <button class="back-to-experiments" type="button" data-app-action="exit" aria-label="Back to all experiments" hidden>&larr; Experiments</button>
+          <span class="brand-mark" aria-hidden="true">M</span><span>Math Maam Academy</span>
+        </div>
         <div class="builder-title"><span class="eyebrow" data-grade="Class 9-10" aria-label="Chemistry, Class 9-10">CHEMISTRY</span><h1>Atom Builder</h1></div>
         <button class="reset-atom" type="button" data-command="atom/reset">Reset atom</button>
       </header>
@@ -664,6 +669,12 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   });
 
   root.addEventListener("click", onCommandClick);
+  const exitButton = requiredElement<HTMLButtonElement>(root, "[data-app-action='exit']");
+  const onExitClick = (): void => options.onExit?.();
+  if (options.onExit) {
+    exitButton.hidden = false;
+    exitButton.addEventListener("click", onExitClick);
+  }
   renderState(store.getState());
   store.events.emit("module_started", {
     type: "module_started",
@@ -680,6 +691,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     root.removeEventListener("click", onEventsAction);
     root.removeEventListener("mma:local-telemetry", onLocalTelemetry);
     root.removeEventListener("click", onCommandClick);
+    exitButton.removeEventListener("click", onExitClick);
     narrationPlayer.dispose();
     void disposeArControls().finally(() => renderer.dispose());
     root.replaceChildren();

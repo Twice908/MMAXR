@@ -11,7 +11,7 @@ declare global {
 }
 
 test("keeps the WebGL canvas visible while the immersive session class is active", async ({ page }) => {
-  await page.goto("https://127.0.0.1:5174");
+  await page.goto("https://127.0.0.1:5174#/experiment/chem.atom-builder");
   const canvas = page.locator("#atom-scene canvas");
   await expect(canvas).toBeVisible();
   await page.locator("#app").evaluate((root) => root.classList.add("ar-active"));
@@ -27,7 +27,7 @@ test("mounts and emits telemetry when crypto.randomUUID is unavailable", async (
       value: undefined,
     });
   });
-  await page.goto("https://127.0.0.1:5174");
+  await page.goto("https://127.0.0.1:5174#/experiment/chem.atom-builder");
   await expect(page.getByRole("heading", { name: "Build carbon-12" })).toBeVisible();
   await page.getByRole("button", { name: "Events" }).click();
   await expect(page.locator("#dev-event-panel")).toContainText("mission_started");
@@ -35,7 +35,7 @@ test("mounts and emits telemetry when crypto.randomUUID is unavailable", async (
 });
 
 test("waits for a gesture before playing bundled mock narration", async ({ page }) => {
-  await page.goto("https://127.0.0.1:5174");
+  await page.goto("https://127.0.0.1:5174#/experiment/chem.atom-builder");
   const enableSound = page.getByRole("button", { name: "Tap to enable sound" });
   await expect(enableSound).toBeVisible();
 
@@ -50,7 +50,7 @@ test("waits for a gesture before playing bundled mock narration", async ({ page 
 test("plays bundled Piper MP3 and loads its timed captions", async ({ page }) => {
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
-  await page.goto("https://127.0.0.1:5174");
+  await page.goto("https://127.0.0.1:5174#/experiment/chem.atom-builder");
   const eventPanel = page.locator("#dev-event-panel");
   await page.getByRole("button", { name: "Events" }).click();
   await page.getByRole("button", { name: "Tap to enable sound" }).click();
@@ -68,7 +68,7 @@ test("changes narration speed mid-cue without playback errors", async ({ page })
   page.on("console", (message) => {
     if (message.type() === "error") playbackErrors.push(message.text());
   });
-  await page.goto("https://127.0.0.1:5174");
+  await page.goto("https://127.0.0.1:5174#/experiment/chem.atom-builder");
   await page.getByRole("button", { name: "Events" }).click();
   await page.getByRole("button", { name: "Tap to enable sound" }).click();
   await expect(page.locator("#dev-event-panel")).toContainText("narration_played");
@@ -84,7 +84,7 @@ test("changes narration speed mid-cue without playback errors", async ({ page })
 });
 
 test("loads the opt-in audible mock assets in development", async ({ page }) => {
-  await page.goto("https://127.0.0.1:5174/?narrationAudio=audible-test");
+  await page.goto("https://127.0.0.1:5174/?narrationAudio=audible-test#/experiment/chem.atom-builder");
   const eventPanel = page.locator("#dev-event-panel");
   await page.getByRole("button", { name: "Events" }).click();
   await page.getByRole("button", { name: "Tap to enable sound" }).click();
@@ -136,7 +136,7 @@ test("committed narration MP3s decode as plausible non-silent speech", async ({ 
     };
   }));
 
-  await page.goto("https://127.0.0.1:5174");
+  await page.goto("https://127.0.0.1:5174#/experiment/chem.atom-builder");
   const metrics = await page.evaluate(async (assets) => {
     const context = new AudioContext();
     try {
@@ -186,7 +186,7 @@ test("shows a sound-blocked hint when HTML audio play is rejected after a tap", 
       return Promise.reject(new DOMException("Playback is not allowed", "NotAllowedError"));
     };
   });
-  await page.goto("https://127.0.0.1:5174");
+  await page.goto("https://127.0.0.1:5174#/experiment/chem.atom-builder");
   await page.getByRole("button", { name: "Tap to enable sound" }).click();
   await expect(page.locator("#narration-audio-status")).toHaveText("Sound blocked. Tap to try again.");
   await expect(page.getByRole("button", { name: "Tap to enable sound" })).toBeVisible();
@@ -196,7 +196,7 @@ test("shows a sound-blocked hint when HTML audio play is rejected after a tap", 
 });
 
 test("restores narration preferences after reload but still requires a sound gesture", async ({ page }) => {
-  await page.goto("https://127.0.0.1:5174");
+  await page.goto("https://127.0.0.1:5174#/experiment/chem.atom-builder");
   await page.getByRole("button", { name: "Tap to enable sound" }).click();
   await expect(page.locator("#narration-audio-status")).toHaveText("Sound enabled");
   await page.getByRole("button", { name: "Mute", exact: true }).click();
@@ -234,7 +234,7 @@ test("opens recent events after M2 and reports no browser console errors", async
     }
   });
   page.on("pageerror", (error) => consoleErrors.push(error.message));
-  await page.goto("https://127.0.0.1:5174");
+  await page.goto("https://127.0.0.1:5174#/experiment/chem.atom-builder");
   await addParticles(page, "Add proton", 5);
   await addParticles(page, "Add neutron", 6);
   await addParticles(page, "Add electron", 5);
@@ -270,7 +270,7 @@ test("hides AR entry and explains unsupported devices", async ({ page }) => {
       value: { isSessionSupported: async () => false },
     });
   });
-  await page.goto("https://127.0.0.1:5174");
+  await page.goto("https://127.0.0.1:5174#/experiment/chem.atom-builder");
 
   await expect(page.getByRole("button", { name: "Enter AR" })).toBeHidden();
   await expect(page.getByRole("button", { name: "Enter VR" })).toBeHidden();
@@ -293,7 +293,7 @@ test("touch-first phones offer Enter AR beside Reset view and hide the phone VR 
     };
   });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("https://127.0.0.1:5174");
+  await page.goto("https://127.0.0.1:5174#/experiment/chem.atom-builder");
 
   const enterAr = page.getByRole("button", { name: "Enter AR" });
   const resetView = page.locator(".scene-heading .reset-view");
@@ -319,7 +319,7 @@ test("AR consent dialog explains camera use and has two clear actions", async ({
       },
     });
   });
-  await page.goto("https://127.0.0.1:5174");
+  await page.goto("https://127.0.0.1:5174#/experiment/chem.atom-builder");
   await page.getByRole("button", { name: "Enter AR" }).click();
 
   const dialog = page.getByRole("dialog", { name: "View the atom in AR?" });
@@ -366,7 +366,7 @@ test("AR consent dialog explains camera use and has two clear actions", async ({
 
 test("a mid-start XR exception restores the screen renderer and lesson panels", async ({ page }) => {
   await installMockXr(page);
-  await page.goto("https://127.0.0.1:5174?xrdebug=1&xrstartfail=1");
+  await page.goto("https://127.0.0.1:5174?xrdebug=1&xrstartfail=1#/experiment/chem.atom-builder");
   await page.getByRole("button", { name: "Enter AR" }).click();
   const dialog = page.getByRole("dialog", { name: "View the atom in AR?" });
   await dialog.getByRole("button", { name: "Start AR" }).click();
@@ -395,7 +395,7 @@ test("a mid-start XR exception restores the screen renderer and lesson panels", 
 
 test("a post-start XR input error ends the session and restores screen mode", async ({ page }) => {
   await installMockXr(page);
-  await page.goto("https://127.0.0.1:5174?xrdebug=1&xrinputfail=1");
+  await page.goto("https://127.0.0.1:5174?xrdebug=1&xrinputfail=1#/experiment/chem.atom-builder");
   await page.getByRole("button", { name: "Enter AR" }).click();
   const dialog = page.getByRole("dialog", { name: "View the atom in AR?" });
   await dialog.getByRole("button", { name: "Start AR" }).click();
@@ -413,7 +413,7 @@ test("a post-start XR input error ends the session and restores screen mode", as
 async function startMockAr(page: import("@playwright/test").Page, viewport: { width: number; height: number }): Promise<void> {
   await installMockXr(page);
   await page.setViewportSize(viewport);
-  await page.goto("https://127.0.0.1:5174");
+  await page.goto("https://127.0.0.1:5174#/experiment/chem.atom-builder");
   await page.getByRole("button", { name: "Enter AR" }).click();
   await page.getByRole("dialog", { name: "View the atom in AR?" })
     .getByRole("button", { name: "Start AR" }).click();
@@ -517,7 +517,7 @@ test("phone AR HUD keeps the sheet beside the atom in landscape", async ({ page 
 test("mocked AR shows one local comfort break reminder after ten minutes", async ({ page }) => {
   await page.clock.install();
   await installMockXr(page);
-  await page.goto("https://127.0.0.1:5174");
+  await page.goto("https://127.0.0.1:5174#/experiment/chem.atom-builder");
   await page.getByRole("button", { name: "Enter AR" }).click();
   await page.getByRole("dialog", { name: "View the atom in AR?" })
     .getByRole("button", { name: "Start AR" }).click();
@@ -554,7 +554,7 @@ test("explains camera use before permission and returns cleanly after denial", a
       },
     });
   });
-  await page.goto("https://127.0.0.1:5174");
+  await page.goto("https://127.0.0.1:5174#/experiment/chem.atom-builder");
 
   const enterAr = page.getByRole("button", { name: "Enter AR" });
   await expect(enterAr).toBeVisible();

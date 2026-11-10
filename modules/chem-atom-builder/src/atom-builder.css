@@ -46,6 +46,9 @@
 }
 
 .builder-brand { gap: 10px; font-size: 13px; font-weight: 700; }
+.back-to-experiments { min-height: 36px; margin-right: 6px; white-space: nowrap; padding: 0 12px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: #fff; font: inherit; font-size: 12px; cursor: pointer; }
+.back-to-experiments:hover { border-color: var(--teal); }
+.back-to-experiments[hidden] { display: none; }
 .brand-mark { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; color: white; background: var(--teal); font-family: Georgia, serif; font-size: 18px; }
 .builder-title { flex-direction: column; gap: 2px; }
 .eyebrow, .rail-heading, .scene-heading, .inspector-foot { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; }
