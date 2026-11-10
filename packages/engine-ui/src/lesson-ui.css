@@ -115,3 +115,28 @@
 @media (prefers-reduced-motion: reduce) {
   .mma-ui *, .mma-ui *::before, .mma-ui *::after { transition: none !important; animation: none !important; }
 }
+
+/* Narration */
+.mma-select {
+  min-height: var(--mma-target);
+  margin-left: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--mma-line);
+  border-radius: 10px;
+  color: var(--mma-ink);
+  background: var(--mma-panel);
+  font: inherit;
+}
+.mma-narration { display: grid; gap: 6px; }
+.mma-narration__controls { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.mma-narration__speed { display: inline-flex; align-items: center; font-size: 14px; font-weight: 700; }
+.mma-narration__status { color: var(--mma-muted); font-size: 14px; }
+.mma-narration__caption {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  color: #fff;
+  background: rgba(30, 41, 45, 0.92);
+  font-size: 16px;
+  text-align: center;
+}

@@ -107,5 +107,75 @@
       }
     }
   ],
+  "narration": {
+    "languages": [
+      "en"
+    ],
+    "cues": [
+      {
+        "id": "module-started",
+        "trigger": "module_started",
+        "script": "narration/en/module-started.json",
+        "audio": "narration/en/generated/module-started.mp3",
+        "captions": "narration/en/generated/module-started.vtt",
+        "interruptible": true
+      },
+      {
+        "id": "give-electron-start",
+        "trigger": "mission_started",
+        "missionId": "give-electron",
+        "script": "narration/en/give-electron-start.json",
+        "audio": "narration/en/generated/give-electron-start.mp3",
+        "captions": "narration/en/generated/give-electron-start.vtt",
+        "interruptible": true
+      },
+      {
+        "id": "give-electron-complete",
+        "trigger": "mission_completed",
+        "missionId": "give-electron",
+        "script": "narration/en/give-electron-complete.json",
+        "audio": "narration/en/generated/give-electron-complete.mp3",
+        "captions": "narration/en/generated/give-electron-complete.vtt",
+        "interruptible": true
+      },
+      {
+        "id": "join-ions-start",
+        "trigger": "mission_started",
+        "missionId": "join-ions",
+        "script": "narration/en/join-ions-start.json",
+        "audio": "narration/en/generated/join-ions-start.mp3",
+        "captions": "narration/en/generated/join-ions-start.vtt",
+        "interruptible": true
+      },
+      {
+        "id": "join-ions-complete",
+        "trigger": "mission_completed",
+        "missionId": "join-ions",
+        "script": "narration/en/join-ions-complete.json",
+        "audio": "narration/en/generated/join-ions-complete.mp3",
+        "captions": "narration/en/generated/join-ions-complete.vtt",
+        "interruptible": true
+      },
+      {
+        "id": "invalid-transfer",
+        "trigger": "invalid_placement",
+        "script": "narration/en/invalid-transfer.json",
+        "audio": "narration/en/generated/invalid-transfer.mp3",
+        "captions": "narration/en/generated/invalid-transfer.vtt",
+        "interruptible": true
+      }
+    ],
+    "guide": {
+      "enabled": false,
+      "allowedActions": [
+        "highlight",
+        "show_hint",
+        "focus_camera",
+        "open_panel",
+        "start_mission"
+      ],
+      "groundingDocs": []
+    }
+  },
   "rulesPlugin": "./src/index.ts"
 }

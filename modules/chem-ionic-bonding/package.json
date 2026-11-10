@@ -16,6 +16,7 @@
     "@mma/engine-lesson": "workspace:*",
     "@mma/engine-render": "workspace:*",
     "@mma/engine-ui": "workspace:*",
+    "@mma/engine-voice": "workspace:*",
     "@mma/kit-chemistry": "workspace:*",
     "@mma/schema": "workspace:*"
   }
