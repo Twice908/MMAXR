@@ -1,5 +1,7 @@
 # IWSDK evaluation for MMAXR
 
+> **Historical note (2026-11-10):** `skills/mmaxr-skill.md` (the liquid-glass XR UI skill) has been removed. The project uses the Horizon UI kit (ADR 0005) and standard UX rules, so links to that skill below no longer resolve.
+
 **Evaluation date:** 2026-10-17
 
 **Scope:** read-only comparison of the current upstream IWSDK repository with the requirements in [`skills/mmaxr-skill.md`](../skills/mmaxr-skill.md). No code, dependencies, or prototypes were changed.

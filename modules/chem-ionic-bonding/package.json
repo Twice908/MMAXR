@@ -1,0 +1,22 @@
+{
+  "name": "@mma/chem-ionic-bonding",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./manifest": "./src/manifest.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@mma/engine-assess": "workspace:*",
+    "@mma/engine-core": "workspace:*",
+    "@mma/engine-lesson": "workspace:*",
+    "@mma/engine-render": "workspace:*",
+    "@mma/engine-ui": "workspace:*",
+    "@mma/kit-chemistry": "workspace:*",
+    "@mma/schema": "workspace:*"
+  }
+}

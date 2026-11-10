@@ -10,6 +10,7 @@ import {
   resolveTriggeredAssessmentItems,
   type AssessmentItem,
 } from "@mma/engine-assess";
+import { lessonCommandToAction } from "@mma/engine-lesson";
 import {
   calculateCharge,
   calculateMassNumber,
@@ -739,28 +740,9 @@ function applyCommand(
     dispatch({ type: "atom/reset", payload: null });
     return;
   }
-  if (command === "lesson:hint") {
-    dispatch({ type: "mission/hint", payload: null });
-    return;
-  }
-  if (command === "lesson:check") {
-    dispatch({ type: "mission/check", payload: { state: missionCheckState(state.chemistry) } });
-    return;
-  }
-  if (command === "lesson:free-play") {
-    dispatch({ type: "mode/free-play", payload: null });
-    return;
-  }
-  if (command === "lesson:assessment:continue") {
-    dispatch({ type: "assessment/continue", payload: null });
-    return;
-  }
-  const answerMatch = /^lesson:assessment:answer:([0-3])$/.exec(command);
-  if (answerMatch) {
-    dispatch({
-      type: "assessment/answer",
-      payload: { selectedOptionIndex: Number(answerMatch[1]) },
-    });
+  const lessonAction = lessonCommandToAction(command, () => missionCheckState(state.chemistry));
+  if (lessonAction) {
+    dispatch(lessonAction);
     return;
   }
   const chemistry = state.chemistry;

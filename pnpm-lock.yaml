@@ -45,6 +45,9 @@ importers:
       '@mma/chem-atom-builder':
         specifier: workspace:*
         version: link:../../modules/chem-atom-builder
+      '@mma/chem-ionic-bonding':
+        specifier: workspace:*
+        version: link:../../modules/chem-ionic-bonding
       '@pmndrs/uikit':
         specifier: 1.0.78
         version: 1.0.78(super-three@0.181.0)
@@ -91,6 +94,9 @@ importers:
       '@mma/engine-core':
         specifier: workspace:*
         version: link:../../packages/engine-core
+      '@mma/engine-lesson':
+        specifier: workspace:*
+        version: link:../../packages/engine-lesson
       '@mma/engine-render':
         specifier: workspace:*
         version: link:../../packages/engine-render
@@ -100,6 +106,30 @@ importers:
       '@mma/engine-xr':
         specifier: workspace:*
         version: link:../../packages/engine-xr
+      '@mma/kit-chemistry':
+        specifier: workspace:*
+        version: link:../../packages/kits/chemistry
+      '@mma/schema':
+        specifier: workspace:*
+        version: link:../../packages/schema
+
+  modules/chem-ionic-bonding:
+    dependencies:
+      '@mma/engine-assess':
+        specifier: workspace:*
+        version: link:../../packages/engine-assess
+      '@mma/engine-core':
+        specifier: workspace:*
+        version: link:../../packages/engine-core
+      '@mma/engine-lesson':
+        specifier: workspace:*
+        version: link:../../packages/engine-lesson
+      '@mma/engine-render':
+        specifier: workspace:*
+        version: link:../../packages/engine-render
+      '@mma/engine-ui':
+        specifier: workspace:*
+        version: link:../../packages/engine-ui
       '@mma/kit-chemistry':
         specifier: workspace:*
         version: link:../../packages/kits/chemistry
@@ -140,6 +170,19 @@ importers:
         specifier: 0.181.0
         version: 0.181.0
 
+  packages/engine-lesson:
+    dependencies:
+      '@mma/engine-assess':
+        specifier: workspace:*
+        version: link:../engine-assess
+      '@mma/engine-core':
+        specifier: workspace:*
+        version: link:../engine-core
+    devDependencies:
+      '@mma/schema':
+        specifier: workspace:*
+        version: link:../schema
+
   packages/engine-render:
     dependencies:
       '@iwsdk/core':
@@ -164,6 +207,21 @@ importers:
       '@types/three':
         specifier: 0.181.0
         version: 0.181.0
+
+  packages/engine-ui:
+    dependencies:
+      '@mma/engine-core':
+        specifier: workspace:*
+        version: link:../engine-core
+      '@mma/engine-lesson':
+        specifier: workspace:*
+        version: link:../engine-lesson
+      '@mma/engine-xr':
+        specifier: workspace:*
+        version: link:../engine-xr
+      '@mma/schema':
+        specifier: workspace:*
+        version: link:../schema
 
   packages/engine-voice:
     dependencies:

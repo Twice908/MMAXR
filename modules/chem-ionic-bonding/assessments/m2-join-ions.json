@@ -1,0 +1,30 @@
+[
+  {
+    "id": "assess.ionic.bond.01",
+    "prompt": "What holds Na+ and Cl- together in sodium chloride?",
+    "options": [
+      { "id": "a", "text": "A pair of electrons shared between them" },
+      { "id": "b", "text": "The nucleus of one atom moving into the other" },
+      { "id": "c", "text": "The attraction between opposite charges" },
+      { "id": "d", "text": "Nothing; the ions only sit next to each other" }
+    ],
+    "correctOptionIndex": 2,
+    "explanation": "Na+ is positive and Cl- is negative. Opposite charges attract. This attraction between ions is an ionic bond. Sharing electrons is a different kind of bond.",
+    "conceptIds": ["sci.chem.bonding.ionic"],
+    "reviewStatus": "pending"
+  },
+  {
+    "id": "assess.ionic.bond.02",
+    "prompt": "What is the total charge of one unit of sodium chloride, NaCl?",
+    "options": [
+      { "id": "a", "text": "+1" },
+      { "id": "b", "text": "-1" },
+      { "id": "c", "text": "+2" },
+      { "id": "d", "text": "0" }
+    ],
+    "correctOptionIndex": 3,
+    "explanation": "The +1 charge of Na+ and the -1 charge of Cl- cancel out, so NaCl has no overall charge. The electron moved from sodium to chlorine; none were made or lost.",
+    "conceptIds": ["sci.chem.bonding.ionic", "sci.chem.atom.ions"],
+    "reviewStatus": "pending"
+  }
+]

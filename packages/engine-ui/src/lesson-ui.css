@@ -1,0 +1,117 @@
+/*
+ * Shared screen-mode lesson UI. Plain UX rules: 44px minimum targets (48px on touch),
+ * one primary action per group, visible focus, AA contrast, no colour-only meaning,
+ * and reduced motion when requested. Colours match the dashboard palette.
+ */
+.mma-ui {
+  --mma-ink: #1e292d;
+  --mma-muted: #56656b;
+  --mma-line: #d7dfdb;
+  --mma-paper: #f4f4ee;
+  --mma-panel: #ffffff;
+  --mma-teal: #287f83;
+  --mma-teal-dark: #1f6669;
+  --mma-teal-soft: #e5f1f1;
+  --mma-coral: #b9412d;
+  --mma-coral-soft: #fbe9e5;
+  --mma-gold: #f0b323;
+  --mma-good: #1f7a46;
+  --mma-good-soft: #e3f3e9;
+  --mma-focus: #1a5fb4;
+  --mma-radius: 12px;
+  --mma-target: 44px;
+  color: var(--mma-ink);
+  font-family: "Avenir Next", "Trebuchet MS", system-ui, sans-serif;
+  line-height: 1.45;
+}
+
+@media (pointer: coarse) {
+  .mma-ui { --mma-target: 48px; }
+}
+
+.mma-ui *, .mma-ui *::before, .mma-ui *::after { box-sizing: border-box; }
+.mma-ui [hidden] { display: none !important; }
+
+.mma-visually-hidden {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.mma-eyebrow {
+  margin: 0 0 4px;
+  color: var(--mma-teal-dark);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mma-card {
+  padding: 16px;
+  border: 1px solid var(--mma-line);
+  border-radius: var(--mma-radius);
+  background: var(--mma-panel);
+}
+
+/* Buttons */
+.mma-button {
+  min-height: var(--mma-target);
+  min-width: var(--mma-target);
+  padding: 0 16px;
+  border: 1px solid var(--mma-line);
+  border-radius: 10px;
+  color: var(--mma-ink);
+  background: var(--mma-panel);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.mma-button:hover:not(:disabled) { border-color: var(--mma-teal); background: var(--mma-teal-soft); }
+.mma-button--primary { border-color: var(--mma-teal); color: #fff; background: var(--mma-teal); }
+.mma-button--primary:hover:not(:disabled) { border-color: var(--mma-teal-dark); background: var(--mma-teal-dark); }
+.mma-button--quiet { border-color: transparent; background: transparent; color: var(--mma-teal-dark); }
+.mma-button:disabled { cursor: not-allowed; opacity: 0.55; }
+.mma-ui :focus-visible { outline: 3px solid var(--mma-focus); outline-offset: 2px; }
+
+/* Lesson panel */
+.mma-lesson { display: grid; gap: 12px; }
+.mma-lesson__mission, .mma-question { display: grid; gap: 8px; padding: 16px; border: 1px solid var(--mma-line); border-radius: var(--mma-radius); background: var(--mma-panel); }
+.mma-lesson__title, .mma-question__prompt { margin: 0; font-size: 20px; line-height: 1.3; }
+.mma-question__prompt { font-size: 18px; }
+.mma-question__prompt:focus { outline: none; }
+.mma-question__prompt:focus-visible { outline: 3px solid var(--mma-focus); }
+.mma-lesson__body { margin: 0; font-size: 16px; }
+.mma-progress { height: 8px; border-radius: 999px; background: var(--mma-line); overflow: hidden; }
+.mma-progress__fill { display: block; height: 100%; background: var(--mma-teal); transition: width 240ms ease; }
+.mma-lesson__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.mma-feedback { margin: 0; padding: 10px 12px; border-left: 4px solid var(--mma-gold); border-radius: 6px; background: #fdf6e3; font-size: 15px; }
+.mma-question { border-color: var(--mma-teal); }
+.mma-question__options { display: grid; gap: 8px; }
+.mma-option {
+  min-height: var(--mma-target);
+  padding: 10px 14px;
+  border: 2px solid var(--mma-line);
+  border-radius: 10px;
+  color: var(--mma-ink);
+  background: var(--mma-panel);
+  font: inherit;
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+}
+.mma-option:hover:not(:disabled) { border-color: var(--mma-teal); }
+.mma-option:disabled { cursor: default; }
+.mma-option--correct, .mma-option--answer { border-color: var(--mma-good); background: var(--mma-good-soft); }
+.mma-option--correct::before, .mma-option--answer::before { content: "✓ "; color: var(--mma-good); font-weight: 700; }
+.mma-option--incorrect { border-color: var(--mma-coral); background: var(--mma-coral-soft); }
+.mma-option--incorrect::before { content: "✗ "; color: var(--mma-coral); font-weight: 700; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mma-ui *, .mma-ui *::before, .mma-ui *::after { transition: none !important; animation: none !important; }
+}
