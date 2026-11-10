@@ -1,23 +1,24 @@
 export { commandButton, el, setText } from "./dom.js";
 export { createLessonPanel, type LessonPanel } from "./lesson-panel.js";
 export {
-  createXrHud,
-  nextHudTab,
-  type XrHud,
+  arHudStatusText,
+  createArHud,
+  nextArHudTab,
+  type ArHud,
   type XrHudOptions,
   type XrHudTab,
 } from "./xr-hud.js";
 export {
-  COMFORT_BREAK_DELAY_MS,
+  arFailureMessage,
+  buildXrDiagnosticsText,
   isTouchFirstDevice,
-  mountXrSession,
-  xrConsentText,
-  xrFailureMessage,
-  type XrSessionControls,
-  type XrSessionInfo,
-  type XrSessionMode,
-  type XrSessionOptions,
-  type XrSessionRenderer,
+  isXrDiagnosticsEnabled,
+  mountArControls,
+  scheduleComfortBreakReminder,
+  type ArControlsOptions,
+  type ArControlsRenderer,
+  type XrDiagnosticsData,
+  type XrSceneDiagnostics,
 } from "./xr-session.js";
 export {
   createNarrationBar,

@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { AR_HUD_TABS, arHudStatusText, nextArHudTab } from "../src/ar-hud.js";
+import { arHudStatusText, nextArHudTab } from "../src/xr-hud.js";
 
-const css = readFileSync(fileURLToPath(new URL("../src/ar-hud.css", import.meta.url)), "utf8");
+const css = readFileSync(fileURLToPath(new URL("../src/xr-hud.css", import.meta.url)), "utf8");
 
 function token(name: string): string {
   const match = new RegExp(`--${name}:\\s*([^;]+);`).exec(css);
@@ -51,10 +51,6 @@ describe("phone AR HUD", () => {
     expect(nextArHudTab(null, "build")).toBe("build");
     expect(nextArHudTab("build", "build")).toBeNull();
     expect(nextArHudTab("build", "mission")).toBe("mission");
-  });
-
-  it("offers four sections in a fixed order", () => {
-    expect(AR_HUD_TABS).toEqual(["mission", "build", "element", "sound"]);
   });
 
   it("shows the mission step and title, or Free play", () => {

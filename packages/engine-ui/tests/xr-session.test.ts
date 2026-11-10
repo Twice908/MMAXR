@@ -1,50 +1,108 @@
-import { describe, expect, it } from "vitest";
-import { nextHudTab } from "../src/xr-hud.js";
-import { COMFORT_BREAK_DELAY_MS, isTouchFirstDevice, xrConsentText, xrFailureMessage } from "../src/xr-session.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  buildXrDiagnosticsText,
+  isTouchFirstDevice,
+  isXrDiagnosticsEnabled,
+  scheduleComfortBreakReminder,
+} from "../src/xr-session.js";
 
-describe("XR session wording", () => {
-  it("asks for consent in plain words and says nothing is recorded", () => {
-    expect(xrConsentText("immersive-ar", "the model")).toEqual({
-      title: "View the model in AR?",
-      body: "Your camera shows the real world so the model can appear in front of you. Nothing is recorded or uploaded.",
-      start: "Start AR",
+const baseData = {
+  supportedModes: ["immersive-ar", "immersive-vr"],
+  requestedFeatures: ["local-floor", "hand-tracking"],
+  grantedFeatures: ["local-floor", "hand-tracking"],
+  overlayGranted: false,
+  interactionMode: "world-space",
+  environmentBlendMode: "opaque",
+  inputSourceTypes: ["hand", "tracked-pointer"],
+  referenceSpaceType: "local-floor",
+  frameRate: 90,
+  scene: {
+    worldReady: true,
+    sessionMode: "immersive-vr" as const,
+    referenceSpaceType: "adopted",
+    rendererPresenting: true,
+    framesRendered: 12,
+    inputSourceCount: 2,
+    atomWorldPosition: { x: 0, y: 1.45, z: -0.85 },
+    atomScale: 0.05,
+    lessonPanelsVisible: true,
+  },
+};
+
+describe("XR diagnostics report", () => {
+  it("formats the complete report without personal or device-identifying data", () => {
+    expect(buildXrDiagnosticsText(baseData)).toBe([
+      "Supported session modes: immersive-ar, immersive-vr",
+      "Requested features: local-floor, hand-tracking",
+      "Granted features: local-floor, hand-tracking",
+      "DOM overlay granted: no",
+      "Interaction mode: world-space",
+      "Environment blend mode: opaque",
+      "Input sources: hand, tracked-pointer",
+      "Reference space: local-floor",
+      "Frame rate: 90 Hz",
+      "IWSDK world ready: yes",
+      "Scene session mode: immersive-vr",
+      "renderer.xr.isPresenting: yes",
+      "XR frame count: 12",
+      "XR input sources (IWSDK): 2",
+      "Atom world position: (0.000, 1.450, -0.850)",
+      "Atom world scale: 0.050",
+      "Lesson panels visible: yes",
+      "Last XR error: none",
+      "Last XR error stack:\nunavailable",
+    ].join("\n"));
+  });
+
+  it("includes the last XR error message and stack for on-device diagnostics", () => {
+    const report = buildXrDiagnosticsText({
+      ...baseData,
+      lastErrorMessage: "WebGL session setup failed",
+      lastErrorStack: "Error: WebGL session setup failed\n at enterSession (renderer.js:12:4)",
     });
-    expect(xrConsentText("immersive-vr", "the model")).toEqual({
-      title: "View the model in VR?",
-      body: "The model and the lesson panels appear in front of you. Nothing is recorded or uploaded.",
-      start: "Start VR",
-    });
+
+    expect(report).toContain("Last XR error: WebGL session setup failed");
+    expect(report).toContain("Last XR error stack:\nError: WebGL session setup failed");
   });
 
-  it("explains every failure and always points back to screen mode", () => {
-    expect(xrFailureMessage("permission_denied", "immersive-ar")).toBe(
-      "Camera access was not allowed. You can keep learning in screen mode.",
-    );
-    expect(xrFailureMessage("dom_overlay_unavailable", "immersive-ar")).toBe(
-      "AR controls are unavailable on this device. You are back in screen mode.",
-    );
-    expect(xrFailureMessage("tracking_lost", "immersive-vr")).toBe("VR tracking was lost. You are back in screen mode.");
-    for (const code of ["permission_denied", "tracking_lost", "unsupported", "dom_overlay_unavailable", "unknown"] as const) {
-      for (const mode of ["immersive-ar", "immersive-vr"] as const) {
-        expect(xrFailureMessage(code, mode)).toMatch(/screen mode\.$/);
-      }
-    }
-  });
-
-  it("reminds students to take a break after ten minutes", () => {
-    expect(COMFORT_BREAK_DELAY_MS).toBe(600_000);
-  });
-
-  it("treats devices without a fine pointer as touch-first", () => {
-    expect(isTouchFirstDevice(() => ({ matches: false }))).toBe(true);
-    expect(isTouchFirstDevice(() => ({ matches: true }))).toBe(false);
+  it("enables the panel only for xrdebug=1", () => {
+    expect(isXrDiagnosticsEnabled("?xrdebug=1")).toBe(true);
+    expect(isXrDiagnosticsEnabled("?xrdebug=0")).toBe(false);
+    expect(isXrDiagnosticsEnabled("?other=1")).toBe(false);
   });
 });
 
-describe("AR HUD tabs", () => {
-  it("opens a tapped tab and closes it when tapped again", () => {
-    expect(nextHudTab(null, "mission")).toBe("mission");
-    expect(nextHudTab("mission", "atoms")).toBe("atoms");
-    expect(nextHudTab("atoms", "atoms")).toBeNull();
+describe("AR comfort break reminders", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("fires once after ten minutes", () => {
+    const reminder = vi.fn();
+    scheduleComfortBreakReminder(reminder);
+
+    vi.advanceTimersByTime(10 * 60 * 1000);
+    vi.advanceTimersByTime(10 * 60 * 1000);
+
+    expect(reminder).toHaveBeenCalledOnce();
+  });
+
+  it("does not fire after the AR session ends", () => {
+    const reminder = vi.fn();
+    const cancel = scheduleComfortBreakReminder(reminder);
+
+    cancel();
+    vi.advanceTimersByTime(10 * 60 * 1000);
+
+    expect(reminder).not.toHaveBeenCalled();
+  });
+});
+
+describe("isTouchFirstDevice", () => {
+  it("treats a device without a fine pointer as touch-first, so phone VR stays hidden", () => {
+    expect(isTouchFirstDevice(() => ({ matches: false }))).toBe(true);
+  });
+
+  it("keeps desktop and headset browsers with a fine pointer eligible for VR", () => {
+    expect(isTouchFirstDevice((query) => ({ matches: query === "(any-pointer: fine)" }))).toBe(false);
   });
 });

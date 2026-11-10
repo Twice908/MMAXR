@@ -49,3 +49,12 @@ in favour of the Horizon UI kit for XR and standard UX rules for every view.
 - Web-view drag-to-turn now follows the pointer horizontally (both modules); handheld
   AR keeps its original direction.
 - VR for Ionic Bonding is not built yet.
+- One shared version per feature (owner's rule): the Atom Builder's original AR controls
+  (`mountArControls`, with consent, toasts, comfort reminder and `?xrdebug=1` report), phone
+  AR HUD (`createArHud`) and narration bar (`createNarrationBar`) moved to engine-ui with
+  their original markup, ids and wording; both modules use them. The HUD holds the page
+  sections (and caption) during every session and stays hidden without a DOM overlay, so
+  the web page never shows behind headset or emulator views. Headsets use the shared
+  `createXrModulePanels`, which gained steppers, a dark info card and dock actions so the
+  Atom Builder keeps its earlier panel look; the renderer's `xr-lesson-panels.ts` is gone.
+

@@ -32,11 +32,14 @@ import {
   NarrationPlayer,
   createNarrationAssetLoader,
   publishNarrationTelemetry,
-  type NarrationViewState,
 } from "@mma/engine-voice";
 import {
+  arHudStatusText,
+  createArHud,
+  createNarrationBar,
   mountArControls,
-} from "./ar-controls.js";
+} from "@mma/engine-ui";
+import "@mma/engine-ui/xr-hud.css";
 import { telemetryEventSchema } from "@mma/schema";
 import carbon12Items from "../assessments/m1-carbon-12.json";
 import sodiumItems from "../assessments/m2-sodium-ion.json";
@@ -51,9 +54,17 @@ import {
   type AtomBuilderLearningState,
 } from "./learning.js";
 import { layoutAtom } from "./layout.js";
-import { NARRATION_COMMAND, buildXrLessonContent } from "./xr-lesson.js";
+import { NARRATION_COMMAND, buildXrLessonContent, toModulePanelsContent } from "./xr-lesson.js";
 import "./atom-builder.css";
 import "./ar-hud.css";
+
+/** Icons for the phone AR HUD tabs (24x24 stroke paths). */
+const HUD_ICONS = {
+  mission: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="0.6"/>',
+  build: '<circle cx="12" cy="12" r="2.4"/><ellipse cx="12" cy="12" rx="9" ry="3.6"/><ellipse cx="12" cy="12" rx="9" ry="3.6" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="9" ry="3.6" transform="rotate(120 12 12)"/>',
+  element: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 15V9l3 4 3-4v6"/>',
+  sound: '<path d="M4 10v4h4l5 4V6L8 10z"/><path d="M16.5 9a4 4 0 0 1 0 6M19 6.5a7.5 7.5 0 0 1 0 11"/>',
+} as const;
 
 interface LocalEventEntry {
   readonly type: string;
@@ -132,23 +143,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
         <p class="hint-feedback" id="hint-feedback" aria-live="polite"></p>
         <p class="mission-feedback" id="mission-feedback" aria-live="polite"></p>
       </section>
-      <section class="narration-hud" aria-label="Narration controls">
-        <p class="narration-caption" id="narration-caption" aria-live="polite" hidden></p>
-        <div class="narration-controls">
-          <button type="button" data-narration-action="enable">Tap to enable sound</button>
-          <button type="button" data-narration-action="mute" aria-pressed="false">Mute</button>
-          <button type="button" data-narration-action="replay">Replay last cue</button>
-          <label>Speed
-            <select id="narration-speed" aria-label="Narration speed">
-              <option value="0.75">0.75x</option>
-              <option value="1" selected>1x</option>
-              <option value="1.25">1.25x</option>
-            </select>
-          </label>
-          <button type="button" data-narration-action="captions" aria-pressed="true">Captions on</button>
-          <span class="narration-audio-status" id="narration-audio-status" role="status"></span>
-        </div>
-      </section>
+      <div data-narration-slot hidden></div>
       <section class="assessment-card" id="assessment-card" aria-label="Question" hidden>
         <p class="lesson-step" id="assessment-step"></p>
         <h2 id="assessment-prompt"></h2>
@@ -210,8 +205,15 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   const sceneHost = requiredElement<HTMLElement>(root, "#atom-scene");
   const feedback = requiredElement<HTMLOutputElement>(root, "#chemistry-feedback");
   const ghost = requiredElement<HTMLElement>(root, "#drag-ghost");
-  const narrationControls = requiredElement<HTMLElement>(root, ".narration-controls");
-  const narrationSpeed = requiredElement<HTMLSelectElement>(root, "#narration-speed");
+  // Shared narration bar, placed where the Atom Builder always had it.
+  const narrationBar = createNarrationBar({
+    enableSound: () => void narrationPlayer.enableSound(),
+    toggleMuted: () => narrationPlayer.toggleMuted(),
+    replay: () => narrationPlayer.replayLastCue(),
+    toggleCaptions: () => narrationPlayer.toggleCaptions(),
+    setSpeed: (speed) => narrationPlayer.setSpeed(speed),
+  });
+  requiredElement<HTMLElement>(root, "[data-narration-slot]").replaceWith(narrationBar.element);
   // Desktop and phones keep the website layout: IWSDK renders the atom inside the
   // scene viewport. The Horizon UI panels appear only inside AR/VR sessions.
   const renderer = new SceneRenderer({
@@ -343,8 +345,32 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   root.addEventListener("click", onEventsAction);
   root.addEventListener("mma:local-telemetry", onLocalTelemetry);
 
+  const hud = createArHud({
+    host: requiredElement<HTMLElement>(root, ".atom-builder"),
+    tabs: [
+      { id: "mission", label: "Mission", icon: HUD_ICONS.mission, sections: ["#lesson-panel", "#assessment-card", "#lesson-summary", "#free-play-status"].map((selector) => requiredElement<HTMLElement>(root, selector)) },
+      { id: "build", label: "Build", icon: HUD_ICONS.build, sections: [requiredElement<HTMLElement>(root, ".particle-rail")] },
+      { id: "element", label: "Element", icon: HUD_ICONS.element, sections: [requiredElement<HTMLElement>(root, ".atom-inspector")] },
+      { id: "sound", label: "Sound", icon: HUD_ICONS.sound, sections: [narrationBar.element] },
+    ],
+    caption: narrationBar.caption,
+    tip: "Pinch to resize. Drag to turn the atom.",
+    status: () => arHudStatusText(
+      requiredElement<HTMLElement>(root, "#mission-step").textContent ?? "",
+      requiredElement<HTMLElement>(root, "#mission-title").textContent ?? "",
+      !requiredElement<HTMLElement>(root, "#free-play-status").hidden,
+    ),
+    statusSources: ["#mission-step", "#mission-title", "#free-play-status"].map((selector) => requiredElement<HTMLElement>(root, selector)),
+    missionSignals: ["#mission-feedback", "#hint-feedback", "#assessment-card", "#lesson-summary"].map((selector) => requiredElement<HTMLElement>(root, selector)),
+    question: requiredElement<HTMLElement>(root, "#assessment-card"),
+    onResetView: () => renderer.resetArView(),
+  });
   const disposeArControls = mountArControls({
     root,
+    entryHost: requiredElement<HTMLElement>(root, ".scene-heading"),
+    dialogHost: requiredElement<HTMLElement>(root, ".atom-builder"),
+    subject: "the atom",
+    hud,
     renderer,
     telemetryContext,
     clock,
@@ -397,7 +423,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
         new URLSearchParams(window.location.search).get("narrationAudio") === "audible-test",
     }),
     onViewChange: (state) => {
-      renderNarrationView(root, state);
+      narrationBar.update(state);
       narrationCaption = state.settings.captionsEnabled ? state.captionText : "";
       narrationView = {
         audioEnabled: state.audioEnabled,
@@ -408,26 +434,6 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     },
     onTelemetry: (event) => publishNarrationTelemetry(event, store.events, telemetryContext, clock, idGenerator),
   });
-  const onNarrationAction = (event: MouseEvent): void => {
-    const button = (event.target as Element | null)?.closest<HTMLButtonElement>("[data-narration-action]");
-    switch (button?.dataset.narrationAction) {
-      case "enable":
-        void narrationPlayer.enableSound();
-        break;
-      case "mute":
-        narrationPlayer.toggleMuted();
-        break;
-      case "replay":
-        narrationPlayer.replayLastCue();
-        break;
-      case "captions":
-        narrationPlayer.toggleCaptions();
-        break;
-    }
-  };
-  const onNarrationSpeedChange = (): void => {
-    narrationPlayer.setSpeed(Number(narrationSpeed.value) as 0.75 | 1 | 1.25);
-  };
   const entryButton = (mode: "immersive-ar" | "immersive-vr") =>
     root.querySelector<HTMLButtonElement>(`.ar-start[data-session-mode='${mode}']`);
   const xrLessonContent = () => buildXrLessonContent(store.getState(), manifest.missions, assessmentItems, {
@@ -442,7 +448,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     narration: narrationView,
   });
   refreshXrLesson = () => {
-    if (xrLessonVisible) renderer.setLessonPanels(xrLessonContent(), (command) => onXrCommand(command));
+    if (xrLessonVisible) renderer.setModulePanels(toModulePanelsContent(xrLessonContent()), (command) => onXrCommand(command));
   };
   onXrCommand = (command) => {
     if (command === XR_COMMAND.exit) {
@@ -465,8 +471,6 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     }
   };
 
-  narrationControls.addEventListener("click", onNarrationAction);
-  narrationSpeed.addEventListener("change", onNarrationSpeedChange);
 
   const renderState = (state: Readonly<AtomBuilderLearningState>): void => {
     const chemistry = state.chemistry;
@@ -659,14 +663,16 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     disposeZoomControls();
     input?.dispose();
     unsubscribe();
-    narrationControls.removeEventListener("click", onNarrationAction);
-    narrationSpeed.removeEventListener("change", onNarrationSpeedChange);
     root.removeEventListener("click", onEventsAction);
     root.removeEventListener("mma:local-telemetry", onLocalTelemetry);
     root.removeEventListener("click", onCommandClick);
     exitButton.removeEventListener("click", onExitClick);
     narrationPlayer.dispose();
-    void disposeArControls().finally(() => renderer.dispose());
+    void disposeArControls().finally(() => {
+      hud.dispose();
+      narrationBar.dispose();
+      renderer.dispose();
+    });
     root.replaceChildren();
   };
 }
@@ -842,56 +848,6 @@ function nextElectronShell(shells: readonly number[], count: number): number {
 
 function formatCharge(charge: number): string {
   return charge > 0 ? `+${charge}` : String(charge);
-}
-
-function renderNarrationView(root: HTMLElement, state: NarrationViewState): void {
-  const caption = requiredElement<HTMLElement>(root, "#narration-caption");
-  caption.textContent = state.captionText;
-  caption.hidden = !state.settings.captionsEnabled || state.captionText.length === 0;
-
-  const enableButton = requiredElement<HTMLButtonElement>(root, '[data-narration-action="enable"]');
-  enableButton.hidden = state.audioEnabled;
-  enableButton.disabled = state.audioUnavailable;
-  enableButton.textContent = state.audioUnavailable ? "Sound unavailable" : "Tap to enable sound";
-
-  const muteButton = requiredElement<HTMLButtonElement>(root, '[data-narration-action="mute"]');
-  muteButton.textContent = state.settings.muted ? "Unmute" : "Mute";
-  muteButton.setAttribute("aria-pressed", String(state.settings.muted));
-  requiredElement<HTMLSelectElement>(root, "#narration-speed").value = String(state.settings.speed);
-
-  const captionsButton = requiredElement<HTMLButtonElement>(root, '[data-narration-action="captions"]');
-  captionsButton.textContent = state.settings.captionsEnabled ? "Captions on" : "Captions off";
-  captionsButton.setAttribute("aria-pressed", String(state.settings.captionsEnabled));
-  const settingsMute = root.querySelector<HTMLButtonElement>('[data-settings-action="mute"]');
-  if (settingsMute) {
-    settingsMute.textContent = muteButton.textContent;
-    settingsMute.setAttribute("aria-pressed", muteButton.getAttribute("aria-pressed") ?? "false");
-  }
-  const settingsCaptions = root.querySelector<HTMLButtonElement>('[data-settings-action="captions"]');
-  if (settingsCaptions) {
-    settingsCaptions.textContent = captionsButton.textContent;
-    settingsCaptions.setAttribute("aria-pressed", captionsButton.getAttribute("aria-pressed") ?? "false");
-  }
-  const settingsEnable = root.querySelector<HTMLButtonElement>('[data-settings-action="enable"]');
-  if (settingsEnable) {
-    settingsEnable.hidden = enableButton.hidden;
-    settingsEnable.disabled = enableButton.disabled;
-  }
-  for (const button of root.querySelectorAll<HTMLButtonElement>("[data-settings-speed]")) {
-    button.setAttribute("aria-pressed", String(button.dataset.settingsSpeed === String(state.settings.speed)));
-  }
-
-  const audioStatus = requiredElement<HTMLElement>(root, "#narration-audio-status");
-  audioStatus.setAttribute("role", state.audioError ? "alert" : "status");
-  audioStatus.textContent = state.audioError ?? (
-    state.soundBlocked
-      ? "Sound blocked. Tap to try again."
-      : state.audioUnavailable
-        ? "Captions remain available."
-        : state.audioEnabled
-          ? state.settings.muted ? "Sound muted" : "Sound enabled"
-          : "Sound waits for your tap."
-  );
 }
 
 function asPayload(payload: EngineAction["payload"]): Record<string, string | number | null> {

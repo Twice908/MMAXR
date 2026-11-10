@@ -8,67 +8,558 @@ import {
   type ArSessionHandle,
   type ArSessionRuntimeInfo,
 } from "@mma/engine-xr";
-import { arTelemetryEventSchema, type ArTelemetryEvent } from "@mma/schema";
-import { el } from "./dom.js";
+import { arTelemetryEventSchema } from "@mma/schema";
+import type { ArHud } from "./xr-hud.js";
 
 /**
- * Shared AR/VR session controls for modules: Enter AR / Enter VR buttons, a consent
- * dialog, status messages, the comfort-break reminder, Exit, and session telemetry.
- * Generalised from the Atom Builder's AR controls (which stay in that module).
+ * Shared AR/VR session controls: Enter AR / Enter VR, the consent dialog, status
+ * messages, the comfort-break reminder, Exit, telemetry and the `?xrdebug=1` report.
+ * This is the Atom Builder's original implementation, moved here so every module uses it.
  */
 
-/** Immersive session modes the controls can start. */
-export type XrSessionMode = "immersive-ar" | "immersive-vr";
-
-/** What the controls need from the renderer: hand a session over and take it back. */
-export interface XrSessionRenderer {
-  enterARSession(session: EventTarget, mode: XrSessionMode): Promise<void>;
-  exitARSession(): Promise<void>;
+/** PII-free facts about the immersive scene for the development report (from the renderer). */
+export interface XrSceneDiagnostics {
+  readonly worldReady: boolean;
+  readonly sessionMode: string | null;
+  readonly referenceSpaceType: string | null;
+  readonly rendererPresenting: boolean;
+  readonly framesRendered: number;
+  readonly inputSourceCount: number;
+  readonly atomWorldPosition: { readonly x: number; readonly y: number; readonly z: number } | null;
+  readonly atomScale: number;
+  readonly lessonPanelsVisible: boolean;
 }
 
-/** Options for {@link mountXrSession}. */
-export interface XrSessionOptions {
-  /** Module root. It becomes the phone AR DOM overlay and gets the `ar-active` class. */
+/** What the controls need from the renderer. */
+export interface ArControlsRenderer {
+  enterARSession(session: EventTarget, mode: "immersive-ar" | "immersive-vr"): Promise<void>;
+  exitARSession(): Promise<void>;
+  getXrSceneDiagnostics(): XrSceneDiagnostics;
+}
+
+export interface ArControlsOptions {
   readonly root: HTMLElement;
-  /** Where the Enter AR / Enter VR buttons go (for example the model's toolbar). */
-  readonly entrySlot: HTMLElement;
-  /** Where the Exit button goes during phone AR (for example the AR HUD's top bar). */
-  readonly exitSlot: HTMLElement;
-  /** What appears in front of the student, for the consent text: "the model". */
+  /** Where the Enter AR / Enter VR buttons go (the model's heading bar). */
+  readonly entryHost: HTMLElement;
+  /** Where the consent dialog goes (the module's page element). */
+  readonly dialogHost: HTMLElement;
+  /** What appears in front of the student, for the consent text: "the atom", "the model". */
   readonly subject: string;
-  readonly renderer: XrSessionRenderer;
+  /** The phone AR HUD (see `createArHud`). */
+  readonly hud: ArHud;
+  readonly renderer: ArControlsRenderer;
   readonly telemetryContext: TelemetryContext;
   readonly clock: () => string;
   readonly idGenerator: () => string;
-  /** Called once when a comfort break is due (the module records `comfort_break_shown`). */
-  readonly onComfortBreak?: () => void;
-  /** Receives validated `ar_session_started`, `ar_session_ended` and `ar_error` events. */
-  readonly onTelemetry?: (event: ArTelemetryEvent) => void;
-  /** Called when a session becomes active or ends. `overlay` is true for phone AR with a DOM overlay. */
-  readonly onActiveChange: (active: boolean, info: XrSessionInfo) => void;
+  readonly getActiveMissionId: () => string | null;
+  readonly publishComfortBreakShown: (missionId: string | null) => void;
+  readonly recordLocalEvent: (type: string, timestamp: string, detail: string) => void;
+  readonly onSpatialActiveChange?: (
+    active: boolean,
+    sessionInfo: ArSessionRuntimeInfo,
+    session: ArSessionHandle | null,
+  ) => void;
+  readonly diagnostics?: boolean;
 }
 
-/** Facts about the running session that the module's UI depends on. */
-export interface XrSessionInfo {
-  readonly mode: XrSessionMode;
-  /** True when the DOM overlay was granted (phone AR): show the page HUD, not in-scene panels. */
-  readonly overlay: boolean;
+const comfortBreakDelayMs = 10 * 60 * 1000;
+
+export interface XrDiagnosticsData {
+  readonly supportedModes: readonly string[];
+  readonly requestedFeatures: readonly string[];
+  readonly grantedFeatures: readonly string[];
+  readonly overlayGranted: boolean | null;
+  readonly interactionMode: string | null;
+  readonly environmentBlendMode: string | null;
+  readonly inputSourceTypes: readonly string[];
+  readonly referenceSpaceType: string | null;
+  readonly frameRate: number | null;
+  readonly scene: XrSceneDiagnostics;
+  readonly lastErrorMessage?: string | null;
+  readonly lastErrorStack?: string | null;
 }
 
-/** A mounted set of session controls. */
-export interface XrSessionControls {
-  /** Start the session flow for a mode, as the Enter buttons do (asks for consent first). */
-  request(mode: XrSessionMode): void;
-  /** End the running session. */
-  exit(): Promise<void>;
-  dispose(): Promise<void>;
+function formatPosition(position: Readonly<{ x: number; y: number; z: number }> | null): string {
+  return position
+    ? `(${position.x.toFixed(3)}, ${position.y.toFixed(3)}, ${position.z.toFixed(3)})`
+    : "unavailable";
 }
 
-/** Ten minutes, per the comfort rules: remind students to take a break. */
-export const COMFORT_BREAK_DELAY_MS = 10 * 60 * 1000;
+/** Build the copyable, PII-free XR report shown with `?xrdebug=1`. */
+export function buildXrDiagnosticsText(data: XrDiagnosticsData): string {
+  const scene = data.scene;
+  return [
+    `Supported session modes: ${data.supportedModes.join(", ") || "none"}`,
+    `Requested features: ${data.requestedFeatures.join(", ") || "none"}`,
+    `Granted features: ${data.grantedFeatures.join(", ") || "none"}`,
+    `DOM overlay granted: ${data.overlayGranted === null ? "unknown" : data.overlayGranted ? "yes" : "no"}`,
+    `Interaction mode: ${data.interactionMode ?? "unavailable"}`,
+    `Environment blend mode: ${data.environmentBlendMode ?? "unavailable"}`,
+    `Input sources: ${data.inputSourceTypes.join(", ") || "none"}`,
+    `Reference space: ${data.referenceSpaceType ?? "unavailable"}`,
+    `Frame rate: ${data.frameRate === null ? "unavailable" : `${data.frameRate} Hz`}`,
+    `IWSDK world ready: ${scene.worldReady ? "yes" : "no"}`,
+    `Scene session mode: ${scene.sessionMode ?? "none"}`,
+    `renderer.xr.isPresenting: ${scene.rendererPresenting ? "yes" : "no"}`,
+    `XR frame count: ${scene.framesRendered}`,
+    `XR input sources (IWSDK): ${scene.inputSourceCount}`,
+    `Atom world position: ${formatPosition(scene.atomWorldPosition)}`,
+    `Atom world scale: ${scene.atomScale.toFixed(3)}`,
+    `Lesson panels visible: ${scene.lessonPanelsVisible ? "yes" : "no"}`,
+    `Last XR error: ${data.lastErrorMessage || "none"}`,
+    `Last XR error stack:\n${data.lastErrorStack || "unavailable"}`,
+  ].join("\n");
+}
 
-/** Plain-language message for a failed or ended session. */
-export function xrFailureMessage(reasonCode: ArErrorReasonCode, mode: XrSessionMode): string {
+function diagnosticErrorDetails(error: unknown): { message: string; stack: string } {
+  const cause = error instanceof ArSessionStartError ? error.originalError : undefined;
+  const source = cause ?? error;
+  const redact = (text: string): string => text
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[redacted]")
+    .replace(/\b\+?\d[\d .()-]{8,}\d\b/g, "[redacted]")
+    .replace(/([?&][\w.-]+=)[^&\s)]+/g, "$1[redacted]")
+    .replace(/\/Users\/[^/\s)]+/g, "/Users/[redacted]");
+  if (source instanceof Error) {
+    return {
+      message: redact(source.message || source.name),
+      stack: redact(source.stack ?? `${source.name}: ${source.message}`),
+    };
+  }
+  return { message: redact(String(source)), stack: "unavailable" };
+}
+
+/** Enable temporary XR diagnostics only for an explicit URL query flag. */
+export function isXrDiagnosticsEnabled(search: string): boolean {
+  return new URLSearchParams(search).get("xrdebug") === "1";
+}
+
+/** Schedule one comfort reminder and return a function that cancels it. */
+export function scheduleComfortBreakReminder(onReminder: () => void): () => void {
+  const timeout = globalThis.setTimeout(onReminder, comfortBreakDelayMs);
+  return () => globalThis.clearTimeout(timeout);
+}
+
+/** Mount the supported-device AR controls without coupling AR to lesson state. */
+export function mountArControls(options: ArControlsOptions): () => Promise<void> {
+  const { root, renderer, subject, hud } = options;
+  const builder = options.dialogHost;
+  const sceneHeading = options.entryHost;
+
+  const actions = document.createElement("div");
+  actions.className = "scene-actions";
+  actions.innerHTML = `
+    <button type="button" class="ar-start" data-ar-action="explain" data-session-mode="immersive-ar" hidden>Enter AR</button>
+    <button type="button" class="ar-start" data-ar-action="explain" data-session-mode="immersive-vr" hidden>Enter VR</button>
+  `;
+  sceneHeading.append(actions);
+
+  const supportMessage = document.createElement("p");
+  supportMessage.id = "ar-support-message";
+  supportMessage.className = "ar-support-message";
+  supportMessage.setAttribute("role", "status");
+  supportMessage.setAttribute("aria-live", "polite");
+  supportMessage.hidden = true;
+  sceneHeading.after(supportMessage);
+
+  const dialog = document.createElement("dialog");
+  dialog.id = "ar-confirmation";
+  dialog.className = "ar-confirmation";
+  dialog.setAttribute("aria-labelledby", "ar-confirmation-title");
+  dialog.innerHTML = `
+    <h2 id="ar-confirmation-title"></h2>
+    <p id="ar-confirmation-description"></p>
+    <p>Stay seated, look around you, and keep an eye on your surroundings.</p>
+    <div class="ar-confirmation-actions">
+      <button type="button" aria-label="Cancel" data-ar-action="cancel">Cancel</button>
+      <button type="button" aria-label="Start session" data-ar-action="start">Start</button>
+    </div>
+  `;
+  builder.append(dialog);
+
+  const status = document.createElement("div");
+  status.id = "ar-status";
+  status.className = "ar-status";
+  status.setAttribute("role", "status");
+  status.setAttribute("aria-live", "polite");
+  status.hidden = true;
+  root.append(status);
+
+
+  const exitButton = document.createElement("button");
+  exitButton.type = "button";
+  exitButton.className = "ar-exit";
+  exitButton.dataset.arAction = "exit";
+  exitButton.textContent = "Exit AR";
+  exitButton.hidden = true;
+  hud.exitSlot.append(exitButton);
+
+
+  const debugEnabled = isXrDiagnosticsEnabled(globalThis.location?.search ?? "");
+  const diagnostics = debugEnabled ? document.createElement("section") : null;
+  const diagnosticsText = debugEnabled ? document.createElement("pre") : null;
+  const diagnosticsCopy = debugEnabled ? document.createElement("button") : null;
+  if (diagnostics) {
+    diagnostics.className = "ar-diagnostics";
+    diagnostics.setAttribute("aria-label", "AR diagnostics");
+    diagnostics.setAttribute("role", "region");
+    diagnostics.hidden = false;
+    diagnostics.style.cssText = "position:fixed;z-index:1000;right:12px;bottom:12px;max-width:min(34rem,90vw);padding:12px;border:1px solid rgba(255,255,255,.84);border-radius:16px;background:rgba(255,255,255,.96);color:#272331;font:12px/1.4 monospace;white-space:pre-wrap;backdrop-filter:blur(12px)";
+    if (diagnosticsText && diagnosticsCopy) {
+      diagnosticsText.id = "xr-debug-report";
+      diagnosticsText.style.cssText = "margin:0;white-space:pre-wrap";
+      diagnosticsCopy.type = "button";
+      diagnosticsCopy.textContent = "Copy report";
+      diagnosticsCopy.dataset.arAction = "copy-xr-report";
+      diagnostics.append(diagnosticsText, diagnosticsCopy);
+    }
+    root.append(diagnostics);
+  }
+
+  const startButton = actions.querySelector<HTMLButtonElement>(
+    "[data-ar-action='explain'][data-session-mode='immersive-ar']",
+  );
+  const vrButton = actions.querySelector<HTMLButtonElement>(
+    "[data-ar-action='explain'][data-session-mode='immersive-vr']",
+  );
+  const confirmationTitle = dialog.querySelector<HTMLElement>("#ar-confirmation-title");
+  const confirmationDescription = dialog.querySelector<HTMLElement>("#ar-confirmation-description");
+  const confirmStartButton = dialog.querySelector<HTMLButtonElement>("[data-ar-action='start']");
+  if (!startButton || !vrButton || !confirmationTitle || !confirmationDescription || !confirmStartButton) {
+    throw new Error("The immersive session controls could not be created.");
+  }
+
+  let disposed = false;
+  const activeTargets = [document.documentElement, document.body, root];
+  let sessionState = "idle";
+  let spatialActive = false;
+  let activeXrSession: ArSessionHandle | null = null;
+  let selectedMode: "immersive-ar" | "immersive-vr" = "immersive-ar";
+  let activeMode: "immersive-ar" | "immersive-vr" = "immersive-ar";
+  let telemetryMode: "immersive-ar" | "immersive-vr" = "immersive-ar";
+  let grantedFeatures: readonly string[] = [];
+  let supportedModes: readonly string[] = [];
+  let latestSessionInfo: ArSessionRuntimeInfo | null = null;
+  let lastXrErrorMessage: string | null = null;
+  let lastXrErrorStack: string | null = null;
+  let diagnosticsRefresh: ReturnType<typeof globalThis.setInterval> | null = null;
+  let diagnosticsSnapshotTimeout: ReturnType<typeof globalThis.setTimeout> | null = null;
+  let diagnosticsSnapshotTaken = false;
+  let xrInputSession: ArSessionHandle | null = null;
+  let statusDismissTimeout: ReturnType<typeof globalThis.setTimeout> | null = null;
+  const updateDiagnostics = (): string => {
+    const report = buildXrDiagnosticsText({
+      supportedModes,
+      requestedFeatures: latestSessionInfo?.requestedFeatures ?? [],
+      grantedFeatures,
+      overlayGranted: latestSessionInfo?.overlayGranted ?? null,
+      interactionMode: latestSessionInfo?.interactionMode ?? null,
+      environmentBlendMode: latestSessionInfo?.environmentBlendMode ?? null,
+      inputSourceTypes: latestSessionInfo?.inputSourceTypes ?? [],
+      referenceSpaceType: latestSessionInfo?.referenceSpaceType ?? null,
+      frameRate: latestSessionInfo?.frameRate ?? null,
+      scene: renderer.getXrSceneDiagnostics(),
+      lastErrorMessage: lastXrErrorMessage,
+      lastErrorStack: lastXrErrorStack,
+    });
+    if (diagnosticsText) diagnosticsText.textContent = report;
+    root.dispatchEvent(new Event("mma:xr-diagnostics-update"));
+    return report;
+  };
+  const onInputSourcesChange = (): void => {
+    latestSessionInfo = controller.sessionInfo;
+    updateDiagnostics();
+  };
+  let cancelComfortBreak: (() => void) | null = null;
+  const setStatus = (message: string, autoDismissMs?: number): void => {
+    if (statusDismissTimeout !== null) globalThis.clearTimeout(statusDismissTimeout);
+    statusDismissTimeout = null;
+    status.textContent = message;
+    status.hidden = message.length === 0;
+    if (message && autoDismissMs !== undefined) {
+      statusDismissTimeout = globalThis.setTimeout(() => {
+        statusDismissTimeout = null;
+        setStatus("");
+      }, autoDismissMs);
+    }
+  };
+  const recordEvent = (type: "ar_session_started" | "ar_session_ended" | "ar_error", payload: Record<string, unknown>): void => {
+    if (disposed) {
+      return;
+    }
+    const event = arTelemetryEventSchema.parse({
+      ...options.telemetryContext,
+      eventId: options.idGenerator(),
+      ts: options.clock(),
+      device: {
+        ...options.telemetryContext.device,
+        mode: (type === "ar_session_ended" ? telemetryMode : activeMode) === "immersive-vr" ? "vr" : "ar",
+      },
+      type,
+      payload,
+    });
+    const detail = "grantedFeatures" in event.payload
+      ? event.payload.grantedFeatures.join(", ") || "none"
+      : "durationSec" in event.payload
+        ? `${event.payload.durationSec.toFixed(1)} seconds`
+        : "reasonCode" in event.payload
+          ? event.payload.reasonCode
+          : "-";
+    options.recordLocalEvent(event.type, event.ts, detail);
+  };
+  const controller = new ArSessionController({
+    overlayRoot: root,
+    presentation: {
+      enter: async (session, mode) => {
+        activeXrSession = session;
+        await renderer.enterARSession(session as unknown as EventTarget, mode);
+      },
+      exit: async () => {
+        await renderer.exitARSession();
+        activeXrSession = null;
+      },
+    },
+    onStateChange: (state, sessionInfo) => {
+      if (disposed) {
+        return;
+      }
+      const inAr = state.status === "active" || state.status === "ending";
+      const spatialShouldBeActive = state.status === "active";
+      sessionState = state.status;
+      latestSessionInfo = sessionInfo;
+      grantedFeatures = state.status === "active" ? state.grantedFeatures : [];
+      setArActiveState(inAr, activeTargets);
+      if (inAr) {
+        hud.mount(sessionInfo.overlayGranted === true);
+      } else {
+        if (diagnosticsSnapshotTimeout !== null) {
+          globalThis.clearTimeout(diagnosticsSnapshotTimeout);
+          diagnosticsSnapshotTimeout = null;
+        }
+        diagnosticsSnapshotTaken = false;
+        if (state.status === "idle") {
+          activeMode = "immersive-ar";
+        }
+        hud.unmount();
+        breakReminder.hidden = true;
+        cancelComfortBreak?.();
+        cancelComfortBreak = null;
+      }
+      exitButton.textContent = sessionInfo.mode === "immersive-vr" ? "Exit VR" : "Exit AR";
+      exitButton.hidden = !inAr || sessionInfo.overlayGranted !== true;
+      exitButton.disabled = state.status !== "active";
+      startButton.disabled = state.status === "requesting" || inAr;
+      vrButton.disabled = state.status === "requesting" || inAr;
+      if (diagnostics) {
+        diagnostics.hidden = inAr && sessionInfo.overlayGranted === false;
+        if (inAr) updateDiagnostics();
+      }
+      if (spatialActive !== spatialShouldBeActive) {
+        spatialActive = spatialShouldBeActive;
+        options.onSpatialActiveChange?.(
+          spatialActive,
+          sessionInfo,
+          spatialActive ? activeXrSession : null,
+        );
+      }
+      if (diagnostics) {
+        diagnostics.hidden = inAr && sessionInfo.overlayGranted === false;
+        if (!inAr) {
+          if (diagnosticsRefresh !== null) globalThis.clearInterval(diagnosticsRefresh);
+          diagnosticsRefresh = null;
+          xrInputSession?.removeEventListener("inputsourceschange", onInputSourcesChange);
+          xrInputSession = null;
+        } else {
+          if (activeXrSession !== xrInputSession) {
+            xrInputSession?.removeEventListener("inputsourceschange", onInputSourcesChange);
+            xrInputSession = activeXrSession;
+            xrInputSession?.addEventListener("inputsourceschange", onInputSourcesChange);
+          }
+          updateDiagnostics();
+          if (state.status === "active" && !diagnosticsSnapshotTaken) {
+            diagnosticsSnapshotTaken = true;
+            diagnosticsSnapshotTimeout = globalThis.setTimeout(() => {
+              diagnosticsSnapshotTimeout = null;
+              if (!disposed && sessionState === "active") updateDiagnostics();
+            }, 2000);
+          }
+          if (diagnosticsRefresh === null) {
+            diagnosticsRefresh = globalThis.setInterval(() => {
+              latestSessionInfo = controller.sessionInfo;
+              updateDiagnostics();
+            }, 1000);
+          }
+        }
+      }
+      if (state.status === "active") {
+        setStatus("");
+      }
+    },
+    onStarted: (grantedFeatures, sessionInfo) => {
+      activeMode = sessionInfo.mode ?? "immersive-ar";
+      recordEvent("ar_session_started", {
+        mode: activeMode,
+        grantedFeatures: [...grantedFeatures],
+      });
+      cancelComfortBreak?.();
+      cancelComfortBreak = scheduleComfortBreakReminder(() => {
+        cancelComfortBreak = null;
+        if (disposed || sessionState !== "active") {
+          return;
+        }
+        options.publishComfortBreakShown(options.getActiveMissionId());
+        const reminder = root.querySelector<HTMLElement>("#ar-break-reminder");
+        if (reminder) {
+          reminder.hidden = false;
+        }
+      });
+    },
+    onEnded: (durationSec) => recordEvent("ar_session_ended", { durationSec }),
+    onError: (reasonCode) => {
+      recordEvent("ar_error", { reasonCode });
+      if (!disposed) {
+        setStatus(arFailureMessage(reasonCode, activeMode), 6000);
+      }
+    },
+  });
+  const onSpatialRuntimeError = (event: Event): void => {
+    if (disposed) return;
+    const details = diagnosticErrorDetails((event as CustomEvent<unknown>).detail);
+    lastXrErrorMessage = details.message;
+    lastXrErrorStack = details.stack;
+    updateDiagnostics();
+    void controller.stop().then(() => {
+      if (!disposed) setStatus(arFailureMessage("unknown", activeMode), 6000);
+    }).catch(() => {
+      if (!disposed) setStatus(arFailureMessage("unknown", activeMode), 6000);
+    });
+  };
+  root.addEventListener("mma:xr-runtime-error", onSpatialRuntimeError);
+
+  if (diagnostics) {
+    updateDiagnostics();
+  }
+
+  const breakReminder = document.createElement("div");
+  breakReminder.id = "ar-break-reminder";
+  breakReminder.className = "ar-break-reminder";
+  breakReminder.setAttribute("role", "status");
+  breakReminder.setAttribute("aria-live", "polite");
+  breakReminder.textContent = "Take a short break";
+  breakReminder.hidden = true;
+  root.append(breakReminder);
+
+  const onAction = (event: MouseEvent): void => {
+    const action = (event.target as Element | null)
+      ?.closest<HTMLElement>("[data-ar-action]")?.dataset.arAction;
+    if (action === "explain") {
+      selectedMode = (event.target as Element | null)
+        ?.closest<HTMLElement>("[data-session-mode]")?.dataset.sessionMode === "immersive-vr"
+        ? "immersive-vr"
+        : "immersive-ar";
+      const isVr = selectedMode === "immersive-vr";
+      confirmationTitle.textContent = isVr ? `View ${subject} in VR?` : `View ${subject} in AR?`;
+      confirmationDescription.textContent = isVr
+        ? `${capitalise(subject)} and lesson panels appear in front of you. Nothing is recorded or uploaded.`
+        : `Your camera shows the real world so ${subject} can appear in front of you. Nothing is recorded or uploaded.`;
+      confirmStartButton.textContent = isVr ? "Start VR" : "Start AR";
+      confirmStartButton.setAttribute("aria-label", isVr ? "Start VR" : "Start AR");
+      setStatus("");
+      dialog.showModal();
+    } else if (action === "copy-xr-report") {
+      const clipboard = navigator.clipboard;
+      if (!clipboard?.writeText) {
+        setStatus("Clipboard is unavailable. You can select and copy the report text.");
+        return;
+      }
+      void clipboard.writeText(updateDiagnostics()).then(() => {
+        setStatus("XR report copied.");
+      }).catch((error: unknown) => {
+        setStatus(error instanceof Error ? `Could not copy XR report: ${error.message}` : "Could not copy XR report.");
+      });
+    } else if (action === "cancel") {
+      dialog.close();
+    } else if (action === "start") {
+      dialog.close();
+      activeMode = selectedMode;
+      telemetryMode = selectedMode;
+      setStatus(selectedMode === "immersive-vr" ? "Starting VR..." : "Starting AR...");
+      void controller.start(selectedMode).catch((error: unknown) => {
+        if (!disposed) {
+          const details = diagnosticErrorDetails(error);
+          lastXrErrorMessage = details.message;
+          lastXrErrorStack = details.stack;
+          updateDiagnostics();
+          setStatus(error instanceof ArSessionStartError
+            ? arFailureMessage(error.reasonCode, selectedMode)
+            : arFailureMessage("unknown", selectedMode), 6000);
+        }
+      });
+    } else if (action === "exit") {
+      exitButton.disabled = true;
+      void controller.stop().catch(() => {
+        if (!disposed) {
+          setStatus("AR has ended. You are back in screen mode.", 6000);
+        }
+      });
+    }
+  };
+  const onBeforeXrSelect = (event: Event): void => {
+    event.preventDefault();
+  };
+  root.addEventListener("click", onAction);
+  root.addEventListener("beforexrselect", onBeforeXrSelect);
+
+  void detectArSupport().then((result) => {
+    if (disposed) {
+      return;
+    }
+    supportedModes = result.supported ? result.modes : [];
+    updateDiagnostics();
+    startButton.hidden = !result.supported || !result.modes.includes("immersive-ar");
+    // Phone VR needs a Cardboard-style viewer; hidden until that mode is designed.
+    vrButton.hidden = !result.supported || !result.modes.includes("immersive-vr") || isTouchFirstDevice();
+    supportMessage.textContent = result.supported ? "" : result.reason;
+    supportMessage.hidden = result.supported;
+  }).catch(() => {
+    if (!disposed) {
+      supportMessage.textContent = "AR support could not be checked. You can keep learning in screen mode.";
+      supportMessage.hidden = false;
+    }
+  });
+
+  return async () => {
+    disposed = true;
+    root.removeEventListener("mma:xr-runtime-error", onSpatialRuntimeError);
+      if (statusDismissTimeout !== null) globalThis.clearTimeout(statusDismissTimeout);
+    statusDismissTimeout = null;
+    root.removeEventListener("click", onAction);
+    root.removeEventListener("beforexrselect", onBeforeXrSelect);
+    cancelComfortBreak?.();
+    cancelComfortBreak = null;
+    if (diagnosticsRefresh !== null) globalThis.clearInterval(diagnosticsRefresh);
+    if (diagnosticsSnapshotTimeout !== null) globalThis.clearTimeout(diagnosticsSnapshotTimeout);
+    xrInputSession?.removeEventListener("inputsourceschange", onInputSourcesChange);
+    if (dialog.open) {
+      dialog.close();
+    }
+    await controller.stop();
+    if (spatialActive) options.onSpatialActiveChange?.(false, controller.sessionInfo, null);
+    hud.unmount();
+    setArActiveState(false, activeTargets);
+    actions.remove();
+    supportMessage.remove();
+    dialog.remove();
+    status.remove();
+    exitButton.remove();
+    breakReminder.remove();
+    diagnostics?.remove();
+  };
+}
+
+export function arFailureMessage(
+  reasonCode: ArErrorReasonCode,
+  mode: "immersive-ar" | "immersive-vr" = "immersive-ar",
+): string {
   if (mode === "immersive-vr") {
     switch (reasonCode) {
       case "permission_denied":
@@ -96,240 +587,11 @@ export function xrFailureMessage(reasonCode: ArErrorReasonCode, mode: XrSessionM
   }
 }
 
-/** Consent dialog wording for a mode. Nothing is recorded or uploaded in either mode. */
-export function xrConsentText(mode: XrSessionMode, subject: string): { title: string; body: string; start: string } {
-  return mode === "immersive-vr"
-    ? {
-      title: `View ${subject} in VR?`,
-      body: `${capitalise(subject)} and the lesson panels appear in front of you. Nothing is recorded or uploaded.`,
-      start: "Start VR",
-    }
-    : {
-      title: `View ${subject} in AR?`,
-      body: `Your camera shows the real world so ${subject} can appear in front of you. Nothing is recorded or uploaded.`,
-      start: "Start AR",
-    };
-}
-
-/** Touch-only devices (phones, tablets) have no fine pointer. Phone VR stays hidden on them. */
+/** Touch-only devices (phones, tablets) have no fine pointer. Phone VR stays hidden on them for now. */
 export function isTouchFirstDevice(
   matchMedia: (query: string) => { matches: boolean } = (query) => globalThis.matchMedia(query),
 ): boolean {
   return !matchMedia("(any-pointer: fine)").matches;
-}
-
-/** Mount the session controls. Screen mode keeps working whether or not AR/VR is available. */
-export function mountXrSession(options: XrSessionOptions): XrSessionControls {
-  const { root } = options;
-  const doc = root.ownerDocument;
-
-  const entry = el(doc, "div", "mma-xr-entry");
-  const arButton = el(doc, "button", "mma-button mma-button--primary", "Enter AR");
-  const vrButton = el(doc, "button", "mma-button mma-button--secondary", "Enter VR");
-  for (const [button, mode] of [[arButton, "immersive-ar"], [vrButton, "immersive-vr"]] as const) {
-    button.type = "button";
-    button.hidden = true;
-    button.dataset.xrRequest = mode;
-    entry.append(button);
-  }
-  options.entrySlot.append(entry);
-
-  const support = el(doc, "p", "mma-xr-support");
-  support.setAttribute("role", "status");
-  support.hidden = true;
-  options.entrySlot.after(support);
-
-  const dialog = el(doc, "dialog", "mma-xr-consent mma-ui");
-  dialog.setAttribute("aria-labelledby", "mma-xr-consent-title");
-  const title = el(doc, "h2", "");
-  title.id = "mma-xr-consent-title";
-  const body = el(doc, "p", "");
-  const safety = el(doc, "p", "", "Stay seated, look around you, and keep an eye on your surroundings.");
-  const actions = el(doc, "div", "mma-xr-consent__actions");
-  const cancel = el(doc, "button", "mma-button mma-button--secondary", "Cancel");
-  cancel.type = "button";
-  const start = el(doc, "button", "mma-button mma-button--primary", "Start");
-  start.type = "button";
-  actions.append(cancel, start);
-  dialog.append(title, body, safety, actions);
-  root.append(dialog);
-
-  const status = el(doc, "p", "mma-xr-status");
-  status.setAttribute("role", "status");
-  status.setAttribute("aria-live", "polite");
-  status.hidden = true;
-  root.append(status);
-
-  const breakReminder = el(doc, "p", "mma-xr-break", "Time for a short break. Look away from the screen for a minute.");
-  breakReminder.setAttribute("role", "status");
-  breakReminder.hidden = true;
-  root.append(breakReminder);
-
-  const exitButton = el(doc, "button", "mma-button mma-xr-exit", "Exit AR");
-  exitButton.type = "button";
-  exitButton.hidden = true;
-  options.exitSlot.append(exitButton);
-
-  const activeTargets = [doc.documentElement, doc.body, root];
-  let disposed = false;
-  let selectedMode: XrSessionMode = "immersive-ar";
-  let activeMode: XrSessionMode = "immersive-ar";
-  let active = false;
-  let statusTimeout: ReturnType<typeof setTimeout> | null = null;
-  let breakTimeout: ReturnType<typeof setTimeout> | null = null;
-
-  const setStatus = (message: string, autoDismissMs?: number): void => {
-    if (statusTimeout !== null) clearTimeout(statusTimeout);
-    statusTimeout = null;
-    status.textContent = message;
-    status.hidden = message === "";
-    if (message && autoDismissMs !== undefined) {
-      statusTimeout = setTimeout(() => setStatus(""), autoDismissMs);
-    }
-  };
-
-  const record = (type: "ar_session_started" | "ar_session_ended" | "ar_error", payload: Record<string, unknown>): void => {
-    if (disposed) return;
-    options.onTelemetry?.(arTelemetryEventSchema.parse({
-      ...options.telemetryContext,
-      eventId: options.idGenerator(),
-      ts: options.clock(),
-      device: { ...options.telemetryContext.device, mode: activeMode === "immersive-vr" ? "vr" : "ar" },
-      type,
-      payload,
-    }));
-  };
-
-  const info = (sessionInfo: ArSessionRuntimeInfo): XrSessionInfo => ({
-    mode: sessionInfo.mode ?? activeMode,
-    overlay: sessionInfo.overlayGranted === true,
-  });
-
-  const controller = new ArSessionController({
-    overlayRoot: root,
-    presentation: {
-      enter: async (session: ArSessionHandle, mode) => {
-        await options.renderer.enterARSession(session as unknown as EventTarget, mode);
-      },
-      exit: async () => {
-        await options.renderer.exitARSession();
-      },
-    },
-    onStateChange: (state, sessionInfo) => {
-      if (disposed) return;
-      const inSession = state.status === "active" || state.status === "ending";
-      setArActiveState(inSession, activeTargets);
-      root.classList.toggle("xr-vr-active", inSession && sessionInfo.mode === "immersive-vr");
-      exitButton.textContent = sessionInfo.mode === "immersive-vr" ? "Exit VR" : "Exit AR";
-      exitButton.hidden = !inSession || sessionInfo.overlayGranted !== true;
-      exitButton.disabled = state.status !== "active";
-      arButton.disabled = state.status === "requesting" || inSession;
-      vrButton.disabled = state.status === "requesting" || inSession;
-      const nowActive = state.status === "active";
-      if (nowActive !== active) {
-        active = nowActive;
-        if (!active) {
-          breakReminder.hidden = true;
-          if (breakTimeout !== null) clearTimeout(breakTimeout);
-          breakTimeout = null;
-        }
-        options.onActiveChange(active, info(sessionInfo));
-      }
-      if (nowActive) setStatus("");
-    },
-    onStarted: (granted, sessionInfo) => {
-      activeMode = sessionInfo.mode ?? activeMode;
-      record("ar_session_started", { mode: activeMode, grantedFeatures: [...granted] });
-      if (breakTimeout !== null) clearTimeout(breakTimeout);
-      breakTimeout = setTimeout(() => {
-        breakTimeout = null;
-        if (disposed || !active) return;
-        breakReminder.hidden = false;
-        options.onComfortBreak?.();
-      }, COMFORT_BREAK_DELAY_MS);
-    },
-    onEnded: (durationSec) => record("ar_session_ended", { durationSec }),
-    onError: (reasonCode) => {
-      record("ar_error", { reasonCode });
-      if (!disposed) setStatus(xrFailureMessage(reasonCode, activeMode), 6000);
-    },
-  });
-
-  const request = (mode: XrSessionMode): void => {
-    selectedMode = mode;
-    const text = xrConsentText(mode, options.subject);
-    title.textContent = text.title;
-    body.textContent = text.body;
-    start.textContent = text.start;
-    setStatus("");
-    dialog.showModal();
-  };
-
-  const exit = async (): Promise<void> => {
-    exitButton.disabled = true;
-    try {
-      await controller.stop();
-    } catch {
-      if (!disposed) setStatus("The session has ended. You are back in screen mode.", 6000);
-    }
-  };
-
-  const onEntryClick = (event: MouseEvent): void => {
-    const mode = (event.target as Element | null)?.closest<HTMLElement>("[data-xr-request]")?.dataset.xrRequest;
-    if (mode === "immersive-ar" || mode === "immersive-vr") request(mode);
-  };
-  const onCancel = (): void => dialog.close();
-  const onStart = (): void => {
-    dialog.close();
-    activeMode = selectedMode;
-    setStatus(selectedMode === "immersive-vr" ? "Starting VR..." : "Starting AR...");
-    void controller.start(selectedMode).catch((error: unknown) => {
-      if (disposed) return;
-      setStatus(xrFailureMessage(error instanceof ArSessionStartError ? error.reasonCode : "unknown", selectedMode), 6000);
-    });
-  };
-  const onExit = (): void => void exit();
-  // Taps on the DOM overlay must not also fire an XR "select" in the scene.
-  const onBeforeXrSelect = (event: Event): void => event.preventDefault();
-
-  entry.addEventListener("click", onEntryClick);
-  cancel.addEventListener("click", onCancel);
-  start.addEventListener("click", onStart);
-  exitButton.addEventListener("click", onExit);
-  root.addEventListener("beforexrselect", onBeforeXrSelect);
-
-  void detectArSupport().then((result) => {
-    if (disposed) return;
-    arButton.hidden = !result.supported || !result.modes.includes("immersive-ar");
-    // Phone VR needs a Cardboard-style viewer; hidden until that mode is designed (ADR 0006).
-    vrButton.hidden = !result.supported || !result.modes.includes("immersive-vr") || isTouchFirstDevice();
-    support.textContent = result.supported ? "" : result.reason;
-    support.hidden = result.supported;
-  }).catch(() => {
-    if (disposed) return;
-    support.textContent = "AR support could not be checked. You can keep learning in screen mode.";
-    support.hidden = false;
-  });
-
-  return {
-    request,
-    exit,
-    async dispose() {
-      disposed = true;
-      if (statusTimeout !== null) clearTimeout(statusTimeout);
-      if (breakTimeout !== null) clearTimeout(breakTimeout);
-      entry.removeEventListener("click", onEntryClick);
-      cancel.removeEventListener("click", onCancel);
-      start.removeEventListener("click", onStart);
-      exitButton.removeEventListener("click", onExit);
-      root.removeEventListener("beforexrselect", onBeforeXrSelect);
-      if (dialog.open) dialog.close();
-      await controller.stop();
-      if (active) options.onActiveChange(false, { mode: activeMode, overlay: false });
-      setArActiveState(false, activeTargets);
-      for (const element of [entry, support, dialog, status, breakReminder, exitButton]) element.remove();
-    },
-  };
 }
 
 function capitalise(text: string): string {
