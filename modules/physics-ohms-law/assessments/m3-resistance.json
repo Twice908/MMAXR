@@ -1,0 +1,30 @@
+[
+  {
+    "id": "assess.ohm.resistance.01",
+    "prompt": "The potential difference stays at 3 V. Which resistor lets the largest current flow?",
+    "options": [
+      { "id": "a", "text": "10 Ω" },
+      { "id": "b", "text": "5 Ω" },
+      { "id": "c", "text": "2 Ω" },
+      { "id": "d", "text": "All three give the same current" }
+    ],
+    "correctOptionIndex": 2,
+    "explanation": "I = V ÷ R. With the same potential difference, the smallest resistance gives the largest current: 3 V ÷ 2 Ω = 1.5 A.",
+    "conceptIds": ["sci.phys.electricity.resistance", "sci.phys.electricity.ohms-law"],
+    "reviewStatus": "pending"
+  },
+  {
+    "id": "assess.ohm.resistance.02",
+    "prompt": "A voltmeter across an unknown resistor reads 4.5 V, and the ammeter reads 0.9 A. What is the resistance?",
+    "options": [
+      { "id": "a", "text": "5 Ω" },
+      { "id": "b", "text": "4.05 Ω" },
+      { "id": "c", "text": "0.2 Ω" },
+      { "id": "d", "text": "9 Ω" }
+    ],
+    "correctOptionIndex": 0,
+    "explanation": "R = V ÷ I = 4.5 V ÷ 0.9 A = 5 Ω.",
+    "conceptIds": ["sci.phys.electricity.resistance", "sci.phys.electricity.ohms-law"],
+    "reviewStatus": "pending"
+  }
+]

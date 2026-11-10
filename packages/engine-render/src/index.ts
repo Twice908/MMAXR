@@ -61,6 +61,14 @@ export {
   type SceneContent,
 } from "./molecule-view.js";
 export {
+  CircuitView,
+  circuitPartTarget,
+  type CircuitPartShape,
+  type CircuitSceneFrame,
+  type CircuitScenePart,
+  type CircuitViewOptions,
+} from "./circuit-view.js";
+export {
   DEFAULT_WORLD_OPTIONS,
   SceneRenderer,
   arTouchGestureConfig,

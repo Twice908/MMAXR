@@ -18,5 +18,29 @@
   "sci.chem.bonding.ionic": {
     "classes": [9, 10],
     "boards": ["CBSE", "ICSE", "STATE"]
+  },
+  "sci.phys.electricity.current": {
+    "classes": [10, 12],
+    "boards": ["CBSE", "ICSE", "STATE"]
+  },
+  "sci.phys.electricity.potential-difference": {
+    "classes": [10, 12],
+    "boards": ["CBSE", "ICSE", "STATE"]
+  },
+  "sci.phys.electricity.resistance": {
+    "classes": [10, 12],
+    "boards": ["CBSE", "ICSE", "STATE"]
+  },
+  "sci.phys.electricity.ohms-law": {
+    "classes": [10, 12],
+    "boards": ["CBSE", "ICSE", "STATE"]
+  },
+  "sci.phys.electricity.meters": {
+    "classes": [10, 12],
+    "boards": ["CBSE", "ICSE", "STATE"]
+  },
+  "sci.phys.electricity.non-ohmic": {
+    "classes": [10, 12],
+    "boards": ["CBSE", "ICSE", "STATE"]
   }
 }

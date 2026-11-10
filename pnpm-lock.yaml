@@ -48,6 +48,9 @@ importers:
       '@mma/chem-ionic-bonding':
         specifier: workspace:*
         version: link:../../modules/chem-ionic-bonding
+      '@mma/physics-ohms-law':
+        specifier: workspace:*
+        version: link:../../modules/physics-ohms-law
       '@pmndrs/uikit':
         specifier: 1.0.78
         version: 1.0.78(super-three@0.181.0)
@@ -136,6 +139,33 @@ importers:
       '@mma/kit-chemistry':
         specifier: workspace:*
         version: link:../../packages/kits/chemistry
+      '@mma/schema':
+        specifier: workspace:*
+        version: link:../../packages/schema
+
+  modules/physics-ohms-law:
+    dependencies:
+      '@mma/engine-assess':
+        specifier: workspace:*
+        version: link:../../packages/engine-assess
+      '@mma/engine-core':
+        specifier: workspace:*
+        version: link:../../packages/engine-core
+      '@mma/engine-lesson':
+        specifier: workspace:*
+        version: link:../../packages/engine-lesson
+      '@mma/engine-render':
+        specifier: workspace:*
+        version: link:../../packages/engine-render
+      '@mma/engine-ui':
+        specifier: workspace:*
+        version: link:../../packages/engine-ui
+      '@mma/engine-voice':
+        specifier: workspace:*
+        version: link:../../packages/engine-voice
+      '@mma/kit-physics':
+        specifier: workspace:*
+        version: link:../../packages/kits/physics
       '@mma/schema':
         specifier: workspace:*
         version: link:../../packages/schema
@@ -245,6 +275,12 @@ importers:
         version: link:../engine-core
 
   packages/kits/chemistry:
+    dependencies:
+      '@mma/engine-core':
+        specifier: workspace:*
+        version: link:../../engine-core
+
+  packages/kits/physics:
     dependencies:
       '@mma/engine-core':
         specifier: workspace:*

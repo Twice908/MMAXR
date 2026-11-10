@@ -151,4 +151,45 @@ export default tseslint.config(
       "no-console": "error",
     },
   },
+  {
+    files: ["packages/kits/physics/**/*.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "@mma/kit-*",
+                "@mma/modules/*",
+                "@mma/chem-*",
+                "@mma/physics-*",
+                "@mma/web",
+                "@mma/engine-render",
+                "@mma/engine-ui",
+                "@mma/engine-xr",
+                "**/apps/**",
+                "**/modules/**",
+                "three",
+                "three/*",
+              ],
+              message: "kit-physics holds pure subject rules: no apps, modules, other kits, renderers, UI or Three.js.",
+            },
+          ],
+        },
+      ],
+      "no-restricted-properties": [
+        "error",
+        { object: "Date", property: "now", message: "Inject a clock instead of reading the system time." },
+        { object: "Math", property: "random", message: "Inject an ID generator instead of using random values." },
+      ],
+      "no-restricted-globals": [
+        "error",
+        { name: "window", message: "Kit rules must remain DOM-agnostic." },
+        { name: "document", message: "Kit rules must remain DOM-agnostic." },
+        { name: "fetch", message: "Kit rules must not perform I/O." },
+      ],
+      "no-console": "error",
+    },
+  },
 );

@@ -1,0 +1,30 @@
+[
+  {
+    "id": "assess.ohm.voltage.01",
+    "prompt": "A current of 0.3 A flows through a resistor when the potential difference across it is 3 V. What is the current at 6 V, at the same temperature?",
+    "options": [
+      { "id": "a", "text": "0.15 A" },
+      { "id": "b", "text": "0.6 A" },
+      { "id": "c", "text": "0.3 A" },
+      { "id": "d", "text": "1.2 A" }
+    ],
+    "correctOptionIndex": 1,
+    "explanation": "The current is proportional to the potential difference. Doubling the potential difference from 3 V to 6 V doubles the current, from 0.3 A to 0.6 A.",
+    "conceptIds": ["sci.phys.electricity.ohms-law"],
+    "reviewStatus": "pending"
+  },
+  {
+    "id": "assess.ohm.voltage.02",
+    "prompt": "The V–I graph for a resistor is a straight line through the origin. What does this show?",
+    "options": [
+      { "id": "a", "text": "The current gets smaller as the potential difference gets larger" },
+      { "id": "b", "text": "The resistance changes with the potential difference" },
+      { "id": "c", "text": "No current flows through the resistor" },
+      { "id": "d", "text": "The current is proportional to the potential difference, so the resistor obeys Ohm's law" }
+    ],
+    "correctOptionIndex": 3,
+    "explanation": "A straight line through the origin means V ÷ I stays the same. That constant is the resistance, R = V ÷ I, and the resistor obeys Ohm's law.",
+    "conceptIds": ["sci.phys.electricity.ohms-law", "sci.phys.electricity.resistance"],
+    "reviewStatus": "pending"
+  }
+]

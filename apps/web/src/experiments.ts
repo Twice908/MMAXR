@@ -1,5 +1,6 @@
 import { manifest as atomBuilder } from "@mma/chem-atom-builder/manifest";
 import { manifest as ionicBonding } from "@mma/chem-ionic-bonding/manifest";
+import { manifest as ohmsLaw } from "@mma/physics-ohms-law/manifest";
 import type { Experiment } from "./catalogue.js";
 
 /**
@@ -44,6 +45,20 @@ export const experiments: readonly Experiment[] = [
       ]);
       return (root, context) =>
         mountIonicBonding(root, { worldOptions: projectOptions, onExit: context.onExit });
+    },
+  },
+  {
+    id: ohmsLaw.id,
+    subject: ohmsLaw.subject,
+    title: ohmsLaw.title.en ?? Object.values(ohmsLaw.title)[0] ?? ohmsLaw.id,
+    estimatedMinutes: ohmsLaw.estimatedMinutes,
+    releaseStatus: ohmsLaw.releaseStatus,
+    load: async () => {
+      const [{ mountOhmsLaw }, { default: projectOptions }] = await Promise.all([
+        import("@mma/physics-ohms-law"),
+        import("virtual:iwsdk-project"),
+      ]);
+      return (root, context) => mountOhmsLaw(root, { worldOptions: projectOptions, onExit: context.onExit });
     },
   },
 ];

@@ -140,3 +140,56 @@
   font-size: 16px;
   text-align: center;
 }
+
+/* Data table (readings). Scrolls sideways on narrow screens instead of squeezing columns. */
+.mma-table { overflow-x: auto; }
+.mma-table__table { width: 100%; border-collapse: collapse; font-size: 15px; }
+.mma-table__table th, .mma-table__table td { padding: 8px 10px; border-bottom: 1px solid var(--mma-line); text-align: left; white-space: nowrap; }
+.mma-table__table th { color: var(--mma-muted); font-size: 13px; font-weight: 700; }
+.mma-table__table .is-numeric { text-align: right; font-variant-numeric: tabular-nums; }
+.mma-table__empty, .mma-graph__empty { margin: 0; color: var(--mma-muted); font-size: 15px; }
+
+/* XY graph. Series differ by colour and marker shape, and are named in the legend. */
+.mma-graph { display: grid; gap: 6px; margin: 0; }
+.mma-graph__title { font-size: 15px; font-weight: 700; }
+.mma-graph__plot { width: 100%; max-width: 520px; height: auto; }
+.mma-graph__grid { stroke: var(--mma-line); stroke-width: 1; }
+.mma-graph__axis { stroke: var(--mma-ink); stroke-width: 1.5; }
+.mma-graph__tick { fill: var(--mma-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.mma-graph__axis-title { fill: var(--mma-ink); font-size: 12px; font-weight: 700; }
+.mma-graph__line { fill: none; stroke-width: 2; }
+.mma-graph__marker { stroke: #fff; stroke-width: 1.5; }
+.mma-graph__series--0 { --mma-series: var(--mma-teal); }
+.mma-graph__series--1 { --mma-series: var(--mma-coral); }
+.mma-graph__series--2 { --mma-series: #6b4fa0; }
+.mma-graph__series--3 { --mma-series: #a87400; }
+.mma-graph__line.mma-graph__series--0, .mma-graph__line.mma-graph__series--1,
+.mma-graph__line.mma-graph__series--2, .mma-graph__line.mma-graph__series--3 { stroke: var(--mma-series); }
+.mma-graph__marker.mma-graph__series--0, .mma-graph__marker.mma-graph__series--1,
+.mma-graph__marker.mma-graph__series--2, .mma-graph__marker.mma-graph__series--3 { fill: var(--mma-series); }
+.mma-graph__legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; padding: 0; list-style: none; font-size: 14px; }
+.mma-graph__key { display: inline-flex; align-items: center; gap: 6px; }
+.mma-graph__swatch { width: 16px; height: 16px; overflow: visible; }
+
+/*
+ * Narration bar in a web view, opt-in: put `mma-narration-web` on the element that holds
+ * the bar (and its caption slot). Matches the Ionic Bonding web view.
+ */
+.mma-narration-web .narration-hud { display: grid; gap: 8px; margin-top: 12px; padding: 12px 16px; border: 1px solid var(--mma-line); border-radius: var(--mma-radius); background: var(--mma-panel); }
+.mma-narration-web .narration-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.mma-narration-web .narration-controls button, .mma-narration-web .narration-controls select {
+  min-height: var(--mma-target);
+  padding: 0 12px;
+  border: 1px solid var(--mma-line);
+  border-radius: 10px;
+  color: var(--mma-ink);
+  background: var(--mma-panel);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.mma-narration-web .narration-controls [data-narration-action="enable"] { border-color: var(--mma-teal); color: #fff; background: var(--mma-teal); }
+.mma-narration-web .narration-controls label { display: inline-flex; align-items: center; gap: 6px; color: var(--mma-muted); font-size: 14px; font-weight: 700; }
+.mma-narration-web .narration-audio-status { flex-basis: 100%; color: var(--mma-muted); font-size: 14px; }
+.mma-narration-web .narration-caption { margin: 0; padding: 10px 14px; border-radius: 10px; color: #fff; background: rgba(30, 41, 45, 0.92); font-size: 16px; text-align: center; }

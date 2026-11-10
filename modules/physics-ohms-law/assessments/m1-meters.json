@@ -1,0 +1,30 @@
+[
+  {
+    "id": "assess.ohm.meters.01",
+    "prompt": "How must an ammeter be connected to measure the current through a resistor?",
+    "options": [
+      { "id": "a", "text": "In series with the resistor" },
+      { "id": "b", "text": "Across (in parallel with) the resistor" },
+      { "id": "c", "text": "Across the battery" },
+      { "id": "d", "text": "It can go anywhere in the circuit" }
+    ],
+    "correctOptionIndex": 0,
+    "explanation": "The current must flow through the ammeter to be measured, so it goes in series, in the path of the current. An ammeter has almost no resistance, so across a part it would let the current bypass that part.",
+    "conceptIds": ["sci.phys.electricity.meters", "sci.phys.electricity.current"],
+    "reviewStatus": "pending"
+  },
+  {
+    "id": "assess.ohm.meters.02",
+    "prompt": "Why is a voltmeter connected across a resistor, not in series with it?",
+    "options": [
+      { "id": "a", "text": "It must carry all the current in the circuit" },
+      { "id": "b", "text": "It has almost no resistance" },
+      { "id": "c", "text": "It measures the potential difference between the two ends of the resistor" },
+      { "id": "d", "text": "It makes the current larger" }
+    ],
+    "correctOptionIndex": 2,
+    "explanation": "A voltmeter compares the two ends of a part, so it is joined to both ends. It has a very high resistance, so in series it would stop almost all of the current.",
+    "conceptIds": ["sci.phys.electricity.meters", "sci.phys.electricity.potential-difference"],
+    "reviewStatus": "pending"
+  }
+]

@@ -1,0 +1,30 @@
+[
+  {
+    "id": "assess.ohm.bulb.01",
+    "prompt": "Why does a filament bulb not obey Ohm's law?",
+    "options": [
+      { "id": "a", "text": "It has no resistance" },
+      { "id": "b", "text": "Its filament gets hotter as the current grows, so its resistance increases" },
+      { "id": "c", "text": "The ammeter cannot measure its current" },
+      { "id": "d", "text": "The potential difference across it is always 0 V" }
+    ],
+    "correctOptionIndex": 1,
+    "explanation": "A larger current heats the filament more, and a hotter filament has a higher resistance. V ÷ I is not constant, so its V–I graph curves instead of being a straight line.",
+    "conceptIds": ["sci.phys.electricity.non-ohmic", "sci.phys.electricity.resistance"],
+    "reviewStatus": "pending"
+  },
+  {
+    "id": "assess.ohm.bulb.02",
+    "prompt": "Ohm's law says the current through a conductor is proportional to the potential difference across it. Which condition must stay the same?",
+    "options": [
+      { "id": "a", "text": "The current" },
+      { "id": "b", "text": "The number of cells" },
+      { "id": "c", "text": "The potential difference" },
+      { "id": "d", "text": "The temperature of the conductor" }
+    ],
+    "correctOptionIndex": 3,
+    "explanation": "Ohm's law holds when the temperature (and other physical conditions) of the conductor stay the same. The bulb's filament heats up, which is why it does not obey the law.",
+    "conceptIds": ["sci.phys.electricity.ohms-law", "sci.phys.electricity.non-ohmic"],
+    "reviewStatus": "pending"
+  }
+]
