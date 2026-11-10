@@ -15,7 +15,10 @@ Current status (update this block as work completes):
 - Done: Camera view removed on all devices; supported views per device are in docs/adr/0006-supported-views.md (Screen everywhere, Android ARCore AR with a tab-bar HUD, headset AR/VR, desktop AR/VR for emulator dev only; phone VR viewer hidden).
 - Done: Ported the 3D scene, XR sessions and XR input to IWSDK 1.0.1 (super-three 0.181); XR lesson UI uses the Horizon UI kit; glass panels and the custom input rig are removed (docs/adr/0005-iwsdk-runtime.md). Needs headset and Android AR checks.
 - Done: Web-view access-code login, student dashboard (Physics, Chemistry, Biology sections; settings drawer) and hash routing (`#/login`, `#/dashboard`, `#/experiment/<id>`). Temporary gate, see docs/adr/0007-temporary-access-code-gate.md. Production accepts no code until the teacher's hashes are added with `pnpm generate:access-codes`.
-- Next: Review the eight assessment items and verify generated narration on desktop and phone.
+- Done: Ionic Bonding web view (`modules/chem-ionic-bonding`, draft, NaCl): shared `engine-lesson` and `engine-ui` packages, kit compound table and bonding rules, multi-atom `MoleculeView` (docs/adr/0008-shared-lesson-packages-and-ionic-bonding.md). The liquid-glass UI skill is removed; use the Horizon UI kit and standard UX rules.
+- Done: Ionic Bonding AR: phone AR (ARCore, DOM overlay HUD, in-model electron drag) and desktop emulator / headset AR (Horizon module panels with move buttons); shared `mountXrSession`, `createXrHud` (engine-ui) and `createXrModulePanels` (engine-render). Needs Android and headset checks (docs/ar-testing.md).
+- Done: Ionic Bonding VR (same shared session and Horizon panels), in-scene Na/Na+ and Cl/Cl- labels for headsets and the emulator, and an opt-in `xrLift` so the model sits just above eye level. Owner checked AR and VR in the emulator.
+- Next: Android and headset checks for Ionic Bonding; narration audio for Ionic Bonding; review the Atom Builder and Ionic Bonding assessment items and narration scripts.
 - Not started: Phase 2b live voice guide, remaining XR work (including headset VR and other 3a-4b work), portal link (Phase 4).
 
 ## 2. Phase gates (do not build ahead)
@@ -96,6 +99,7 @@ Also: new logic has unit tests; public APIs have TSDoc; no leftover debug code; 
 - Engine: `packages/engine-core` (store, actions, events, missions).
 - Chemistry rules: `packages/kits/chemistry`.
 - Narration: `packages/engine-voice`; mock asset generator: `tools/generate-narration`.
+- Shared lesson flow and lesson view model: `packages/engine-lesson`; shared screen lesson UI: `packages/engine-ui`.
 - XR UI reference and tokens: read `docs/horizon-ui.md` before any AR/VR/MR/XR UI work.
 - Decisions: `docs/adr/`.
 - Device testing record: `docs/device-matrix.md`.

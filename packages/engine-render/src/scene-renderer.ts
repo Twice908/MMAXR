@@ -9,7 +9,8 @@ import {
   type WorldOptions,
 } from "@iwsdk/core";
 import * as THREE from "three";
-import { AtomView, type ScreenSceneFrame } from "./atom-view.js";
+import { AtomView, type Position3, type ScreenSceneFrame } from "./atom-view.js";
+import type { SceneContent } from "./molecule-view.js";
 import { selectSnapTarget } from "./snap-target.js";
 import {
   screenDropTolerancePx,
@@ -20,6 +21,7 @@ import {
 } from "./screen-snap.js";
 import { screenZoomConfig } from "./zoom-controls.js";
 import { createXrLessonPanels, type XrLessonPanels } from "./xr-lesson-panels.js";
+import { createXrModulePanels, type XrModulePanels, type XrModulePanelsContent } from "./xr-module-panels.js";
 import type { XrLessonContent } from "./xr-lesson-content.js";
 
 /** Options for {@link SceneRenderer}. */
@@ -32,6 +34,42 @@ export interface SceneRendererOptions {
    */
   readonly worldOptions?: WorldOptions;
   readonly diagnostics?: boolean;
+  /**
+   * What to draw. Defaults to one {@link AtomView} driven by {@link SceneRenderer.update};
+   * pass a {@link MoleculeView} (or other content) to draw several atoms instead.
+   */
+  readonly content?: SceneContent;
+  /** Screen-mode camera distances. Defaults to {@link screenZoomConfig}. */
+  readonly screenZoom?: ScreenZoomDistances;
+  /** Content scale in XR (metres per content unit). Defaults to 0.05. */
+  readonly xrContentScale?: number;
+  /**
+   * Phone AR with a DOM overlay: project points and pick targets through the AR camera,
+   * in full-screen overlay coordinates, so page overlays (labels, grab rings) and touch
+   * drags line up with the camera view. Off by default.
+   */
+  readonly handheldOverlay?: boolean;
+  /**
+   * Raise everything placed in AR/VR (model, panels, dock) by this many metres. The
+   * default layout sits the model 12 cm below eye level; content below eye level appears
+   * to drift down and sideways as the viewer moves toward it. Defaults to 0.
+   */
+  readonly xrLift?: number;
+}
+
+/** Screen-mode camera distance limits and the distance Reset view restores. */
+export interface ScreenZoomDistances {
+  readonly minDistance: number;
+  readonly maxDistance: number;
+  readonly defaultDistance: number;
+}
+
+/** A point in the scene viewport, in CSS pixels from its top-left corner. */
+export interface ViewportPoint {
+  readonly x: number;
+  readonly y: number;
+  /** False when the point is behind the camera or outside the viewport. */
+  readonly visible: boolean;
 }
 
 /** PII-free facts about the immersive scene for the development report. */
@@ -105,6 +143,12 @@ export class SceneRenderer {
   private readonly host: HTMLElement;
   private readonly container: HTMLDivElement;
   private readonly atom = new AtomView();
+  /** What is drawn: the default atom, or content supplied by the caller. */
+  private readonly content: SceneContent;
+  private readonly zoom: ScreenZoomDistances;
+  private readonly xrContentScale: number;
+  private readonly handheldOverlay: boolean;
+  private readonly xrLift: number;
   /** Positions the atom: in front of the camera on screen, world-locked in XR. */
   private readonly anchor = new THREE.Group();
   /** Applies view rotation and scale without touching the anchor. */
@@ -120,7 +164,10 @@ export class SceneRenderer {
   private atomEntity: Entity | null = null;
   private yaw = 0;
   private pitch = 0;
-  private distance: number = screenZoomConfig.defaultDistance;
+  private distance: number;
+  /** Content width kept in view by {@link fitToWidth}, or null when not fitting. */
+  private fitWidth: number | null = null;
+  private fittedDistance: number | null = null;
   private drag: { pointerId: number; direction: THREE.Vector3 } | null = null;
   private xrScale = 1;
   private xrDistance: number = XR_LAYOUT.atomDistance;
@@ -130,13 +177,21 @@ export class SceneRenderer {
   private xrNeedsPlacement = false;
   private xrFrames = 0;
   private stopXrFrames: (() => void) | null = null;
-  private lessonPanels: XrLessonPanels | null = null;
+  private lessonPanels: XrLessonPanels | XrModulePanels | null = null;
+  /** Which panel set is shown: the Atom Builder lesson panels or the shared module panels. */
+  private panelKind: "lesson" | "module" | null = null;
   private lessonEntities: Entity[] = [];
-  private pendingLesson: { content: XrLessonContent; onCommand: (command: string) => void } | null = null;
+  private pendingLesson: { kind: "lesson" | "module"; create: () => XrLessonPanels | XrModulePanels } | null = null;
   private disposed = false;
 
   constructor(options: SceneRendererOptions) {
     this.host = options.host;
+    this.content = options.content ?? this.atom;
+    this.zoom = options.screenZoom ?? screenZoomConfig;
+    this.distance = this.zoom.defaultDistance;
+    this.xrContentScale = options.xrContentScale ?? XR_ATOM_SCALE;
+    this.handheldOverlay = options.handheldOverlay ?? false;
+    this.xrLift = options.xrLift ?? 0;
     this.container = document.createElement("div");
     this.container.className = "iwsdk-scene-host";
     this.container.style.cssText = "position:absolute;inset:0;overflow:hidden;";
@@ -146,7 +201,7 @@ export class SceneRenderer {
     this.pivot.name = "atom-pivot";
     this.grabSphere.name = "atom-grab-sphere";
     this.anchor.add(this.pivot);
-    this.pivot.add(this.atom.root, this.grabSphere);
+    this.pivot.add(this.content.root, this.grabSphere);
     this.ready = World.create(this.container, options.worldOptions ?? DEFAULT_WORLD_OPTIONS).then((world) => {
       if (this.disposed) {
         world.destroy();
@@ -162,15 +217,59 @@ export class SceneRenderer {
     return this.world?.renderer.domElement ?? null;
   }
 
-  /** Redraw the atom from a new frame. */
+  /** Redraw the default atom from a new frame (when no custom content was supplied). */
   update(frame: ScreenSceneFrame): void {
     this.atom.update(frame);
-    this.grabSphere.scale.setScalar(this.atom.boundingRadius);
+    this.contentChanged();
+  }
+
+  /**
+   * Keep content of this width (content units, centred) fully in view on screen. The
+   * fitted distance becomes what Reset view restores, and it is updated when the
+   * viewport changes shape (a phone rotating). Zooming out further is still allowed.
+   */
+  fitToWidth(width: number): void {
+    this.fitWidth = Math.max(0, width);
+    this.applyFit(true);
+  }
+
+  /** Call after updating custom content so rotation picking matches its new size. */
+  contentChanged(): void {
+    this.grabSphere.scale.setScalar(this.content.boundingRadius);
+  }
+
+  /**
+   * Project a point in content-local units (for example a label anchor) to the scene
+   * viewport in CSS pixels. Returns null before the world exists or while in XR.
+   */
+  projectContentPoint(point: Position3): ViewportPoint | null {
+    const world = this.world;
+    const canvas = this.canvas;
+    if (!world || !canvas) return null;
+    const overlay = this.overlayView();
+    if (overlay) {
+      const projected = this.content.root.localToWorld(new THREE.Vector3(point.x, point.y, point.z)).project(overlay.camera);
+      const hostBounds = this.host.getBoundingClientRect();
+      const x = (projected.x * 0.5 + 0.5) * overlay.width - hostBounds.left;
+      const y = (-projected.y * 0.5 + 0.5) * overlay.height - hostBounds.top;
+      const visible = projected.z > -1 && projected.z < 1 && x >= 0 && x <= overlay.width && y >= 0 && y <= overlay.height;
+      return { x, y, visible };
+    }
+    if (this.xrSession) return null;
+    const bounds = canvas.getBoundingClientRect();
+    if (bounds.width === 0 || bounds.height === 0) return null;
+    world.scene.updateMatrixWorld(true);
+    const projected = this.content.root.localToWorld(new THREE.Vector3(point.x, point.y, point.z)).project(world.camera);
+    const x = (projected.x * 0.5 + 0.5) * bounds.width;
+    const y = (-projected.y * 0.5 + 0.5) * bounds.height;
+    const visible = projected.z > -1 && projected.z < 1 && x >= 0 && x <= bounds.width && y >= 0 && y <= bounds.height;
+    return { x, y, visible };
   }
 
   /** Rotate the screen view from a drag in CSS pixels, without changing atom state. */
   rotate(deltaX: number, deltaY: number): void {
-    this.rotateBy(-deltaX * ROTATE_SPEED, deltaY * ROTATE_SPEED);
+    // Web view: the model's front follows the pointer (drag right, model turns right).
+    this.rotateBy(deltaX * ROTATE_SPEED, deltaY * ROTATE_SPEED);
   }
 
   /** Zoom the screen view by a log-scale delta. */
@@ -180,7 +279,8 @@ export class SceneRenderer {
 
   /** Rotate the atom in handheld AR. */
   rotateArView(deltaX: number, deltaY: number): void {
-    this.rotate(deltaX, deltaY);
+    // Handheld AR keeps its original direction; only the web view was flipped.
+    this.rotateBy(-deltaX * ROTATE_SPEED, deltaY * ROTATE_SPEED);
   }
 
   /** Scale the atom in handheld AR, bounded around its default size. */
@@ -201,13 +301,18 @@ export class SceneRenderer {
 
   /** Start a particle drag: show free electron slots for electrons. */
   beginDrag(particle: string): void {
-    this.atom.setSlotsVisible(particle === "electron");
+    this.content.setSlotsVisible(particle === "electron");
   }
 
   /** End a particle drag and clear drop highlights. */
   endDrag(): void {
-    this.atom.setSlotsVisible(false);
-    this.atom.setHighlight(null);
+    this.content.setSlotsVisible(false);
+    this.content.setHighlight(null);
+  }
+
+  /** Highlight one pick target (for example a drop target under the pointer), or clear with null. */
+  setHighlight(target: string | null): void {
+    this.content.setHighlight(target);
   }
 
   /** Find the drop target under viewport coordinates (screen mode). */
@@ -215,6 +320,17 @@ export class SceneRenderer {
     const world = this.world;
     const canvas = this.canvas;
     if (!world || !canvas) return null;
+    const overlay = this.overlayView();
+    if (overlay) {
+      const ndc = new THREE.Vector2((clientX / overlay.width) * 2 - 1, -(clientY / overlay.height) * 2 + 1);
+      const raycaster = new THREE.Raycaster();
+      raycaster.setFromCamera(ndc, overlay.camera);
+      const hits = raycaster.intersectObjects(this.content.interactiveMeshes, false);
+      return selectSnapTarget(hits.flatMap((hit) => {
+        const target = hit.object.userData.interactionTarget;
+        return typeof target === "string" ? [{ target, distance: hit.distance }] : [];
+      }));
+    }
     const bounds = canvas.getBoundingClientRect();
     if (bounds.width === 0 || bounds.height === 0) return null;
     world.scene.updateMatrixWorld(true);
@@ -236,7 +352,7 @@ export class SceneRenderer {
     const ndc = new THREE.Vector2((pointer.x / bounds.width) * 2 - 1, -(pointer.y / bounds.height) * 2 + 1);
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(ndc, camera);
-    const hits = raycaster.intersectObjects(this.atom.interactiveMeshes, false);
+    const hits = raycaster.intersectObjects(this.content.interactiveMeshes, false);
     return selectSnapTarget(hits.flatMap((hit) => {
       const target = hit.object.userData.interactionTarget;
       return typeof target === "string"
@@ -259,7 +375,7 @@ export class SceneRenderer {
 
   /** Set the screen-mode viewing distance within the configured limits. */
   setDistance(distance: number): void {
-    this.distance = THREE.MathUtils.clamp(distance, screenZoomConfig.minDistance, screenZoomConfig.maxDistance);
+    this.distance = THREE.MathUtils.clamp(distance, this.zoom.minDistance, this.zoom.maxDistance);
     this.applyScreenAnchor();
   }
 
@@ -272,7 +388,7 @@ export class SceneRenderer {
       this.xrDistance = XR_LAYOUT.atomDistance;
       this.xrNeedsPlacement = true;
     } else {
-      this.distance = screenZoomConfig.defaultDistance;
+      this.distance = this.fittedDistance ?? this.zoom.defaultDistance;
       this.applyScreenAnchor();
     }
     this.applyPivot();
@@ -290,15 +406,40 @@ export class SceneRenderer {
 
   /** Show or update the world-locked Horizon UI lesson panels (AR/VR only). */
   setLessonPanels(content: XrLessonContent, onCommand: (command: string) => void): void {
-    if (this.lessonPanels) {
-      this.lessonPanels.update(content);
+    this.showPanels(
+      "lesson",
+      () => createXrLessonPanels(content, onCommand),
+      (panels) => (panels as XrLessonPanels).update(content),
+    );
+  }
+
+  /**
+   * Show or update the shared module panels (lesson card, a side panel of info cards and
+   * actions, and a dock) for modules other than the Atom Builder (AR/VR only).
+   */
+  setModulePanels(content: XrModulePanelsContent, onCommand: (command: string) => void): void {
+    this.showPanels(
+      "module",
+      () => createXrModulePanels(content, onCommand),
+      (panels) => (panels as XrModulePanels).update(content),
+    );
+  }
+
+  private showPanels(
+    kind: "lesson" | "module",
+    create: () => XrLessonPanels | XrModulePanels,
+    update: (panels: XrLessonPanels | XrModulePanels) => void,
+  ): void {
+    if (this.lessonPanels && this.panelKind === kind) {
+      update(this.lessonPanels);
       return;
     }
+    if (this.lessonPanels) this.hideLessonPanels();
     if (!this.world) {
-      this.pendingLesson = { content, onCommand };
+      this.pendingLesson = { kind, create };
       return;
     }
-    this.createLessonPanels(this.world, content, onCommand);
+    this.mountPanels(this.world, kind, create());
   }
 
   /** Remove the lesson panels. */
@@ -307,6 +448,7 @@ export class SceneRenderer {
     this.lessonEntities = [];
     this.lessonPanels?.dispose();
     this.lessonPanels = null;
+    this.panelKind = null;
     this.pendingLesson = null;
   }
 
@@ -365,7 +507,7 @@ export class SceneRenderer {
   /** Facts for the development XR report. */
   getXrSceneDiagnostics(): XrSceneDiagnostics {
     const world = this.world;
-    const position = world ? this.atom.root.getWorldPosition(new THREE.Vector3()) : null;
+    const position = world ? this.content.root.getWorldPosition(new THREE.Vector3()) : null;
     return {
       worldReady: world !== null,
       sessionMode: this.xrMode,
@@ -374,7 +516,7 @@ export class SceneRenderer {
       framesRendered: this.xrFrames,
       inputSourceCount: this.xrSession ? Array.from(this.xrSession.inputSources).length : 0,
       atomWorldPosition: position ? { x: position.x, y: position.y, z: position.z } : null,
-      atomScale: this.atom.root.getWorldScale(new THREE.Vector3()).x,
+      atomScale: this.content.root.getWorldScale(new THREE.Vector3()).x,
       lessonPanelsVisible: this.lessonPanels !== null,
     };
   }
@@ -388,6 +530,7 @@ export class SceneRenderer {
     this.resizeObserver?.disconnect();
     this.hideLessonPanels();
     this.atomEntity?.destroy();
+    if (this.content !== this.atom) this.content.dispose();
     this.atom.dispose();
     this.grabSphere.geometry.dispose();
     this.grabSphere.material.dispose();
@@ -400,6 +543,18 @@ export class SceneRenderer {
   }
 
   // --- internals -----------------------------------------------------------
+
+  /**
+   * The AR camera and full-screen overlay size during handheld AR with
+   * {@link SceneRendererOptions.handheldOverlay}; null otherwise.
+   */
+  private overlayView(): { camera: THREE.Camera; width: number; height: number } | null {
+    const world = this.world;
+    if (!this.handheldOverlay || !world || !this.xrSession || this.xrMode !== "immersive-ar") return null;
+    const xrCamera = world.renderer.xr.getCamera();
+    const camera = xrCamera.cameras[0] ?? xrCamera;
+    return { camera, width: window.innerWidth, height: window.innerHeight };
+  }
 
   private setupScene(world: World): void {
     const hemisphere = new THREE.HemisphereLight(0xffffff, 0x5c6870, 2);
@@ -426,12 +581,12 @@ export class SceneRenderer {
     this.onResize();
     const pending = this.pendingLesson;
     this.pendingLesson = null;
-    if (pending) this.createLessonPanels(world, pending.content, pending.onCommand);
+    if (pending) this.mountPanels(world, pending.kind, pending.create());
   }
 
-  private createLessonPanels(world: World, content: XrLessonContent, onCommand: (command: string) => void): void {
-    const panels = createXrLessonPanels(content, onCommand);
+  private mountPanels(world: World, kind: "lesson" | "module", panels: XrLessonPanels | XrModulePanels): void {
     this.lessonPanels = panels;
+    this.panelKind = kind;
     this.lessonEntities = panels.roots.map((root, index) => {
       const holder = [panels.lesson, panels.build, panels.dock][index]!;
       holder.add(new UIKitDocument(root));
@@ -476,7 +631,28 @@ export class SceneRenderer {
     world.renderer.setSize(width, height);
     world.camera.aspect = width / height;
     world.camera.updateProjectionMatrix();
+    this.applyFit(false);
   };
+
+  /**
+   * Work out the distance that keeps {@link fitWidth} in view. On a new fit it is
+   * applied; on a resize the view only moves back if the content would be cut off.
+   */
+  private applyFit(force: boolean): void {
+    const world = this.world;
+    if (this.fitWidth === null || !world || this.xrSession) return;
+    const camera = world.camera;
+    const halfVertical = THREE.MathUtils.degToRad(camera.fov) / 2;
+    const halfHorizontal = Math.atan(Math.tan(halfVertical) * camera.aspect);
+    const margin = 1.15;
+    const needed = (this.fitWidth / 2) * margin / Math.tan(halfHorizontal);
+    this.fittedDistance = THREE.MathUtils.clamp(
+      Math.max(needed, this.zoom.defaultDistance),
+      this.zoom.minDistance,
+      this.zoom.maxDistance,
+    );
+    if (force || this.distance < this.fittedDistance) this.setDistance(this.fittedDistance);
+  }
 
   private applyScreenAnchor(): void {
     if (this.xrSession) return;
@@ -487,7 +663,7 @@ export class SceneRenderer {
 
   private applyPivot(): void {
     this.pivot.rotation.set(this.pitch, this.yaw, 0, "YXZ");
-    this.pivot.scale.setScalar(this.xrSession ? XR_ATOM_SCALE * this.xrScale : 1);
+    this.pivot.scale.setScalar(this.xrSession ? this.xrContentScale * this.xrScale : 1);
   }
 
   private onXrFrame(): void {
@@ -509,7 +685,7 @@ export class SceneRenderer {
   private placeXrContent(head: THREE.Vector3, headingYaw: number): void {
     const at = (distance: number, drop: number, yawOffset: number): THREE.Vector3 => new THREE.Vector3(
       head.x - Math.sin(headingYaw + yawOffset) * distance,
-      head.y - drop,
+      head.y - drop + this.xrLift,
       head.z - Math.cos(headingYaw + yawOffset) * distance,
     );
     this.anchor.position.copy(at(this.xrDistance, XR_LAYOUT.atomDrop, 0));

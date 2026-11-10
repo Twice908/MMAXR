@@ -14,6 +14,7 @@ describe("concept registry", () => {
       "sci.chem.atom.shells",
       "sci.chem.atom.ions",
       "sci.chem.atom.isotopes",
+      "sci.chem.bonding.ionic",
     ]);
     for (const definition of Object.values(conceptRegistry)) {
       expect(definition.classes).toEqual([9, 10]);

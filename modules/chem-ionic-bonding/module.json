@@ -1,0 +1,111 @@
+{
+  "schemaVersion": "1.0",
+  "releaseStatus": "draft",
+  "id": "chem.ionic-bonding",
+  "title": {
+    "en": "Ionic Bonding"
+  },
+  "subject": "chemistry",
+  "kit": "chemistry",
+  "concepts": [
+    "sci.chem.bonding.ionic",
+    "sci.chem.atom.ions",
+    "sci.chem.atom.shells"
+  ],
+  "boards": [
+    "CBSE",
+    "ICSE",
+    "STATE"
+  ],
+  "levels": [
+    {
+      "id": "class9-10",
+      "classes": [
+        9,
+        10
+      ],
+      "features": [
+        "shells",
+        "ions",
+        "ionic-bonds"
+      ]
+    }
+  ],
+  "modes": [
+    "screen"
+  ],
+  "estimatedMinutes": 6,
+  "assets": [],
+  "interactions": {
+    "manipulate": [
+      "drag-electron-to-atom",
+      "tap-giver-then-taker",
+      "join-ions",
+      "orbit-camera"
+    ],
+    "simulate": [
+      "update-charge",
+      "update-electron-configuration",
+      "show-attraction",
+      "form-ionic-bond"
+    ],
+    "missions": [
+      "give-electron",
+      "join-ions"
+    ],
+    "check": [
+      "assess.ionic.transfer.01",
+      "assess.ionic.transfer.02",
+      "assess.ionic.bond.01",
+      "assess.ionic.bond.02"
+    ]
+  },
+  "missions": [
+    {
+      "id": "give-electron",
+      "title": "Move an electron",
+      "goalText": "Give sodium's outer electron to chlorine, so both end with a complete outer shell (an octet).",
+      "goal": {
+        "compound": "nacl",
+        "ions": [
+          "Na+",
+          "Cl-"
+        ],
+        "allOuterShellsComplete": true
+      },
+      "hints": [
+        "Look at the outer shells. Sodium has 1 outer electron. Chlorine has 7.",
+        "Sodium is the metal, so it gives. Chlorine is the non-metal, so it takes.",
+        "Drag sodium's outer electron onto chlorine, or tap sodium and then tap chlorine. Then press Check."
+      ],
+      "onComplete": {
+        "triggerAssessments": [
+          "assess.ionic.transfer.01",
+          "assess.ionic.transfer.02"
+        ]
+      }
+    },
+    {
+      "id": "join-ions",
+      "title": "Join the ions",
+      "goalText": "Join Na+ and Cl- to make sodium chloride, NaCl.",
+      "goal": {
+        "compound": "nacl",
+        "bonded": true,
+        "formula": "NaCl"
+      },
+      "hints": [
+        "Na+ is positive and Cl- is negative. Opposite charges attract.",
+        "Both ions already have a complete outer shell, so they are ready to join.",
+        "Press Join the ions, then press Check."
+      ],
+      "onComplete": {
+        "triggerAssessments": [
+          "assess.ionic.bond.01",
+          "assess.ionic.bond.02"
+        ]
+      }
+    }
+  ],
+  "rulesPlugin": "./src/index.ts"
+}

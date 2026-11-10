@@ -1,4 +1,5 @@
 import { manifest as atomBuilder } from "@mma/chem-atom-builder/manifest";
+import { manifest as ionicBonding } from "@mma/chem-ionic-bonding/manifest";
 import type { Experiment } from "./catalogue.js";
 
 /**
@@ -28,6 +29,21 @@ export const experiments: readonly Experiment[] = [
           onExit: context.onExit,
         });
       };
+    },
+  },
+  {
+    id: ionicBonding.id,
+    subject: ionicBonding.subject,
+    title: ionicBonding.title.en ?? Object.values(ionicBonding.title)[0] ?? ionicBonding.id,
+    estimatedMinutes: ionicBonding.estimatedMinutes,
+    releaseStatus: ionicBonding.releaseStatus,
+    load: async () => {
+      const [{ mountIonicBonding }, { default: projectOptions }] = await Promise.all([
+        import("@mma/chem-ionic-bonding"),
+        import("virtual:iwsdk-project"),
+      ]);
+      return (root, context) =>
+        mountIonicBonding(root, { worldOptions: projectOptions, onExit: context.onExit });
     },
   },
 ];

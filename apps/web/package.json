@@ -12,6 +12,7 @@
   "dependencies": {
     "@iwsdk/core": "1.0.1",
     "@mma/chem-atom-builder": "workspace:*",
+    "@mma/chem-ionic-bonding": "workspace:*",
     "@pmndrs/uikit": "1.0.78",
     "@pmndrs/uikit-horizon": "1.0.78",
     "@zappar/msdf-generator": "1.2.4",

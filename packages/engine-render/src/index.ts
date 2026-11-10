@@ -50,10 +50,23 @@ export {
   type SphereBatch,
 } from "./atom-view.js";
 export {
+  MoleculeView,
+  atomIdFromTarget,
+  moleculeAtomTarget,
+  type MoleculeLabel,
+  type MoleculeSceneAtom,
+  type MoleculeSceneFrame,
+  type MoleculeSceneLink,
+  type MoleculeViewOptions,
+  type SceneContent,
+} from "./molecule-view.js";
+export {
   DEFAULT_WORLD_OPTIONS,
   SceneRenderer,
   arTouchGestureConfig,
   type SceneRendererOptions,
+  type ScreenZoomDistances,
+  type ViewportPoint,
   type XrSceneDiagnostics,
 } from "./scene-renderer.js";
 export {
@@ -65,4 +78,11 @@ export {
   type XrParticleRow,
 } from "./xr-lesson-content.js";
 export { createXrLessonPanels, type XrLessonPanels } from "./xr-lesson-panels.js";
+export {
+  createXrModulePanels,
+  type XrModulePanels,
+  type XrModulePanelsContent,
+  type XrPanelAction,
+  type XrPanelCard,
+} from "./xr-module-panels.js";
 export type { WorldOptions } from "@iwsdk/core";

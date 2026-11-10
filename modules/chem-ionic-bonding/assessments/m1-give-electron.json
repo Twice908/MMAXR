@@ -1,0 +1,30 @@
+[
+  {
+    "id": "assess.ionic.transfer.01",
+    "prompt": "Sodium (2,8,1) gives one electron to chlorine. What does sodium become?",
+    "options": [
+      { "id": "a", "text": "Na+, with configuration 2,8" },
+      { "id": "b", "text": "Na-, with configuration 2,8,2" },
+      { "id": "c", "text": "Na+, with configuration 2,8,1" },
+      { "id": "d", "text": "Na2+, with configuration 2,8" }
+    ],
+    "correctOptionIndex": 0,
+    "explanation": "Sodium loses its one outer electron, so it has 11 protons and 10 electrons. That is a charge of +1, and the electrons fill 2,8, a complete outer shell (an octet).",
+    "conceptIds": ["sci.chem.atom.ions", "sci.chem.bonding.ionic"],
+    "reviewStatus": "pending"
+  },
+  {
+    "id": "assess.ionic.transfer.02",
+    "prompt": "Why does chlorine take an electron instead of giving its electrons away?",
+    "options": [
+      { "id": "a", "text": "It has 1 outer electron, which is easy to lose" },
+      { "id": "b", "text": "It has 7 outer electrons, so gaining 1 completes its octet" },
+      { "id": "c", "text": "It has no outer electrons at all" },
+      { "id": "d", "text": "Its outer shell is already complete" }
+    ],
+    "correctOptionIndex": 1,
+    "explanation": "Chlorine is 2,8,7. Gaining one electron gives 2,8,8, a complete outer shell (an octet). Losing seven electrons would take much more.",
+    "conceptIds": ["sci.chem.atom.shells", "sci.chem.bonding.ionic"],
+    "reviewStatus": "pending"
+  }
+]

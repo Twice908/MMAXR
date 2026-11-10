@@ -14,5 +14,9 @@
   "sci.chem.atom.isotopes": {
     "classes": [9, 10],
     "boards": ["CBSE", "ICSE", "STATE"]
+  },
+  "sci.chem.bonding.ionic": {
+    "classes": [9, 10],
+    "boards": ["CBSE", "ICSE", "STATE"]
   }
 }

@@ -1,12 +1,13 @@
 import type { MissionDefinition } from "@mma/engine-core";
-import { resolveTriggeredAssessmentItems, type AssessmentItem } from "@mma/engine-assess";
+import type { AssessmentItem } from "@mma/engine-assess";
+import { buildLessonView, type LessonViewCopy } from "@mma/engine-lesson";
 import {
   calculateCharge,
   calculateMassNumber,
   elementByAtomicNumber,
   hasCompleteOuterShell,
 } from "@mma/kit-chemistry";
-import type { XrAssessmentOption, XrLessonContent } from "@mma/engine-render";
+import type { XrLessonContent } from "@mma/engine-render";
 import type { AtomBuilderLearningState } from "./learning.js";
 
 /** Inputs that are not part of learning state but appear in the immersive UI. */
@@ -34,7 +35,13 @@ export const NARRATION_COMMAND = {
   replay: "narration:replay",
 } as const;
 
-const HINT_LEVELS = ["nudge", "clue", "explanation"] as const;
+/** Atom Builder wording for the shared lesson view. */
+const ATOM_BUILDER_LESSON_COPY: LessonViewCopy = {
+  idleEyebrow: "ATOM BUILDER",
+  freePlayTitle: "Build any atom",
+  freePlayBody: "Add or remove particles and watch the element change.",
+  notYetFeedback: "Not yet. The atom does not match every part of the goal. Adjust it and check again.",
+};
 
 /**
  * Build the immersive lesson content from learning state. Pure: the same state
@@ -49,84 +56,10 @@ export function buildXrLessonContent(
   const chemistry = state.chemistry;
   const electrons = chemistry.shells.reduce((sum, count) => sum + count, 0);
   const element = elementByAtomicNumber(chemistry.protons);
-  const completed = Object.values(state.missionProgress).filter((progress) => progress.status === "completed").length;
-  const missionIndex = missions.findIndex((mission) => mission.id === state.activeMissionId);
-  const mission = missions[missionIndex];
-  const progress = mission ? state.missionProgress[mission.id] : undefined;
-  const missionActive = progress?.status === "active";
-  const finished = state.mode === "mission" && state.activeMissionId === null && completed === missions.length;
-  const hintCount = progress?.hintsUsed ?? 0;
+  const lesson = buildLessonView(state, missions, assessmentItems, extras.lastHintText, ATOM_BUILDER_LESSON_COPY);
 
-  let eyebrow: string;
-  let title: string;
-  let body: string;
-  let feedback = "";
-  if (state.mode === "free-play") {
-    eyebrow = "FREE PLAY";
-    title = "Build any atom";
-    body = "Add or remove particles and watch the element change.";
-  } else if (finished) {
-    const hintsUsed = Object.values(state.missionProgress).reduce((sum, item) => sum + item.hintsUsed, 0);
-    eyebrow = "LESSON COMPLETE";
-    title = "Well done";
-    body = `${completed} missions done. ${hintsUsed} hints used. ${state.questionsCorrect} questions correct out of ${state.questionsAnswered}.`;
-  } else if (mission) {
-    eyebrow = `MISSION ${missionIndex + 1} OF ${missions.length}`;
-    title = mission.title;
-    body = mission.goalText;
-    if (progress?.status === "completed") {
-      feedback = "Goal met. Answer the questions to continue.";
-    } else if ((progress?.attempts ?? 0) > 0) {
-      feedback = "Not yet. The atom does not match every part of the goal. Adjust it and check again.";
-    } else if (hintCount > 0 && extras.lastHintText) {
-      feedback = `${HINT_LEVELS[Math.min(hintCount, HINT_LEVELS.length) - 1]}: ${extras.lastHintText}`;
-    }
-  } else {
-    eyebrow = "ATOM BUILDER";
-    title = "Getting ready";
-    body = "";
-  }
-
-  const items = resolveTriggeredAssessmentItems(state.assessmentIds, assessmentItems);
-  const item = state.mode === "free-play" ? undefined : items[state.assessmentIndex];
-  const answer = state.currentAnswer;
-  const assessment = item
-    ? {
-      step: `QUESTION ${state.assessmentIndex + 1} OF ${items.length}`,
-      prompt: item.prompt,
-      options: item.options.map((option, index): XrAssessmentOption => ({
-        label: `${String.fromCharCode(65 + index)}. ${option.text}`,
-        command: `lesson:assessment:answer:${index}`,
-        state: answer?.selectedOptionIndex === index
-          ? answer.correct ? "correct" : "incorrect"
-          : answer && index === item.correctOptionIndex ? "answer" : "idle",
-        disabled: answer !== null,
-      })),
-      feedback: answer
-        ? `${answer.correct
-          ? "Correct. "
-          : `Not quite. The correct answer is ${item.options[item.correctOptionIndex]?.text ?? "shown above"}. `}${item.explanation}`
-        : "",
-      continueLabel: answer === null
-        ? null
-        : state.assessmentIndex + 1 < items.length ? "Next question" : "Continue",
-      continueCommand: "lesson:assessment:continue",
-    }
-    : null;
-
-  const inMission = state.mode === "mission" && !finished && mission !== undefined;
   return {
-    eyebrow,
-    title,
-    body,
-    progress: missions.length === 0 ? 0 : (completed / missions.length) * 100,
-    feedback,
-    hint: inMission
-      ? { label: "Hint", command: "lesson:hint", enabled: missionActive && hintCount < mission.hints.length }
-      : null,
-    check: inMission ? { label: "Check", command: "lesson:check", enabled: missionActive } : null,
-    freePlay: state.mode === "free-play" ? null : { label: "Free play", command: "lesson:free-play" },
-    assessment,
+    ...lesson,
     particles: [
       particle("proton", "Protons", chemistry.protons, "#d64c35"),
       particle("neutron", "Neutrons", chemistry.neutrons, "#287f83"),

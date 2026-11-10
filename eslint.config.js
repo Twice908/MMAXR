@@ -79,4 +79,76 @@ export default tseslint.config(
       "no-console": "error",
     },
   },
+  {
+    files: ["packages/engine-ui/**/*.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "@mma/kits/*",
+                "@mma/kit-*",
+                "@mma/modules/*",
+                "@mma/chem-*",
+                "@mma/web",
+                "@mma/engine-render",
+                "**/apps/**",
+                "**/kits/**",
+                "**/modules/**",
+                "three",
+                "three/*",
+              ],
+              message: "engine-ui is subject-neutral DOM UI: no apps, kits, modules, renderers or Three.js.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ["packages/engine-lesson/**/*.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "@mma/kits/*",
+                "@mma/kit-*",
+                "@mma/modules/*",
+                "@mma/chem-*",
+                "@mma/web",
+                "@mma/api",
+                "@mma/engine-render",
+                "@mma/engine-xr",
+                "**/apps/**",
+                "**/kits/**",
+                "**/modules/**",
+                "node:*",
+                "three",
+                "three/*",
+              ],
+              message: "engine-lesson is subject- and renderer-neutral: no apps, kits, modules, renderers or Three.js.",
+            },
+          ],
+        },
+      ],
+      "no-restricted-properties": [
+        "error",
+        { object: "Date", property: "now", message: "Inject a clock instead of reading the system time." },
+        { object: "Math", property: "random", message: "Inject an ID generator instead of using random values." },
+      ],
+      "no-restricted-globals": [
+        "error",
+        { name: "Date", message: "Inject a clock instead of reading ambient time." },
+        { name: "window", message: "engine-lesson must remain DOM-agnostic." },
+        { name: "document", message: "engine-lesson must remain DOM-agnostic." },
+        { name: "fetch", message: "Lesson reducers must not perform I/O." },
+      ],
+      "no-console": "error",
+    },
+  },
 );

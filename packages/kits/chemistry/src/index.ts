@@ -6,6 +6,21 @@ export {
   type AtomComposition,
 } from "./atom.js";
 export {
+  layoutAtom,
+  type AtomLayout,
+  type AtomLayoutOptions,
+  type ElectronSlotLayout,
+  type Point3,
+  type RingLayout,
+  type SphereGroup,
+} from "./atom-layout.js";
+export {
+  layoutIonicBonding,
+  type IonicBondingLayout,
+  type IonicBondingLayoutAtom,
+  type IonicBondingLayoutLink,
+} from "./ionic-layout.js";
+export {
   allElements,
   elementByAtomicNumber,
   elementBySymbol,
@@ -22,6 +37,26 @@ export {
   MAX_SUPPORTED_ELECTRON_COUNT,
   type ElectronPlacementResult,
 } from "./electron-shells.js";
+export {
+  electronsToCompleteOuterShell,
+  ionicCompoundById,
+  ionicCompoundIssues,
+  ionicCompounds,
+  outerElectrons,
+  type IonicCompound,
+  type IonicCompoundPart,
+} from "./ionic-compounds.js";
+export {
+  IONIC_BONDING_ACTION,
+  createIonicBondingReducer,
+  createIonicBondingState,
+  formatIon,
+  ionicAtomCharge,
+  ionicBondingCheckState,
+  type IonicBondingAction,
+  type IonicBondingAtom,
+  type IonicBondingState,
+} from "./ionic-bonding.js";
 export {
   chemistryReducer,
   createChemistryState,
