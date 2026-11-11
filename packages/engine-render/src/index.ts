@@ -43,6 +43,7 @@ export {
   type ScreenPoint,
 } from "./screen-snap.js";
 export { XrBanner, type XrBannerContent } from "./xr-banner.js";
+export { XrCard, type XrCardButton, type XrCardContent } from "./xr-card.js";
 export {
   AtomView,
   type Position3,

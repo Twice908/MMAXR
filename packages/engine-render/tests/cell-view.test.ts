@@ -144,6 +144,98 @@ describe("CellView", () => {
   });
 });
 
+describe("highlight", () => {
+  const color = (object: THREE.Object3D) => ((object as THREE.Mesh).material as THREE.MeshPhysicalMaterial).color.getHex();
+
+  it("outlines the highlighted structure and fades the rest back", () => {
+    const view = new CellView();
+    view.update(frame);
+    const mito = view.root.getObjectByName("cell-plant-mitochondrion") as THREE.InstancedMesh;
+    const chloro = view.root.getObjectByName("cell-plant-chloroplast") as THREE.InstancedMesh;
+    const chloroColor = color(chloro);
+    view.setHighlight(cellOrganelleTarget("plant", "mitochondrion"));
+    const outline = mito.children.find((child) => child.name === "cell-highlight-outline") as THREE.InstancedMesh;
+    expect(outline).toBeDefined();
+    // The outline follows the batch: same instances, same matrices.
+    expect(outline.instanceMatrix).toBe(mito.instanceMatrix);
+    expect(outline.count).toBe(mito.count);
+    expect(color(chloro)).not.toBe(chloroColor);
+    view.setHighlight(null);
+    expect(mito.children.some((child) => child.name === "cell-highlight-outline")).toBe(false);
+    expect(color(chloro)).toBe(chloroColor);
+    view.dispose();
+  });
+
+  it("lights a see-through shell by its rim only", () => {
+    const view = new CellView();
+    view.update(frame);
+    const membrane = view.interactiveMeshes.find((mesh) => mesh.userData.interactionTarget === cellOrganelleTarget("animal", "cell-membrane")) as THREE.Mesh;
+    const material = membrane.material as THREE.MeshPhysicalMaterial;
+    const opacity = material.opacity;
+    view.setHighlight(cellOrganelleTarget("animal", "cell-membrane"));
+    expect(material.depthWrite).toBe(true);
+    expect(material.opacity).toBeLessThan(opacity + 0.1);
+    view.setHighlight(null);
+    expect(material.depthWrite).toBe(false);
+    expect(material.opacity).toBe(opacity);
+    view.dispose();
+  });
+});
+
+describe("living motion", () => {
+  const firstPosition = (view: CellView, name: string, index = 0) => {
+    const batch = view.root.getObjectByName(name) as THREE.InstancedMesh;
+    const matrix = new THREE.Matrix4();
+    batch.getMatrixAt(index, matrix);
+    return new THREE.Vector3().setFromMatrixPosition(matrix);
+  };
+
+  it("rests in place at time 0 and sways a little later, never far", () => {
+    const view = new CellView();
+    view.update(frame);
+    const rest = firstPosition(view, "cell-animal-mitochondrion");
+    expect(rest.x).toBeCloseTo(0.8, 6);
+    view.animate(2400);
+    const moved = firstPosition(view, "cell-animal-mitochondrion");
+    expect(moved.distanceTo(rest)).toBeGreaterThan(0.001);
+    expect(moved.distanceTo(rest)).toBeLessThan(0.2);
+    view.dispose();
+  });
+
+  it("keeps the grana inside their swaying chloroplasts", () => {
+    const view = new CellView();
+    view.update(frame);
+    view.animate(3100);
+    const chloroplast = firstPosition(view, "cell-plant-chloroplast");
+    const granum = firstPosition(view, "cell-plant-chloroplast-grana", 1);
+    expect(granum.distanceTo(chloroplast)).toBeLessThan(0.3);
+    view.dispose();
+  });
+
+  it("keeps everything still with reduced motion", () => {
+    const view = new CellView({ reducedMotion: true });
+    view.update(frame);
+    const rest = firstPosition(view, "cell-animal-mitochondrion");
+    view.animate(5000);
+    expect(firstPosition(view, "cell-animal-mitochondrion").distanceTo(rest)).toBe(0);
+    expect((view.root.getObjectByName("cell-animal") as THREE.Group).scale.x).toBe(1);
+    view.dispose();
+  });
+
+  it("advances once per drawn frame through an invisible driver", () => {
+    let now = 0;
+    const view = new CellView({ now: () => now });
+    view.update(frame);
+    const driver = view.root.getObjectByName("cell-motion-driver") as THREE.Mesh;
+    expect(driver).toBeDefined();
+    const rest = firstPosition(view, "cell-animal-mitochondrion");
+    now = 2000;
+    driver.onBeforeRender({} as never, {} as never, {} as never, {} as never, {} as never, {} as never);
+    expect(firstPosition(view, "cell-animal-mitochondrion").distanceTo(rest)).toBeGreaterThan(0);
+    view.dispose();
+  });
+});
+
 describe("hidden organelles", () => {
   it("leaves out the organelles a close-up replaces", () => {
     const view = new CellView();

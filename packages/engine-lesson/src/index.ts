@@ -41,3 +41,9 @@ export {
   type JourneyOptionView,
   type JourneyView,
 } from "./journey-view.js";
+export {
+  journeyMoments,
+  journeySnapshot,
+  type JourneyMoment,
+  type JourneySnapshot,
+} from "./journey-moments.js";

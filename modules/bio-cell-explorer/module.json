@@ -34,7 +34,9 @@
     }
   ],
   "modes": [
-    "screen"
+    "screen",
+    "ar",
+    "vr"
   ],
   "estimatedMinutes": 8,
   "assets": [],
@@ -304,6 +306,60 @@
         "audio": "narration/en/generated/recap-why.mp3",
         "captions": "narration/en/generated/recap-why.vtt",
         "captionText": "Plants make their own food using sunlight, so they need chloroplasts. Every cell needs energy, so every cell has mitochondria.",
+        "interruptible": true
+      },
+      {
+        "id": "answer-assess-cell-mito-01",
+        "trigger": "journey_beat",
+        "script": "narration/en/answer-assess-cell-mito-01.json",
+        "audio": "narration/en/generated/answer-assess-cell-mito-01.mp3",
+        "captions": "narration/en/generated/answer-assess-cell-mito-01.vtt",
+        "captionText": "The correct answer is: Mitochondrion. Mitochondria release energy from food, so they are called the powerhouse of the cell.",
+        "interruptible": true
+      },
+      {
+        "id": "answer-assess-cell-mito-02",
+        "trigger": "journey_beat",
+        "script": "narration/en/answer-assess-cell-mito-02.json",
+        "audio": "narration/en/generated/answer-assess-cell-mito-02.mp3",
+        "captions": "narration/en/generated/answer-assess-cell-mito-02.vtt",
+        "captionText": "The correct answer is: Folds of the inner membrane of a mitochondrion. Cristae are the folds of a mitochondrion's inner membrane. The fluid inside is the matrix.",
+        "interruptible": true
+      },
+      {
+        "id": "answer-assess-cell-chloro-01",
+        "trigger": "journey_beat",
+        "script": "narration/en/answer-assess-cell-chloro-01.json",
+        "audio": "narration/en/generated/answer-assess-cell-chloro-01.mp3",
+        "captions": "narration/en/generated/answer-assess-cell-chloro-01.vtt",
+        "captionText": "The correct answer is: Plant cells only. Chloroplasts are found in plant cells. Animal cells do not have them.",
+        "interruptible": true
+      },
+      {
+        "id": "answer-assess-cell-chloro-02",
+        "trigger": "journey_beat",
+        "script": "narration/en/answer-assess-cell-chloro-02.json",
+        "audio": "narration/en/generated/answer-assess-cell-chloro-02.mp3",
+        "captions": "narration/en/generated/answer-assess-cell-chloro-02.vtt",
+        "captionText": "The correct answer is: Stacks of thylakoids. The grana are stacks of thylakoids. The fluid around them is the stroma.",
+        "interruptible": true
+      },
+      {
+        "id": "answer-assess-cell-recap-01",
+        "trigger": "journey_beat",
+        "script": "narration/en/answer-assess-cell-recap-01.json",
+        "audio": "narration/en/generated/answer-assess-cell-recap-01.mp3",
+        "captions": "narration/en/generated/answer-assess-cell-recap-01.vtt",
+        "captionText": "The correct answer is: An animal cell. Plant cells have a cell wall, and green plant cells have chloroplasts. A cell with neither is an animal cell.",
+        "interruptible": true
+      },
+      {
+        "id": "answer-assess-cell-recap-02",
+        "trigger": "journey_beat",
+        "script": "narration/en/answer-assess-cell-recap-02.json",
+        "audio": "narration/en/generated/answer-assess-cell-recap-02.mp3",
+        "captions": "narration/en/generated/answer-assess-cell-recap-02.vtt",
+        "captionText": "The correct answer is: To make food using sunlight. Chloroplasts use sunlight to make food. Mitochondria release energy from that food.",
         "interruptible": true
       }
     ],

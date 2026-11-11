@@ -13,6 +13,9 @@
   --cx-wrong: #a2452a;
   --cx-wrong-soft: #fbe3d8;
   --cx-halo: 0 2px 14px #ffffff, 0 0 2px #ffffff;
+  /* Matches the 3D highlight (CellView): the part the narrator is talking about. */
+  --cx-focus: #c4127a;
+  --cx-focus-glow: rgb(224 33 138 / 28%);
 
   position: fixed;
   inset: 0;
@@ -34,6 +37,29 @@
 .cell-explorer :focus-visible {
   outline: 3px solid var(--cx-leaf);
   outline-offset: 3px;
+}
+
+/* Each chapter tints the sky; the layers cross-fade as chapters change. */
+.cx-tints i {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 1.6s ease;
+  pointer-events: none;
+}
+
+.cx-tints [data-tint="two-cells"] { background: radial-gradient(80% 60% at 50% 40%, rgb(190 240 170 / 0%) 30%, rgb(150 220 130 / 35%) 100%); }
+.cx-tints [data-tint="mitochondria"] { background: radial-gradient(80% 60% at 50% 40%, rgb(255 210 180 / 0%) 25%, rgb(255 190 150 / 40%) 100%); }
+.cx-tints [data-tint="chloroplasts"] { background: radial-gradient(80% 60% at 50% 40%, rgb(120 200 100 / 0%) 25%, rgb(90 180 80 / 38%) 100%); }
+.cx-tints [data-tint="recap"] { background: radial-gradient(80% 60% at 50% 40%, rgb(255 230 150 / 0%) 25%, rgb(250 215 110 / 38%) 100%); }
+.cx-tints [data-tint="finished"] { background: radial-gradient(80% 60% at 50% 40%, rgb(255 240 190 / 0%) 20%, rgb(240 220 120 / 42%) 100%); }
+
+.cell-explorer[data-chapter="two-cells"] [data-tint="two-cells"],
+.cell-explorer[data-chapter="mitochondria"] [data-tint="mitochondria"],
+.cell-explorer[data-chapter="chloroplasts"] [data-tint="chloroplasts"],
+.cell-explorer[data-chapter="recap"] [data-tint="recap"],
+.cell-explorer[data-chapter="finished"] [data-tint="finished"] {
+  opacity: 1;
 }
 
 /* Soft, slowly drifting specks: the inside of a cell, out of focus. */
@@ -133,10 +159,41 @@
   font-weight: 600;
 }
 
+/* Flipped: the dot stays on the point and the name reads to its left. */
+.cx-label--organelle.is-flipped,
+.cx-label--part.is-flipped {
+  flex-direction: row-reverse;
+  translate: calc(-100% + 4px) -50%;
+}
+
+.cx-label.is-emphasis.is-flipped {
+  padding: 3px 6px 3px 10px;
+}
+
+/* Cell names step aside while a chapter banner plays above them. */
+.cell-explorer.has-moment .cx-label--cell {
+  opacity: 0 !important;
+}
+
 .cx-label.is-emphasis {
-  color: #8a5a00;
+  padding: 3px 10px 3px 6px;
+  border-radius: 999px;
+  color: #ffffff;
+  background: var(--cx-focus);
+  box-shadow: 0 0 0 4px var(--cx-focus-glow), 0 6px 18px rgb(140 10 80 / 25%);
   font-size: 16px;
   font-weight: 800;
+  text-shadow: none;
+  animation: cx-focus-pulse 1.5s ease-in-out infinite;
+}
+
+.cx-label.is-emphasis::before {
+  background: #ffffff;
+  box-shadow: none;
+}
+
+@keyframes cx-focus-pulse {
+  50% { box-shadow: 0 0 0 9px rgb(224 33 138 / 12%), 0 6px 18px rgb(140 10 80 / 25%); }
 }
 
 /* --- top: back and chapter path ------------------------------------------------------ */
@@ -446,6 +503,133 @@
   transform: translate(-50%, 0);
 }
 
+/* --- moments ---------------------------------------------------------------------------- */
+.cx-moment {
+  position: absolute;
+  left: 50%;
+  top: 74px;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  width: min(520px, calc(100% - 32px));
+  transform: translateX(-50%);
+  text-align: center;
+  text-shadow: var(--cx-halo);
+  pointer-events: none;
+}
+
+.cx-moment p {
+  margin: 0;
+}
+
+.cx-moment-title {
+  font-size: clamp(20px, 2.6vw, 28px);
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.cx-moment-line {
+  color: var(--cx-soft);
+  font-size: 15px;
+}
+
+/* A ring of leaf-green light opens behind the words. */
+.cx-moment::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: -1;
+  width: 90px;
+  height: 90px;
+  border: 3px solid var(--cx-leaf);
+  border-radius: 50%;
+  box-shadow: 0 0 40px rgb(61 139 74 / 35%), inset 0 0 30px rgb(61 139 74 / 20%);
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.4);
+}
+
+.cx-moment[data-tone="journey"]::before {
+  border-color: #d9a400;
+  box-shadow: 0 0 50px rgb(240 190 40 / 45%), inset 0 0 30px rgb(240 190 40 / 25%);
+}
+
+.cx-moment[data-tone="journey"] .cx-eyebrow {
+  color: #a67800;
+}
+
+.cx-moment.is-playing {
+  animation: cx-moment-in 3s ease both;
+}
+
+.cx-moment[data-tone="journey"].is-playing {
+  animation-duration: 4.2s;
+}
+
+.cx-moment.is-playing::before {
+  animation: cx-moment-ring 1.6s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes cx-moment-in {
+  0% { opacity: 0; transform: translate(-50%, 12px) scale(0.96); }
+  12%, 80% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -6px) scale(1); }
+}
+
+@keyframes cx-moment-ring {
+  0% { opacity: 0.9; transform: translate(-50%, -50%) scale(0.4); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(2.6); }
+}
+
+/* Rings where the student tapped the model. */
+.cx-rings {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.cx-ring {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  margin: -13px 0 0 -13px;
+  border: 3px solid var(--cx-leaf);
+  border-radius: 50%;
+  animation: cx-ring 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+}
+
+.cx-ring--right {
+  border-color: var(--cx-leaf);
+  box-shadow: 0 0 24px rgb(61 139 74 / 50%);
+  animation-duration: 1.1s;
+}
+
+.cx-ring--wrong {
+  border-color: #e0714f;
+  box-shadow: 0 0 18px rgb(224 113 79 / 40%);
+}
+
+.cx-ring--explore {
+  border-width: 2px;
+  border-color: rgb(61 139 74 / 70%);
+}
+
+@keyframes cx-ring {
+  from { opacity: 1; transform: scale(0.6); }
+  to { opacity: 0; transform: scale(3); }
+}
+
+/* A wrong answer's reason nudges, so the eye goes to it. */
+.cx-ask-feedback.is-nudged {
+  animation: cx-nudge 0.42s ease;
+}
+
+@keyframes cx-nudge {
+  20% { transform: translateX(-6px); }
+  45% { transform: translateX(5px); }
+  70% { transform: translateX(-3px); }
+}
+
 /* --- phones -------------------------------------------------------------------------- */
 @media (max-width: 640px) {
   .cx-top {
@@ -495,8 +679,20 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cx-motes i {
+  .cx-motes i,
+  .cx-label.is-emphasis,
+  .cx-ask-feedback.is-nudged,
+  .cx-moment::before,
+  .cx-ring {
+    animation: none !important;
+  }
+
+  .cx-moment.is-playing {
     animation: none;
+  }
+
+  .cx-tints i {
+    transition: none;
   }
 
   .cx-pill,
@@ -504,4 +700,94 @@
   .cx-name {
     transition: none;
   }
+}
+
+/* --- AR and VR ------------------------------------------------------------------------ */
+.cx-xr-entry .scene-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.cx-xr-entry .ar-start {
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1.5px solid var(--cx-line);
+  border-radius: 999px;
+  color: var(--cx-ink);
+  background: var(--cx-glass);
+  backdrop-filter: blur(8px);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cx-xr-exit:empty {
+  display: none;
+}
+
+/* Phone AR: the room shows through; the floating words, pills and banners stay. */
+.cell-explorer.is-xr-overlay {
+  background: transparent;
+}
+
+.cell-explorer.is-xr-overlay .cx-tints,
+.cell-explorer.is-xr-overlay .cx-motes,
+.cell-explorer.is-xr .cx-xr-entry {
+  display: none;
+}
+
+.cell-explorer.is-xr-overlay .cx-caption,
+.cell-explorer.is-xr-overlay .cx-ask {
+  padding: 10px 14px;
+  border-radius: 20px;
+  background: rgb(255 255 255 / 72%);
+  backdrop-filter: blur(8px);
+}
+
+/* --- hover and pressed: each state reads differently from the resting one ------------- */
+.cx-pill,
+.cx-icon,
+.cx-xr-entry .ar-start {
+  transition: transform 0.12s ease, background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.cx-pill:hover:not(:disabled),
+.cx-xr-entry .ar-start:hover {
+  border-color: var(--cx-leaf);
+  background: #eaf7e4;
+  box-shadow: 0 0 0 3px rgb(61 139 74 / 18%), 0 12px 30px rgb(40 100 50 / 18%);
+  transform: translateY(-2px);
+}
+
+.cx-pill--primary:hover:not(:disabled) {
+  border-color: var(--cx-leaf-deep);
+  background: var(--cx-leaf-deep);
+}
+
+.cx-icon:hover {
+  border-color: var(--cx-leaf);
+  background: #eaf7e4;
+  box-shadow: 0 0 0 3px rgb(61 139 74 / 18%);
+}
+
+.cx-pill:active:not(:disabled),
+.cx-icon:active,
+.cx-xr-entry .ar-start:active {
+  transform: translateY(1px) scale(0.96);
+  box-shadow: none;
+}
+
+.cx-pill:active:not(:disabled):not(.cx-pill--primary),
+.cx-icon:active {
+  background: #cfeac4;
+}
+
+.cx-pill--primary:active:not(:disabled) {
+  background: #1f5228;
+}
+
+.cx-icon[aria-pressed="true"] {
+  border-color: var(--cx-leaf);
+  color: #ffffff;
+  background: var(--cx-leaf);
 }

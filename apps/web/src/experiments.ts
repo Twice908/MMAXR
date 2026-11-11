@@ -74,7 +74,12 @@ export const experiments: readonly Experiment[] = [
         import("@mma/bio-cell-explorer"),
         import("virtual:iwsdk-project"),
       ]);
-      return (root, context) => mountCellExplorer(root, { worldOptions: projectOptions, onExit: context.onExit });
+      return (root, context) =>
+        mountCellExplorer(root, {
+          worldOptions: projectOptions,
+          onExit: context.onExit,
+          ...(context.sound ? { sound: context.sound } : {}),
+        });
     },
   },
 ];

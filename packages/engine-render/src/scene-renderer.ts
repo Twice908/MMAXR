@@ -11,7 +11,8 @@ import {
 import * as THREE from "three";
 import { AtomView, type AtomStyle, type Position3, type ScreenSceneFrame } from "./atom-view.js";
 import { XrBanner, type XrBannerContent } from "./xr-banner.js";
-import { interpolateShot, shotDurationMs, type CameraShot } from "./camera-shot.js";
+import { XrCard, type XrCardContent } from "./xr-card.js";
+import { easeInOut, interpolateShot, shotDurationMs, type CameraShot } from "./camera-shot.js";
 import type { SceneContent } from "./molecule-view.js";
 import { selectSnapTarget } from "./snap-target.js";
 import {
@@ -127,7 +128,22 @@ const XR_LAYOUT = {
   dockDistance: 0.8,
   dockDrop: 0.48,
   dockTilt: -0.45,
+  cardDistance: 0.72,
+  cardDrop: 0.55,
+  /** Straight ahead, just below the cells and nearer than them, tilted up towards the eyes. */
+  cardYaw: 0,
+  cardTilt: -0.3,
 } as const;
+/** In XR a shot shows its framed area about this many metres away, as if on screen. */
+const XR_SHOT_METRES = 0.7;
+
+/** Where the model's content sits for an XR shot: focus point, scale (relative to the XR scale) and turn. */
+interface XrShotPose {
+  readonly focus: Position3;
+  readonly scale: number;
+  readonly yaw: number;
+  readonly pitch: number;
+}
 /** UIKit lays out in centimetres (100 units = 1 m); 0.1 makes 1 unit = 1 mm in XR. */
 const XR_PANEL_SCALE = 0.1;
 /** Atom scale in XR: the largest atom (4 shells, about 3.4 units) is about 34 cm wide. */
@@ -167,6 +183,13 @@ export class SceneRenderer {
   private readonly reducedMotion: boolean;
   /** The running camera move, if any. */
   private shotMove: { from: CameraShot; to: CameraShot; startedAt: number; durationMs: number; frame: number } | null = null;
+  /** In XR a shot moves the model instead of the view; advanced each XR frame. */
+  private xrShotMove: { from: XrShotPose; to: XrShotPose; startedAt: number; durationMs: number } | null = null;
+  /** Headset card for narrated lessons (see {@link SceneRenderer.showXrCard}). */
+  private xrCard: { card: XrCard; holder: THREE.Group; onPress: (id: string) => void } | null = null;
+  /** While set, a controller press on the model picks what it points at. */
+  private xrPick: ((target: string) => void) | null = null;
+  private xrPickRestore: (() => void) | null = null;
   /** Invisible sphere that receives drag-to-rotate pointer events. */
   private readonly grabSphere = new THREE.Mesh(
     new THREE.SphereGeometry(1, 24, 16),
@@ -277,7 +300,10 @@ export class SceneRenderer {
    * zoom or reset by the student stops it. Ignored during XR sessions. View-only.
    */
   focusOn(shot: CameraShot, options: { readonly durationMs?: number } = {}): void {
-    if (this.xrSession) return;
+    if (this.xrSession) {
+      this.focusXr(shot, options.durationMs);
+      return;
+    }
     this.stopShotMove();
     const target: CameraShot = {
       ...shot,
@@ -546,6 +572,9 @@ export class SceneRenderer {
     this.xrMode = null;
     this.floor.visible = false;
     this.banner.hide();
+    this.xrShotMove = null;
+    this.xrCard?.card.show(null);
+    this.setXrPicking(null);
     if (this.starDome) this.starDome.visible = false;
     if (this.world) this.world.scene.background = null;
     if (session) {
@@ -594,6 +623,11 @@ export class SceneRenderer {
     this.grabSphere.geometry.dispose();
     this.grabSphere.material.dispose();
     this.banner.dispose();
+    this.xrPickRestore?.();
+    if (this.xrCard) {
+      this.xrCard.holder.removeFromParent();
+      this.xrCard.card.dispose();
+    }
     this.floor.geometry.dispose();
     (this.floor.material as THREE.Material).dispose();
     this.starDome?.geometry.dispose();
@@ -726,6 +760,113 @@ export class SceneRenderer {
     this.anchor.quaternion.identity();
   }
 
+  /**
+   * The XR version of a shot, for comfort: the student's view never moves. The model glides
+   * and grows instead, so the shot's focus point comes to the model's place in front of
+   * them, about as big as the shot would show it on screen.
+   */
+  private focusXr(shot: CameraShot, durationMs?: number): void {
+    const to: XrShotPose = {
+      focus: shot.focus,
+      scale: XR_SHOT_METRES / (Math.max(0.2, shot.distance) * this.xrContentScale),
+      yaw: shot.yaw,
+      pitch: THREE.MathUtils.clamp(shot.pitch, -PITCH_LIMIT, PITCH_LIMIT),
+    };
+    const offset = this.focusGroup.position;
+    const from: XrShotPose = { focus: { x: -offset.x, y: -offset.y, z: -offset.z }, scale: this.xrScale, yaw: this.yaw, pitch: this.pitch };
+    const ms = this.reducedMotion ? 0 : durationMs ?? 1600;
+    if (ms <= 0) {
+      this.applyXrPose(to);
+      this.xrShotMove = null;
+      return;
+    }
+    this.xrShotMove = { from, to, startedAt: performance.now(), durationMs: ms };
+  }
+
+  private applyXrPose(pose: XrShotPose): void {
+    this.focusGroup.position.set(-pose.focus.x, -pose.focus.y, -pose.focus.z);
+    this.xrScale = pose.scale;
+    this.yaw = pose.yaw;
+    this.pitch = pose.pitch;
+    this.applyPivot();
+    this.contentChanged();
+  }
+
+  /**
+   * Show a card in the headset view (or hide it with null): words and pill buttons in the
+   * style of the XR banner, world-locked below the model. `onPress` gets the pressed button's
+   * id. Does nothing outside an XR session; phones keep their page overlay.
+   */
+  showXrCard(content: XrCardContent | null, onPress: (id: string) => void): void {
+    const world = this.world;
+    if (!world) return;
+    if (!this.xrCard) {
+      const card = new XrCard();
+      const holder = new THREE.Group();
+      holder.name = "xr-card-holder";
+      holder.add(card.mesh);
+      world.scene.add(holder);
+      const entity = world.createTransformEntity(holder);
+      entity.addComponent(RayInteractable);
+      const state = { card, holder, onPress };
+      // Hover, press and release, so the pills answer the pointer like buttons do on a page.
+      let pressed: string | null = null;
+      const under = (event: { uv?: THREE.Vector2 }): string | null => (event.uv ? card.buttonAt(event.uv) : null);
+      card.mesh.addEventListener("pointermove", ((event: { uv?: THREE.Vector2 }) => card.setPointer(under(event), pressed)) as never);
+      card.mesh.addEventListener("pointerleave", (() => {
+        pressed = null;
+        card.setPointer(null, null);
+      }) as never);
+      card.mesh.addEventListener("pointerdown", ((event: { uv?: THREE.Vector2 }) => {
+        pressed = under(event);
+        card.setPointer(pressed, pressed);
+      }) as never);
+      card.mesh.addEventListener("pointerup", ((event: { uv?: THREE.Vector2 }) => {
+        const id = under(event);
+        const fire = id !== null && id === pressed;
+        pressed = null;
+        card.setPointer(id, null);
+        if (fire && id) this.xrCard?.onPress(id);
+      }) as never);
+      this.xrCard = state;
+      this.xrNeedsPlacement = this.xrNeedsPlacement || this.xrSession !== null;
+    }
+    this.xrCard.onPress = onPress;
+    this.xrCard.card.show(this.xrSession ? content : null);
+  }
+
+  /**
+   * Let a controller press on the model pick what it points at (for answering on the model in
+   * a headset), or stop with null. While picking, drag-to-turn and the see-through shells
+   * step aside so the ray reaches the parts inside.
+   */
+  setXrPicking(onPick: ((target: string) => void) | null): void {
+    this.xrPickRestore?.();
+    this.xrPickRestore = null;
+    this.xrPick = onPick;
+    if (!onPick) return;
+    const stashed: [THREE.Object3D, THREE.Object3D["raycast"]][] = [];
+    const quiet = (object: THREE.Object3D): void => {
+      stashed.push([object, object.raycast]);
+      object.raycast = () => undefined;
+    };
+    quiet(this.grabSphere);
+    for (const mesh of this.content.interactiveMeshes) if (mesh.userData.pickBackdrop === true) quiet(mesh);
+    this.content.root.addEventListener("pointerup", this.onXrPickUp as never);
+    this.xrPickRestore = () => {
+      for (const [object, raycast] of stashed) object.raycast = raycast;
+      this.content.root.removeEventListener("pointerup", this.onXrPickUp as never);
+    };
+  }
+
+  private readonly onXrPickUp = (event: { object?: THREE.Object3D }): void => {
+    if (!this.xrSession || !this.xrPick) return;
+    let object: THREE.Object3D | null = event.object ?? null;
+    while (object && typeof object.userData.interactionTarget !== "string") object = object.parent;
+    const target = object?.userData.interactionTarget;
+    if (typeof target === "string") this.xrPick(target);
+  };
+
   private applyShot(shot: CameraShot): void {
     this.focusGroup.position.set(-shot.focus.x, -shot.focus.y, -shot.focus.z);
     this.distance = shot.distance;
@@ -759,11 +900,29 @@ export class SceneRenderer {
     const world = this.world;
     if (!world) return;
     this.xrFrames += 1;
+    const move = this.xrShotMove;
+    if (move) {
+      const t = Math.min(1, (performance.now() - move.startedAt) / move.durationMs);
+      const k = easeInOut(t);
+      const turn = Math.atan2(Math.sin(move.to.yaw - move.from.yaw), Math.cos(move.to.yaw - move.from.yaw));
+      this.applyXrPose({
+        focus: {
+          x: move.from.focus.x + (move.to.focus.x - move.from.focus.x) * k,
+          y: move.from.focus.y + (move.to.focus.y - move.from.focus.y) * k,
+          z: move.from.focus.z + (move.to.focus.z - move.from.focus.z) * k,
+        },
+        scale: move.from.scale * (move.to.scale / move.from.scale) ** k,
+        yaw: move.from.yaw + turn * k,
+        pitch: move.from.pitch + (move.to.pitch - move.from.pitch) * k,
+      });
+      if (t >= 1) this.xrShotMove = null;
+    }
     if (this.banner.mesh.visible) {
       const camera = world.renderer.xr.getCamera();
       const head = camera.getWorldPosition(new THREE.Vector3());
-      const above = this.content.root.getWorldPosition(new THREE.Vector3());
-      above.y += 0.22;
+      // Above the model's place (its content may be shifted to bring a shot's focus there).
+      const above = this.anchor.getWorldPosition(new THREE.Vector3());
+      above.y += 0.24;
       this.banner.update(above, head);
     }
     if (!this.xrNeedsPlacement) return;
@@ -787,6 +946,10 @@ export class SceneRenderer {
     this.anchor.position.copy(at(this.xrDistance, XR_LAYOUT.atomDrop, 0));
     this.anchor.rotation.set(0, headingYaw, 0);
     this.applyPivot();
+    if (this.xrCard) {
+      this.xrCard.holder.position.copy(at(XR_LAYOUT.cardDistance, XR_LAYOUT.cardDrop, XR_LAYOUT.cardYaw));
+      this.xrCard.holder.rotation.set(XR_LAYOUT.cardTilt, headingYaw + XR_LAYOUT.cardYaw, 0, "YXZ");
+    }
     const panels = this.lessonPanels;
     if (!panels) return;
     const placePanel = (object: THREE.Object3D, yawOffset: number): void => {
