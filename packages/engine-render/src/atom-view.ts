@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { LuminousAtom } from "./luminous-atom.js";
 
 /** A 3D point in atom-local units. */
 export interface Position3 {
@@ -25,6 +26,12 @@ export interface SceneRing {
     readonly position: Position3;
     readonly occupied: boolean;
   }[];
+  /**
+   * Optional visual cue chosen by the caller, used by the luminous style: `pulse` makes the ring
+   * breathe, `settled` makes it flash once and then glow calmly. The renderer gives these no
+   * meaning of its own.
+   */
+  readonly emphasis?: "pulse" | "settled";
 }
 
 /** Declarative, subject-neutral geometry the renderer draws. */
@@ -32,6 +39,17 @@ export interface ScreenSceneFrame {
   readonly nucleusRadius: number;
   readonly spheres: readonly SphereBatch[];
   readonly rings: readonly SceneRing[];
+}
+
+/** How the atom is drawn: the original solid look, or glowing rings with orbiting electrons. */
+export type AtomStyle = "classic" | "luminous";
+
+/** Options for {@link AtomView}. */
+export interface AtomViewOptions {
+  /** Defaults to `classic`. */
+  readonly style?: AtomStyle;
+  /** Stops orbiting and breathing in the luminous style. */
+  readonly reducedMotion?: boolean;
 }
 
 const RING_TUBE_RADIUS = 0.035;
@@ -67,8 +85,10 @@ export class AtomView {
   private frame: ScreenSceneFrame | null = null;
   private highlightTarget: string | null = null;
   private slotsVisible = false;
+  private readonly luminous: LuminousAtom | null;
 
-  constructor() {
+  constructor(options: AtomViewOptions = {}) {
+    this.luminous = options.style === "luminous" ? new LuminousAtom(options.reducedMotion ?? false) : null;
     this.root.name = "atom-root";
     this.content.name = "atom-content";
     this.root.add(this.content);
@@ -101,6 +121,14 @@ export class AtomView {
     this.frame = frame;
     this.clearContent();
 
+    if (this.luminous) {
+      this.luminous.build(frame, this.content, this.sphereGeometry);
+      this.addNucleusPick(frame).onBeforeRender = () => this.luminous?.tick();
+      this.addSlotMarkers(frame);
+      this.applyHighlight();
+      return;
+    }
+
     for (const batch of frame.spheres) {
       if (batch.positions.length === 0) continue;
       const material = new THREE.MeshStandardMaterial({
@@ -121,11 +149,7 @@ export class AtomView {
       this.own(mesh, undefined, material);
     }
 
-    const nucleusPick = new THREE.Mesh(this.sphereGeometry, this.nucleusPickMaterial);
-    nucleusPick.name = "atom-nucleus-target";
-    nucleusPick.scale.setScalar(Math.max(frame.nucleusRadius, 0.3) + 0.2);
-    nucleusPick.userData.interactionTarget = "nucleus";
-    this.content.add(nucleusPick);
+    this.addNucleusPick(frame);
 
     for (const ring of frame.rings) {
       const geometry = new THREE.TorusGeometry(ring.radius, RING_TUBE_RADIUS, 12, 96);
@@ -140,23 +164,15 @@ export class AtomView {
       mesh.name = `atom-shell-${ring.shell}`;
       mesh.userData.interactionTarget = `shell:${ring.shell}`;
       this.own(mesh, geometry, material);
-
-      for (const slot of ring.slots) {
-        if (slot.occupied) continue;
-        const marker = new THREE.Mesh(this.slotGeometry, this.slotMaterial);
-        marker.name = `atom-slot-${slot.id}`;
-        marker.position.set(slot.position.x, slot.position.y, slot.position.z);
-        marker.visible = this.slotsVisible;
-        marker.userData.slot = true;
-        this.content.add(marker);
-      }
     }
+    this.addSlotMarkers(frame);
     this.applyHighlight();
   }
 
   /** Show or hide free electron slots (shown while an electron is being dragged). */
   setSlotsVisible(visible: boolean): void {
     this.slotsVisible = visible;
+    this.luminous?.setSlotsVisible(visible);
     this.content.traverse((object) => {
       if (object.userData.slot === true) object.visible = visible;
     });
@@ -175,10 +191,35 @@ export class AtomView {
     this.slotGeometry.dispose();
     this.slotMaterial.dispose();
     this.nucleusPickMaterial.dispose();
+    this.luminous?.dispose();
     this.root.removeFromParent();
   }
 
+  private addNucleusPick(frame: ScreenSceneFrame): THREE.Mesh {
+    const nucleusPick = new THREE.Mesh(this.sphereGeometry, this.nucleusPickMaterial);
+    nucleusPick.name = "atom-nucleus-target";
+    nucleusPick.scale.setScalar(Math.max(frame.nucleusRadius, 0.3) + 0.2);
+    nucleusPick.userData.interactionTarget = "nucleus";
+    this.content.add(nucleusPick);
+    return nucleusPick;
+  }
+
+  private addSlotMarkers(frame: ScreenSceneFrame): void {
+    for (const ring of frame.rings) {
+      for (const slot of ring.slots) {
+        if (slot.occupied) continue;
+        const marker = new THREE.Mesh(this.slotGeometry, this.slotMaterial);
+        marker.name = `atom-slot-${slot.id}`;
+        marker.position.set(slot.position.x, slot.position.y, slot.position.z);
+        marker.visible = this.slotsVisible;
+        marker.userData.slot = true;
+        this.content.add(marker);
+      }
+    }
+  }
+
   private applyHighlight(): void {
+    this.luminous?.setHighlight(this.highlightTarget);
     for (const [shell, material] of this.ringMaterials) {
       material.color.setHex(this.highlightTarget === `shell:${shell}` ? RING_HIGHLIGHT_COLOR : RING_COLOR);
     }
@@ -197,6 +238,7 @@ export class AtomView {
     }
     this.owned.length = 0;
     this.ringMaterials.clear();
+    this.luminous?.clear();
     for (const child of [...this.content.children]) {
       if (child instanceof THREE.InstancedMesh) child.dispose();
       child.removeFromParent();

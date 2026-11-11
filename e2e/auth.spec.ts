@@ -49,14 +49,15 @@ test("login, dashboard, open the experiment, go back, rename and sign out", asyn
   await page.goto(BASE_URL);
   await signIn(page);
 
-  // Dashboard: three subjects, Atom Builder under Chemistry.
+  // Dashboard: three subjects (star systems), each experiment a planet link.
   await expect(page).toHaveURL(/#\/dashboard$/);
   await expect(page.getByRole("heading", { name: `Hi, ${TEST_USERNAME}` })).toBeVisible();
   await expect(page.getByLabel("Your details")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Menu" })).toBeHidden();
   await expect(page.getByRole("heading", { level: 2 })).toHaveText(["Physics", "Chemistry", "Biology"]);
-  await expect(page.locator("section[data-subject='physics']")).toContainText("Coming soon");
+  await expect(page.locator("section[data-subject='physics']")).toContainText("Ohm's Law");
   await expect(page.locator("section[data-subject='biology']")).toContainText("Coming soon");
+  await expect(page.getByRole("button", { name: "Sound" })).toHaveAttribute("aria-pressed", "true");
   const atomCard = page.locator("section[data-subject='chemistry'] [data-experiment='chem.atom-builder']");
   await expect(atomCard).toContainText("Atom Builder");
   await expect(atomCard).toContainText("Draft");

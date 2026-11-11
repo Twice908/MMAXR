@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web-runtime",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@mma/web", "dev:runtime"],
+      "port": 5173,
+      "url": "https://localhost:5173"
+    }
+  ]
+}

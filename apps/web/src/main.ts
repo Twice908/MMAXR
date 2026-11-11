@@ -6,8 +6,13 @@ import { createSessionStore } from "./auth/session.js";
 import { findExperiment } from "./catalogue.js";
 import { experiments } from "./experiments.js";
 import { parseRoute, resolveRoute, routeHash, type Route } from "./router.js";
+import { createStage, type Stage } from "./stage/stage.js";
+import { createArrivalLog, playArrival } from "./stage/arrival.js";
+import { arrivalFor, planetLook } from "./stage/theme.js";
+import { sameRoute } from "./stage/transitions.js";
 import { mountDashboard } from "./views/dashboard.js";
 import { mountLogin } from "./views/login.js";
+import type { Screen } from "./views/screen.js";
 
 const appRoot = document.querySelector<HTMLElement>("#app");
 
@@ -22,12 +27,13 @@ if (import.meta.env.DEV && new URLSearchParams(window.location.search).has("narr
   app.innerHTML = '<div class="shell-loading" role="status">Loading narration generator...</div>';
   void import("./narration-generator.js")
     .then(({ mountNarrationGenerator }) => mountNarrationGenerator(app))
-    .catch(showLoadError);
+    .catch((error: unknown) => showLoadError(error));
 } else {
   startApp();
 }
 
 function startApp(): void {
+  const stage = createStage(document);
   const sessions = createSessionStore({
     storage: window.localStorage,
     now: () => Date.now(),
@@ -35,20 +41,16 @@ function startApp(): void {
   });
   const limiter = createAttemptLimiter({ maxAttempts: 5, lockMs: 30_000, now: () => Date.now() });
   const experimentIds = experiments.map((experiment) => experiment.id);
-  let teardown: () => void = () => undefined;
-  // Bumped on every navigation so a slow experiment load cannot mount after the student left.
-  let navigation = 0;
+  const arrivals = createArrivalLog(readStorage());
+  let current: { readonly route: Route; readonly screen: Screen } | null = null;
+  // Page changes run one at a time, so an exit animation always finishes before the next page mounts.
+  let queue: Promise<void> = Promise.resolve();
 
   const navigate = (route: Route): void => {
     window.location.hash = routeHash(route);
   };
 
-  const render = (): void => {
-    navigation += 1;
-    const current = navigation;
-    teardown();
-    teardown = () => undefined;
-
+  const render = async (): Promise<void> => {
     const requested = parseRoute(window.location.hash);
     const route = resolveRoute(requested, sessions.get(), experimentIds);
     const wanted = routeHash(route);
@@ -56,61 +58,135 @@ function startApp(): void {
       // Replace so the back button never lands on a page the student may not see.
       window.history.replaceState(null, "", wanted);
     }
+    if (current && sameRoute(current.route, route)) return;
 
+    const from = current?.route ?? null;
+    if (current) {
+      app.inert = true;
+      try {
+        await current.screen.leave(route);
+      } catch (error) {
+        console.warn("Page exit animation failed.", error);
+      }
+      current.screen.dispose();
+      app.replaceChildren();
+      app.inert = false;
+    }
+    current = { route, screen: await mountRoute(route, from) };
+  };
+
+  const mountRoute = async (route: Route, from: Route | null): Promise<Screen> => {
     const session = sessions.get();
     if (route.name === "login" || !session) {
       document.title = "Sign in | Math Maam Academy";
-      teardown = mountLogin(app, {
+      stage.setCosmic(true);
+      return mountLogin(app, {
         verifyCode: (code) => verifyAccessCode(code, ACCESS_CODES),
         limiter,
+        stage,
+        from,
         onSignedIn: (username) => {
           sessions.signIn(username);
           navigate({ name: "dashboard" });
         },
       });
-      return;
     }
 
     if (route.name === "dashboard") {
       document.title = "Experiments | Math Maam Academy";
-      teardown = mountDashboard(app, {
+      stage.setCosmic(true);
+      return mountDashboard(app, {
         session,
         experiments,
+        stage,
+        from,
         rename: (username) => sessions.rename(username),
         onSignOut: () => {
           sessions.signOut();
           navigate({ name: "login" });
         },
       });
-      return;
     }
 
-    const experiment = findExperiment(experiments, route.id);
-    if (!experiment) {
-      navigate({ name: "dashboard" });
-      return;
-    }
-    document.title = `${experiment.title} | Math Maam Academy`;
-    app.innerHTML = `<div class="shell-loading" role="status">Loading ${escapeText(experiment.title)}...</div>`;
-    void experiment
-      .load()
-      .then((mount) => {
-        if (current !== navigation) return;
-        teardown = mount(app, { onExit: () => navigate({ name: "dashboard" }) });
-      })
-      .catch((error: unknown) => {
-        if (current === navigation) showLoadError(error, experiment.title);
-      });
+    return mountExperiment(route.id, stage);
   };
 
-  window.addEventListener("hashchange", render);
-  render();
-}
+  const mountExperiment = async (id: string, stage: Stage): Promise<Screen> => {
+    const experiment = findExperiment(experiments, id);
+    const palette = planetLook(id).palette;
+    const closed: Screen = { leave: () => Promise.resolve(), dispose: () => undefined };
+    if (!experiment) {
+      navigate({ name: "dashboard" });
+      return closed;
+    }
+    document.title = `${experiment.title} | Math Maam Academy`;
+    const onExit = (): void => navigate({ name: "dashboard" });
+    const leaveToDashboard = async (): Promise<void> => {
+      stage.veil.setLabel("");
+      await stage.veil.show(palette, stage.time(380));
+    };
+    // Lessons can paint the same sky without a running WebGL loop: a still of the nebula in the
+    // planet's colours, offered as the CSS variable --cosmos-snapshot.
+    const paintSky = (): void => {
+      const still = stage.cosmos.snapshot(palette);
+      if (still) app.style.setProperty("--cosmos-snapshot", `url("${still}")`);
+    };
+    const withSky = (teardown: () => void): (() => void) => () => {
+      teardown();
+      app.style.removeProperty("--cosmos-snapshot");
+    };
 
-function escapeText(value: string): string {
-  const holder = document.createElement("span");
-  holder.textContent = value;
-  return holder.innerHTML;
+    // A module with a descent: fall from its planet down to the atom while the lesson loads and
+    // mounts unseen underneath. The full descent plays on a student's first visit, a short one after.
+    const script = arrivalFor(id);
+    const studentRef = sessions.get()?.studentRef;
+    if (script && studentRef && stage.cosmos.supported && !stage.reducedMotion) {
+      const short = arrivals.seen(studentRef, id);
+      stage.veil.setLabel("");
+      const run = playArrival(stage, script, { short, title: experiment.title });
+      void stage.veil.hide(450);
+      try {
+        const [mount] = await Promise.all([experiment.load(), run.arrived]);
+        arrivals.mark(studentRef, id);
+        paintSky();
+        const teardown = mount(app, { onExit });
+        await run.finish(900);
+        return { leave: leaveToDashboard, dispose: withSky(teardown) };
+      } catch (error) {
+        await run.finish(0);
+        showLoadError(error, experiment.title);
+        return closed;
+      }
+    }
+
+    // Otherwise the veil (already up after the dive, or raised now) covers the load in the planet's colours.
+    stage.veil.setLabel(`Opening ${experiment.title}`);
+    if (!stage.veil.showing) await stage.veil.show(palette, stage.time(300));
+    stage.sound.setBedLevel(0, 1.5);
+    try {
+      const mount = await experiment.load();
+      paintSky();
+      stage.setCosmic(false);
+      const teardown = mount(app, { onExit });
+      stage.veil.setLabel("");
+      void stage.veil.hide(stage.time(650));
+      return { leave: leaveToDashboard, dispose: withSky(teardown) };
+    } catch (error) {
+      stage.setCosmic(true);
+      stage.veil.setLabel("");
+      void stage.veil.hide(stage.time(400));
+      showLoadError(error, experiment.title);
+      return closed;
+    }
+  };
+
+  const schedule = (): void => {
+    queue = queue.then(render).catch((error: unknown) => {
+      console.error("Navigation failed.", error);
+    });
+  };
+  window.addEventListener("hashchange", schedule);
+  schedule();
 }
 
 function showLoadError(error: unknown, title = "This page"): void {
@@ -125,4 +201,13 @@ function showLoadError(error: unknown, title = "This page"): void {
   back.textContent = "Back to experiments";
   wrapper.append(message, back);
   app.append(wrapper);
+}
+
+/** `localStorage`, or null where the browser blocks it. */
+function readStorage(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
 }

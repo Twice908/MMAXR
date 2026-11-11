@@ -9,7 +9,7 @@ import {
   type WorldOptions,
 } from "@iwsdk/core";
 import * as THREE from "three";
-import { AtomView, type Position3, type ScreenSceneFrame } from "./atom-view.js";
+import { AtomView, type AtomStyle, type Position3, type ScreenSceneFrame } from "./atom-view.js";
 import type { SceneContent } from "./molecule-view.js";
 import { selectSnapTarget } from "./snap-target.js";
 import {
@@ -37,6 +37,10 @@ export interface SceneRendererOptions {
    * pass a {@link MoleculeView} (or other content) to draw several atoms instead.
    */
   readonly content?: SceneContent;
+  /** Look of the default atom (ignored when `content` is supplied). Defaults to `classic`. */
+  readonly atomStyle?: AtomStyle;
+  /** Calms the default atom's animation for reduced-motion users. */
+  readonly reducedMotion?: boolean;
   /** Screen-mode camera distances. Defaults to {@link screenZoomConfig}. */
   readonly screenZoom?: ScreenZoomDistances;
   /** Content scale in XR (metres per content unit). Defaults to 0.05. */
@@ -140,7 +144,7 @@ export class SceneRenderer {
   readonly ready: Promise<void>;
   private readonly host: HTMLElement;
   private readonly container: HTMLDivElement;
-  private readonly atom = new AtomView();
+  private readonly atom: AtomView;
   /** What is drawn: the default atom, or content supplied by the caller. */
   private readonly content: SceneContent;
   private readonly zoom: ScreenZoomDistances;
@@ -182,6 +186,10 @@ export class SceneRenderer {
 
   constructor(options: SceneRendererOptions) {
     this.host = options.host;
+    this.atom = new AtomView({
+      ...(options.atomStyle === undefined ? {} : { style: options.atomStyle }),
+      ...(options.reducedMotion === undefined ? {} : { reducedMotion: options.reducedMotion }),
+    });
     this.content = options.content ?? this.atom;
     this.zoom = options.screenZoom ?? screenZoomConfig;
     this.distance = this.zoom.defaultDistance;

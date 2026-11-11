@@ -54,9 +54,11 @@ import {
   type AtomBuilderLearningState,
 } from "./learning.js";
 import { layoutAtom } from "./layout.js";
+import { outerShellState, withOuterShellEmphasis } from "./outer-shell.js";
 import { NARRATION_COMMAND, buildXrLessonContent, toModulePanelsContent } from "./xr-lesson.js";
 import "./atom-builder.css";
 import "./ar-hud.css";
+import "./atom-builder-cosmic.css";
 
 /** Icons for the phone AR HUD tabs (24x24 stroke paths). */
 const HUD_ICONS = {
@@ -122,7 +124,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     <section class="atom-builder" aria-label="Atom Builder" tabindex="0">
       <header class="builder-header">
         <div class="builder-brand">
-          <button class="back-to-experiments" type="button" data-app-action="exit" aria-label="Back to all experiments" hidden>&larr; Experiments</button>
+          <button class="back-to-experiments" type="button" data-app-action="exit" aria-label="Back to all experiments" hidden>&larr; Universe</button>
           <span class="brand-mark" aria-hidden="true">M</span><span>Math Maam Academy</span>
         </div>
         <div class="builder-title"><span class="eyebrow" data-grade="Class 9-10" aria-label="Chemistry, Class 9-10">CHEMISTRY</span><h1>Atom Builder</h1></div>
@@ -158,7 +160,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
       <p class="free-play-status" id="free-play-status" hidden>Free play</p>
       <div class="builder-content">
         <aside class="particle-rail" aria-label="Particles">
-          <div class="rail-heading"><span>PARTICLES</span><span class="rail-rule"></span></div>
+          <div class="rail-heading"><span>BUILDING BLOCKS</span><span class="rail-rule"></span></div>
           <div class="particle-row proton-row">
             <button class="tray-particle proton-dot" type="button" data-particle="proton" aria-label="Drag proton" title="Proton"></button>
             <div class="particle-label"><strong>Proton</strong><span id="proton-count">0</span></div>
@@ -177,7 +179,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
           <div class="rail-footer"><span class="color-key proton-key"></span>Proton<span class="color-key neutron-key"></span>Neutron<span class="color-key electron-key"></span>Electron</div>
         </aside>
         <section class="atom-workspace" aria-label="Atom model and properties">
-          <div class="scene-heading"><span>LIVE MODEL</span><button type="button" class="reset-view" data-command="reset-view">Reset view</button></div>
+          <div class="scene-heading"><span>INSIDE THE ATOM</span><button type="button" class="reset-view" data-command="reset-view">Reset view</button></div>
           <div class="scene-viewport" id="atom-scene"></div>
           <output class="chemistry-feedback" id="chemistry-feedback" aria-live="polite"></output>
         </section>
@@ -190,7 +192,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
             <div><dt>Electron configuration</dt><dd id="electron-configuration">1</dd></div>
             <div><dt>Outer shell</dt><dd id="outer-shell">Incomplete</dd></div>
           </dl>
-          <div class="inspector-foot"><span class="live-indicator"></span>ATOM STATE</div>
+          <div class="inspector-foot"><span class="live-indicator"></span>LIVE SCAN</div>
         </aside>
       </div>
       <div class="drag-ghost" id="drag-ghost" aria-hidden="true"></div>
@@ -218,6 +220,9 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   // scene viewport. The Horizon UI panels appear only inside AR/VR sessions.
   const renderer = new SceneRenderer({
     host: sceneHost,
+    // Glowing nucleus, rings of light and orbiting electrons (Ionic Bonding keeps the classic atom).
+    atomStyle: "luminous",
+    reducedMotion: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false,
     ...(options.worldOptions === undefined ? {} : { worldOptions: options.worldOptions }),
     ...(options.diagnostics === undefined ? {} : { diagnostics: options.diagnostics }),
   });
@@ -493,7 +498,9 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     setText(root, "#outer-shell", hasCompleteOuterShell(chemistry.shells) ? "Complete" : "Incomplete");
     feedback.textContent = chemistry.validationMessages[0] ?? "";
     feedback.classList.toggle("is-visible", chemistry.validationMessages.length > 0);
-    renderer.update(layoutAtom(chemistry));
+    renderer.update(withOuterShellEmphasis(layoutAtom(chemistry), chemistry.shells));
+    // The light behind the atom follows the outer shell: dim, restless violet, or calm cyan.
+    sceneHost.dataset.outerShell = outerShellState(chemistry.shells);
     renderLearningState(root, state, assessmentItems, assessmentsById, lastHintText);
     refreshXrLesson();
   };

@@ -108,6 +108,36 @@ export default tseslint.config(
     },
   },
   {
+    files: ["packages/engine-ambience/**/*.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "@mma/kits/*",
+                "@mma/kit-*",
+                "@mma/modules/*",
+                "@mma/chem-*",
+                "@mma/physics-*",
+                "@mma/web",
+                "@mma/api",
+                "@mma/engine-lesson",
+                "@mma/engine-ui",
+                "@mma/engine-xr",
+                "**/apps/**",
+                "**/kits/**",
+                "**/modules/**",
+              ],
+              message: "engine-ambience is the subject-neutral shell (cosmos, sound, veil): no apps, kits, modules or lesson packages.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ["packages/engine-lesson/**/*.ts"],
     rules: {
       "no-restricted-imports": [
