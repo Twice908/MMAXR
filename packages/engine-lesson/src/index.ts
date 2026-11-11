@@ -16,3 +16,28 @@ export {
   type LessonView,
   type LessonViewCopy,
 } from "./lesson-view.js";
+export {
+  JOURNEY_ACTION,
+  createJourneyFlowReducer,
+  createJourneyFlowState,
+  isJourneyAction,
+  projectJourneyFlowEvents,
+  type JourneyAnswer,
+  type JourneyFlowReducer,
+  type JourneyFlowState,
+  type JourneyState,
+  type JourneyStatus,
+} from "./journey-flow.js";
+export {
+  JOURNEY_COMMAND,
+  buildJourneyView,
+  journeyBeatEndedAction,
+  journeyCommandToAction,
+  journeyTapAction,
+  type JourneyBeatView,
+  type JourneyButtonView,
+  type JourneyChapterView,
+  type JourneyCheckpointView,
+  type JourneyOptionView,
+  type JourneyView,
+} from "./journey-view.js";

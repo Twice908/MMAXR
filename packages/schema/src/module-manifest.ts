@@ -13,6 +13,8 @@ const narrationTriggerSchema = z.enum([
   "mission_completed",
   "hint_used",
   "idle",
+  // Played by a journey beat (see `journey`), never by a learning event.
+  "journey_beat",
 ]);
 
 const guideActionSchema = z.enum([
@@ -96,6 +98,75 @@ const missionSchema = z
   })
   .strict();
 
+const journeyBeatSchema = z
+  .object({
+    id: identifierSchema,
+    /** Narration cue (trigger `journey_beat`) spoken during the beat. */
+    cueId: identifierSchema.optional(),
+    /** Short on-screen line; required when the beat has no cue. */
+    captionText: z.string().min(1).optional(),
+    /** Camera shot id, defined by the module. */
+    shot: identifierSchema.optional(),
+    /** Pick target to highlight during the beat. */
+    highlight: z.string().min(1).optional(),
+    /** How long the beat lasts when no narration audio plays. */
+    durationMs: z.number().int().positive(),
+  })
+  .strict()
+  .refine((beat) => beat.cueId !== undefined || beat.captionText !== undefined, {
+    message: "Every journey beat must define a narration cue or caption text",
+  });
+
+const checkpointCommon = {
+  id: identifierSchema,
+  prompt: z.string().min(1),
+  /** Shown once the checkpoint is solved: why the answer is right. */
+  explanation: z.string().min(1),
+  /** Shown for a wrong answer that has no specific feedback. */
+  defaultFeedback: z.string().min(1),
+  /** Why a specific wrong answer (tap target or option id) is wrong. */
+  wrongFeedback: z.record(z.string().min(1), z.string().min(1)).default({}),
+};
+
+const journeyCheckpointSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      kind: z.literal("tap"),
+      ...checkpointCommon,
+      /** Pick targets that answer the checkpoint. */
+      correctTargets: z.array(z.string().min(1)).min(1),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("choice"),
+      ...checkpointCommon,
+      options: z
+        .array(z.object({ id: identifierSchema, text: z.string().min(1) }).strict())
+        .min(2)
+        .max(4),
+      correctOptionId: identifierSchema,
+    })
+    .strict(),
+]);
+
+const journeyChapterSchema = z
+  .object({
+    id: identifierSchema,
+    title: z.string().min(1),
+    /** Mission tracked for this chapter; its goal must be `{ "chapter": "<chapter id>" }`. */
+    missionId: identifierSchema,
+    beats: z.array(journeyBeatSchema).min(1),
+    checkpoint: journeyCheckpointSchema.optional(),
+  })
+  .strict();
+
+const journeySchema = z
+  .object({
+    chapters: z.array(journeyChapterSchema).min(1),
+  })
+  .strict();
+
 export const moduleManifestSchema = z
   .object({
     schemaVersion: z.string().min(1),
@@ -116,6 +187,7 @@ export const moduleManifestSchema = z
     missions: z.array(missionSchema),
     rulesPlugin: z.string().min(1),
     narration: narrationSchema.optional(),
+    journey: journeySchema.optional(),
   })
   .strict()
   .superRefine((manifest, context) => {
@@ -179,6 +251,70 @@ export const moduleManifestSchema = z
       }
     }
 
+    if (manifest.journey) {
+      const cues = new Map((manifest.narration?.cues ?? []).map((cue) => [cue.id, cue]));
+      const missionsById = new Map(manifest.missions.map((mission) => [mission.id, mission]));
+      const chapterIds = manifest.journey.chapters.map((chapter) => chapter.id);
+      const beatIds = manifest.journey.chapters.flatMap((chapter) => chapter.beats.map((beat) => beat.id));
+      const chapterMissions = manifest.journey.chapters.map((chapter) => chapter.missionId);
+      for (const [label, ids] of [["chapter", chapterIds], ["beat", beatIds], ["chapter mission", chapterMissions]] as const) {
+        if (new Set(ids).size !== ids.length) {
+          context.addIssue({ code: "custom", path: ["journey", "chapters"], message: `Journey ${label} IDs must be unique` });
+        }
+      }
+      // The lesson flow starts the next mission in manifest order after scored questions.
+      const missionOrder = manifest.missions.map((mission) => mission.id).filter((id) => chapterMissions.includes(id));
+      if (missionOrder.join() !== chapterMissions.join()) {
+        context.addIssue({ code: "custom", path: ["journey", "chapters"], message: "Journey chapters must follow the order of their missions" });
+      }
+      for (const [chapterIndex, chapter] of manifest.journey.chapters.entries()) {
+        const path = ["journey", "chapters", chapterIndex];
+        const mission = missionsById.get(chapter.missionId);
+        if (!mission) {
+          context.addIssue({ code: "custom", path: [...path, "missionId"], message: `Journey chapter references missing mission "${chapter.missionId}"` });
+        } else if (JSON.stringify(mission.goal) !== JSON.stringify({ chapter: chapter.id })) {
+          context.addIssue({
+            code: "custom",
+            path: [...path, "missionId"],
+            message: `Mission "${mission.id}" must have the goal { "chapter": "${chapter.id}" }`,
+          });
+        }
+        for (const [beatIndex, beat] of chapter.beats.entries()) {
+          if (beat.cueId === undefined) continue;
+          const cue = cues.get(beat.cueId);
+          if (!cue || cue.trigger !== "journey_beat") {
+            context.addIssue({
+              code: "custom",
+              path: [...path, "beats", beatIndex, "cueId"],
+              message: `Journey beat needs a narration cue "${beat.cueId}" with trigger journey_beat`,
+            });
+          }
+        }
+        const checkpoint = chapter.checkpoint;
+        if (checkpoint?.kind === "choice") {
+          const optionIds = checkpoint.options.map((option) => option.id);
+          if (new Set(optionIds).size !== optionIds.length) {
+            context.addIssue({ code: "custom", path: [...path, "checkpoint", "options"], message: "Checkpoint option IDs must be unique" });
+          }
+          if (!optionIds.includes(checkpoint.correctOptionId)) {
+            context.addIssue({ code: "custom", path: [...path, "checkpoint", "correctOptionId"], message: "The correct option must be one of the options" });
+          }
+          for (const optionId of Object.keys(checkpoint.wrongFeedback)) {
+            if (!optionIds.includes(optionId) || optionId === checkpoint.correctOptionId) {
+              context.addIssue({ code: "custom", path: [...path, "checkpoint", "wrongFeedback"], message: `Feedback "${optionId}" must name a wrong option` });
+            }
+          }
+        }
+        if (checkpoint?.kind === "tap") {
+          for (const target of Object.keys(checkpoint.wrongFeedback)) {
+            if (checkpoint.correctTargets.includes(target)) {
+              context.addIssue({ code: "custom", path: [...path, "checkpoint", "wrongFeedback"], message: `Feedback "${target}" names a correct target` });
+            }
+          }
+        }
+      }
+    }
+
     for (const [label, ids] of [
       ["asset", assetIds],
       ["level", levelIds],
@@ -218,3 +354,12 @@ export const moduleManifestSchema = z
   });
 
 export type ModuleManifest = z.infer<typeof moduleManifestSchema>;
+
+/** A guided journey: chapters of narrated beats, each ending in an optional checkpoint. */
+export type JourneyDefinition = NonNullable<ModuleManifest["journey"]>;
+/** One chapter of a {@link JourneyDefinition}. */
+export type JourneyChapter = JourneyDefinition["chapters"][number];
+/** One narrated beat of a {@link JourneyChapter}. */
+export type JourneyBeat = JourneyChapter["beats"][number];
+/** The question that ends a {@link JourneyChapter}. */
+export type JourneyCheckpoint = NonNullable<JourneyChapter["checkpoint"]>;

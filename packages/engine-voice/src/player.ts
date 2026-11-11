@@ -81,7 +81,19 @@ export interface NarrationPlayerOptions {
   readonly idleAfterMs?: number;
   readonly onViewChange?: (state: NarrationViewState) => void;
   readonly onTelemetry?: (event: NarrationTelemetryDraft) => void;
+  /**
+   * Called when a cue stops for good: `ended` after its audio played to the end, `failed`
+   * when its audio could not be played, `unavailable` when it has no audio file.
+   * Journeys use it to move to the next beat.
+   */
+  readonly onCueEnded?: (cueId: string, outcome: NarrationCueOutcome) => void;
 }
+
+/** How a cue finished; see {@link NarrationPlayerOptions.onCueEnded}. */
+export type NarrationCueOutcome = "ended" | "failed" | "unavailable";
+
+/** Cue triggers that come from learning events (journey beats are played directly). */
+type EventTrigger = Exclude<NarrationCue["trigger"], "journey_beat">;
 
 interface QueuedCue {
   readonly cue: NarrationCue;
@@ -102,6 +114,7 @@ interface TimedCaption {
 
 const SETTINGS_KEY = "mma.narration.settings.v1";
 const PRIORITY: Record<NarrationCue["trigger"], number> = {
+  journey_beat: 4,
   mission_completed: 5,
   module_started: 4,
   mission_started: 3,
@@ -154,6 +167,7 @@ export class NarrationPlayer {
     this.lastActivityAt = this.now();
     const triggers = new Set(options.cues.map((cue) => cue.trigger));
     for (const trigger of triggers) {
+      if (trigger === "journey_beat") continue;
       this.unsubscribers.push(options.events.subscribe(trigger, (event) => {
         this.onTrigger(trigger, event as LearningEventMap[typeof trigger]);
       }));
@@ -259,6 +273,34 @@ export class NarrationPlayer {
   }
 
   /** Stop playback, detach event listeners, and release audio resources. */
+  /**
+   * Speak one cue now, interrupting anything playing, and show its caption. Returns
+   * `playing` when audio will play (then {@link NarrationPlayerOptions.onCueEnded} reports
+   * how it ends), or `silent` when only the caption shows: sound is off or muted, the tab
+   * is hidden, or the cue is unknown.
+   */
+  playCue(cueId: string): "playing" | "silent" {
+    const cue = this.options.cues.find((candidate) => candidate.id === cueId);
+    if (!cue || this.disposed) {
+      return "silent";
+    }
+    this.onActivity();
+    this.lastCue = cue;
+    this.showCaption(cue);
+    if (this.settingsValue.muted || this.documentRef?.hidden || !this.audioEnabled) {
+      this.publishSkipped(cue, this.settingsValue.muted ? "muted" : this.audioEnabled ? "tab_hidden" : "sound_off");
+      return "silent";
+    }
+    this.stopCurrent("interrupted");
+    this.startCue({ cue, priority: PRIORITY[cue.trigger] });
+    return "playing";
+  }
+
+  /** Stop the cue that is playing, if any (for example when a journey pauses). */
+  stopCurrentCue(): void {
+    this.stopCurrent("stopped");
+  }
+
   dispose(): void {
     if (this.disposed) {
       return;
@@ -292,8 +334,8 @@ export class NarrationPlayer {
   };
 
   private onTrigger(
-    trigger: NarrationCue["trigger"],
-    event: LearningEventMap[NarrationCue["trigger"]],
+    trigger: EventTrigger,
+    event: LearningEventMap[EventTrigger],
   ): void {
     if (this.disposed) {
       return;
@@ -404,6 +446,7 @@ export class NarrationPlayer {
     if (!queued.cue.audio || !this.audioEngine) {
       this.publishTelemetry({ type: "voice_fallback_used", payload: { reason: "audio_asset_missing" } });
       this.publishSkipped(queued.cue, "audio_unavailable");
+      this.options.onCueEnded?.(queued.cue.id, "unavailable");
       this.playNextQueued();
       return;
     }
@@ -440,6 +483,7 @@ export class NarrationPlayer {
               this.current = null;
               this.timedCaptionCueId = null;
               this.publishView();
+              this.options.onCueEnded?.(active.cue.id, "ended");
               this.playNextQueued();
             }
           });
@@ -485,6 +529,7 @@ export class NarrationPlayer {
         this.publishTelemetry({ type: "voice_fallback_used", payload: { reason: "audio_decode_failed" } });
         this.publishSkipped(active.cue, "audio_unavailable");
         this.publishView();
+        this.options.onCueEnded?.(active.cue.id, "failed");
         this.playNextQueued();
       }
     }

@@ -25,6 +25,11 @@ Current status (update this block as work completes):
 - Done: Ohm's Law stage 5: phone AR (HUD: Mission, Circuit, Readings, Sound) and headset / emulator AR and VR (Horizon panels); checked in the emulator only.
 - Done: Immersive shell for login and dashboard: `@mma/engine-ambience` (WebGL cosmos with nebula, star field, planets and stars anchored to DOM elements; live-synthesised soundscape; veil and shared motion). Subjects are star systems, experiments are planets; navigation is carried by colour and sound; sign-in warps, opening a lesson dives into its planet (docs/adr/0011-immersive-shell-cosmos-and-soundscape.md). Needs phone performance and headset checks.
 - Done: Atom Builder immersive upgrade, 6 phases (docs/adr/0012-atom-builder-immersive-upgrade.md): descent arrival with loader captions, dark cosmic lesson page with the nebula snapshot sky, luminous atom, sound that teaches (shared soundscape), mission moments, dark AR HUD and VR space backdrop. Needs the owner's manual checks: phone fps, AR legibility, headset VR.
+- Done: Cell Explorer phase 1: `packages/kits/biology` (`@mma/kit-biology`) organelle table (pending review) and seeded cell layout; realistic procedural `CellView` with cut-open mitochondrion and chloroplast models (engine-render); dev-only `?model-preview=cell` (docs/adr/0013-biology-kit-and-cell-views.md). Journey engine and the module page are next.
+- Done: Cell Explorer phase 2: shared guided journey engine (docs/adr/0014-guided-journey-engine.md): optional `journey` block in the manifest (chapters as missions, beats, tap/choice checkpoints, `journey_beat` cues), `createJourneyFlowReducer` / `buildJourneyView` (engine-lesson), `JourneyBeatRunner` and `NarrationPlayer.playCue` (engine-voice), `SceneRenderer.focusOn` camera shots; dev-only `?model-preview=journey` demo. Module page (phase 3) is next.
+- Done: Cell Explorer phase 3: screen module `modules/bio-cell-explorer` (draft; 4 chapters, 4 checkpoints, 6 pending questions, captions pending review) with the floating-stage light green/white page, pinned labels, fly-in from empty space, phone stacking; listed on the Dashboard under Biology with its own planet (docs/adr/0015-cell-explorer-screen-module.md). Next: Phase 4 narration, then immersive polish, AR, VR.
+- Done: Cell Explorer phase 4: 19 beat narration cues (`journey_beat`, scripts pending review), shared NarrationPlayer + JourneyBeatRunner, Sound and Captions buttons; draft Piper MP3s generated with the browser generator (ADR 0015).
+- Done: Cell Explorer close-ups now zoom into a real mitochondrion (animal cell) and chloroplast (plant cell) and open them in place. Phase 5 (moments, sound cues, living cells, chapter tint; plan approved) is on hold until the next session.
 - Next: Android and headset checks for Ohm's Law (docs/ar-testing.md); teacher review of Ohm's Law questions, bulb curve, graph axes and concept classes; Android and headset checks for Ionic Bonding; review the Atom Builder and Ionic Bonding assessment items and narration scripts.
 - Not started: Phase 2b live voice guide, remaining XR work (including headset VR and other 3a-4b work), portal link (Phase 4).
 
@@ -103,7 +108,7 @@ Also: new logic has unit tests; public APIs have TSDoc; no leftover debug code; 
 - Spec and roadmap: `README.md` (sections: 6 architecture, 7 manifest, 9 portal/telemetry, 11 repo layout, 13 roadmap, 16 first tasks, 17 decisions).
 - Schemas: `packages/schema` (`module-manifest.ts`, `telemetry-event.ts`).
 - Engine: `packages/engine-core` (store, actions, events, missions).
-- Chemistry rules: `packages/kits/chemistry`.
+- Chemistry rules: `packages/kits/chemistry`. Biology (organelles, cell layout): `packages/kits/biology`.
 - Narration: `packages/engine-voice`; mock asset generator: `tools/generate-narration`.
 - Shared lesson flow and lesson view model: `packages/engine-lesson`; shared screen lesson UI: `packages/engine-ui`.
 - Immersive shell (cosmos, soundscape, veil, screen motion): `packages/engine-ambience`; app palettes, moods and planet looks: `apps/web/src/stage`.

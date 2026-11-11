@@ -72,8 +72,30 @@ export {
   type CircuitViewOptions,
 } from "./circuit-view.js";
 export {
+  easeInOut,
+  interpolateShot,
+  shotDurationMs,
+  type CameraShot,
+} from "./camera-shot.js";
+export {
+  CellView,
+  cellOrganelleTarget,
+  organelleDetailTarget,
+  parseCellTarget,
+  type CellPick,
+  type CellSceneCell,
+  type CellSceneDetail,
+  type CellSceneFrame,
+  type CellSceneOrganelle,
+  type CellSceneOrganelleKind,
+  type CellViewOptions,
+  type OrganelleDetailKind,
+  type OrganelleDetailPart,
+} from "./cell-view.js";
+export {
   DEFAULT_WORLD_OPTIONS,
   SceneRenderer,
+  preferForeground,
   arTouchGestureConfig,
   type SceneRendererOptions,
   type ScreenZoomDistances,

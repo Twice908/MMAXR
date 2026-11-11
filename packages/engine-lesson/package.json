@@ -11,9 +11,7 @@
   },
   "dependencies": {
     "@mma/engine-assess": "workspace:*",
-    "@mma/engine-core": "workspace:*"
-  },
-  "devDependencies": {
+    "@mma/engine-core": "workspace:*",
     "@mma/schema": "workspace:*"
   }
 }

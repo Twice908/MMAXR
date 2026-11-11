@@ -58,9 +58,9 @@ const SYSTEMS: Readonly<Record<string, SystemLook>> = {
     accent: "#b9adff",
   },
   biology: {
-    // Dormant until Biology experiments arrive: a faint, distant star.
-    star: { core: "#c9ffe0", edge: "#2fb57a", intensity: 0.5, spikes: 0, glowScale: 3.2, seed: 8.8 },
-    size: 60,
+    // A fresh green star, awake now that the Cell Explorer orbits it.
+    star: { core: "#e4ffef", edge: "#2fb57a", intensity: 1, spikes: 0.5, seed: 8.8 },
+    size: 100,
     orbitColor: "#5fd9a0",
     mood: { rootMidi: 40, intervals: [0, 7, 11, 14, 16], brightness: 0.4 },
     accent: "#8fe7bd",
@@ -121,6 +121,21 @@ const PLANETS: Readonly<Record<string, PlanetLook>> = {
     size: 100,
     palette: { deep: "#021113", mid: "#073c48", glow: "#12b5a6", accent: "#ff5cc8" },
     note: 86,
+  },
+  // Plant vs Animal Cell: a living green world, with a soft pink moon for the animal cell.
+  "bio.cell-explorer": {
+    planet: {
+      style: "ocean",
+      colors: ["#0f4a2a", "#4fae5c", "#f2fff0"],
+      atmosphere: "#9df0b4",
+      moon: { colors: ["#7a3b46", "#f0b9a8", "#fff4ef"], atmosphere: "#ffc9bd", size: 0.3 },
+      spin: 0.06,
+      tilt: 0.3,
+      seed: 3.3,
+    },
+    size: 108,
+    palette: { deep: "#03110a", mid: "#0d3b22", glow: "#2fb57a", accent: "#b8ff8a" },
+    note: 84,
   },
   // Ohm's Law: a storm world with current-like lightning in its bands.
   "phys.ohms-law": {

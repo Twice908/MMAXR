@@ -2,6 +2,7 @@ export {
   NarrationPlayer,
   type NarrationAudioEngine,
   type NarrationCue,
+  type NarrationCueOutcome,
   type NarrationPlayback,
   type NarrationPlayerOptions,
   type NarrationSettings,
@@ -20,3 +21,9 @@ export {
   type NarrationAssetLoader,
   type NarrationAssetSources,
 } from "./assets.js";
+export {
+  JourneyBeatRunner,
+  type BeatNarrator,
+  type JourneyBeatRunnerOptions,
+  type TimedBeat,
+} from "./journey-beats.js";

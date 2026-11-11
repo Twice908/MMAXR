@@ -1,0 +1,507 @@
+/*
+ * Plant vs Animal Cell: a light, open stage. No panels: the cells fill the page, and
+ * captions, questions and names float over it or are pinned to the model.
+ */
+.cell-explorer {
+  --cx-ink: #17402a;
+  --cx-soft: #4f7a5c;
+  --cx-leaf: #3d8b4a;
+  --cx-leaf-deep: #2c6b37;
+  --cx-mint: #d7efcd;
+  --cx-line: rgb(61 139 74 / 30%);
+  --cx-glass: rgb(255 255 255 / 72%);
+  --cx-wrong: #a2452a;
+  --cx-wrong-soft: #fbe3d8;
+  --cx-halo: 0 2px 14px #ffffff, 0 0 2px #ffffff;
+
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  color: var(--cx-ink);
+  background: radial-gradient(90% 70% at 50% 45%, #ffffff 0%, #f3fbef 40%, #def2d6 78%, #c9e8bf 100%);
+  font-family: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+}
+
+.cell-explorer button {
+  font: inherit;
+}
+
+/* Layout rules below set display; hidden parts must still disappear. */
+.cell-explorer [hidden] {
+  display: none !important;
+}
+
+.cell-explorer :focus-visible {
+  outline: 3px solid var(--cx-leaf);
+  outline-offset: 3px;
+}
+
+/* Soft, slowly drifting specks: the inside of a cell, out of focus. */
+.cx-motes {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.cx-motes i {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgb(150 215 130 / 55%), rgb(150 215 130 / 0%) 70%);
+  animation: cx-drift 22s ease-in-out infinite alternate;
+}
+
+.cx-motes i:nth-child(1) { left: 8%; top: 18%; width: 70px; height: 70px; }
+.cx-motes i:nth-child(2) { left: 84%; top: 12%; width: 96px; height: 96px; animation-duration: 28s; }
+.cx-motes i:nth-child(3) { left: 76%; top: 78%; width: 48px; height: 48px; animation-duration: 18s; }
+.cx-motes i:nth-child(4) { left: 16%; top: 74%; width: 120px; height: 120px; animation-duration: 31s; }
+.cx-motes i:nth-child(5) { left: 50%; top: 6%; width: 30px; height: 30px; background: radial-gradient(circle, #ffffff, rgb(255 255 255 / 0%) 70%); }
+.cx-motes i:nth-child(6) { left: 40%; top: 88%; width: 36px; height: 36px; animation-duration: 25s; }
+.cx-motes i:nth-child(7) { left: 92%; top: 50%; width: 64px; height: 64px; animation-duration: 20s; }
+.cx-motes i:nth-child(8) { left: 3%; top: 45%; width: 40px; height: 40px; animation-duration: 27s; }
+
+@keyframes cx-drift {
+  from { transform: translate(0, 0); }
+  to { transform: translate(30px, -24px); }
+}
+
+.cx-stage {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+}
+
+/* --- pinned labels ------------------------------------------------------------------- */
+.cx-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.cx-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  font-weight: 700;
+  font-size: 15px;
+  text-shadow: var(--cx-halo);
+  transition: opacity 0.3s ease;
+  will-change: transform;
+}
+
+/* Cell names sit above their cell, centred on the point. */
+.cx-label--cell {
+  translate: -50% -100%;
+}
+
+.cx-label--cell.cx-label--below {
+  translate: -50% 0;
+}
+
+.cx-label--cell::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--cx-leaf);
+  box-shadow: 0 0 0 4px rgb(61 139 74 / 20%);
+}
+
+/* Organelle and part names point at their spot with a short line. */
+.cx-label--organelle,
+.cx-label--part {
+  translate: -4px -50%;
+  font-size: 14px;
+  color: var(--cx-leaf-deep);
+}
+
+.cx-label--organelle::before,
+.cx-label--part::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 3px #ffffff;
+}
+
+.cx-label--part {
+  color: var(--cx-soft);
+  font-weight: 600;
+}
+
+.cx-label.is-emphasis {
+  color: #8a5a00;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+/* --- top: back and chapter path ------------------------------------------------------ */
+.cx-top {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  pointer-events: none;
+}
+
+.cx-top > * {
+  pointer-events: auto;
+}
+
+.cx-path {
+  display: flex;
+  margin: 0 auto;
+  padding: 0;
+  list-style: none;
+}
+
+.cx-path li {
+  display: flex;
+  align-items: flex-start;
+}
+
+.cx-path li + li::before {
+  content: "";
+  width: 36px;
+  height: 2px;
+  margin-top: 11px;
+  background: repeating-linear-gradient(90deg, #9cd28a 0 5px, transparent 5px 10px);
+}
+
+.cx-node {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  min-width: 96px;
+  padding: 0;
+  border: 0;
+  color: var(--cx-soft);
+  background: none;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.cx-node:disabled {
+  cursor: default;
+}
+
+.cx-node-dot {
+  width: 14px;
+  height: 14px;
+  margin-top: 4px;
+  border: 2px solid #9cd28a;
+  border-radius: 50%;
+  background: #ffffff;
+}
+
+[data-state="done"] .cx-node-dot {
+  background: #9cd28a;
+}
+
+[data-state="current"] .cx-node {
+  color: var(--cx-ink);
+  font-weight: 700;
+}
+
+[data-state="current"] .cx-node-dot {
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  border-color: var(--cx-leaf);
+  background: var(--cx-leaf);
+  box-shadow: 0 0 0 6px rgb(61 139 74 / 18%);
+}
+
+[data-state="locked"] .cx-node {
+  opacity: 0.55;
+}
+
+/* --- pills and icon buttons --------------------------------------------------------- */
+.cx-pill {
+  min-height: 44px;
+  padding: 0 20px;
+  border: 1.5px solid var(--cx-line);
+  border-radius: 999px;
+  color: var(--cx-ink);
+  background: var(--cx-glass);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 10px 30px rgb(40 100 50 / 12%);
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.cx-pill:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: #ffffff;
+}
+
+.cx-pill:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.cx-pill--primary {
+  border-color: var(--cx-leaf);
+  color: #ffffff;
+  background: var(--cx-leaf);
+}
+
+.cx-pill--primary:hover:not(:disabled) {
+  background: var(--cx-leaf-deep);
+}
+
+.cx-pill[data-state="correct"] {
+  border-color: var(--cx-leaf);
+  color: #ffffff;
+  background: var(--cx-leaf);
+  opacity: 1;
+}
+
+.cx-pill[data-state="incorrect"] {
+  border-color: var(--cx-wrong);
+  color: var(--cx-wrong);
+  background: var(--cx-wrong-soft);
+  opacity: 1;
+}
+
+.cx-pill[data-state="answer"] {
+  border-color: var(--cx-leaf);
+  opacity: 1;
+}
+
+.cx-back {
+  min-height: 40px;
+  padding: 0 14px;
+  font-size: 14px;
+}
+
+.cx-icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border: 1px solid var(--cx-line);
+  border-radius: 50%;
+  color: var(--cx-leaf-deep);
+  background: var(--cx-glass);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+}
+
+.cx-icon svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
+.cx-dock {
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  display: flex;
+  gap: 10px;
+}
+
+/* --- words that float over the stage ------------------------------------------------ */
+.cx-eyebrow {
+  margin: 0;
+  color: var(--cx-leaf);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.cx-intro {
+  position: absolute;
+  left: 50%;
+  bottom: 12vh;
+  width: min(560px, calc(100% - 32px));
+  transform: translateX(-50%);
+  text-align: center;
+  text-shadow: var(--cx-halo);
+}
+
+.cx-intro h1 {
+  margin: 6px 0 8px;
+  font-size: clamp(30px, 5vw, 48px);
+  line-height: 1.1;
+}
+
+.cx-lede {
+  margin: 0 0 22px;
+  color: var(--cx-soft);
+  font-size: 17px;
+}
+
+.cell-explorer:not([data-status="intro"]) .cx-intro {
+  display: none;
+}
+
+.cx-caption {
+  position: absolute;
+  left: 50%;
+  bottom: 96px;
+  width: min(760px, calc(100% - 32px));
+  margin: 0;
+  transform: translateX(-50%);
+  text-align: center;
+  font-size: clamp(17px, 1.7vw, 22px);
+  font-weight: 600;
+  line-height: 1.4;
+  text-shadow: var(--cx-halo);
+  pointer-events: none;
+}
+
+.cx-caption small {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.cell-explorer[data-paused="true"] .cx-caption span::after {
+  content: " (paused)";
+  color: var(--cx-soft);
+  font-weight: 500;
+}
+
+.cx-ask {
+  position: absolute;
+  left: 50%;
+  bottom: 84px;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  width: min(720px, calc(100% - 32px));
+  transform: translateX(-50%);
+  text-align: center;
+  text-shadow: var(--cx-halo);
+}
+
+.cx-ask p {
+  margin: 0;
+}
+
+.cx-ask-prompt {
+  font-size: clamp(20px, 2.2vw, 26px);
+  font-weight: 700;
+}
+
+.cx-ask-note,
+.cx-ask-hint {
+  color: var(--cx-soft);
+  font-size: 14px;
+}
+
+.cx-ask-feedback {
+  max-width: 600px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.cx-ask-feedback[data-tone="wrong"] {
+  color: var(--cx-wrong);
+}
+
+.cx-ask-feedback[data-tone="right"] {
+  color: var(--cx-leaf-deep);
+}
+
+.cx-answers,
+.cx-ask-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  text-shadow: none;
+}
+
+/* The name of whatever was tapped while exploring. */
+.cx-name {
+  position: absolute;
+  left: 50%;
+  top: 92px;
+  margin: 0;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--cx-glass);
+  backdrop-filter: blur(8px);
+  font-weight: 700;
+  opacity: 0;
+  transform: translate(-50%, -6px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  pointer-events: none;
+}
+
+.cx-name.is-shown {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* --- phones -------------------------------------------------------------------------- */
+@media (max-width: 640px) {
+  .cx-top {
+    top: 12px;
+    left: 12px;
+    right: 12px;
+  }
+
+  .cx-node {
+    min-width: 0;
+  }
+
+  .cx-node-title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+
+  .cx-path li + li::before {
+    width: 14px;
+  }
+
+  .cx-path {
+    margin: 10px 0 0 auto;
+  }
+
+  .cx-dock {
+    left: 50%;
+    right: auto;
+    bottom: 14px;
+    transform: translateX(-50%);
+  }
+
+  .cx-caption {
+    bottom: 76px;
+  }
+
+  .cx-ask {
+    bottom: 72px;
+  }
+
+  .cx-label {
+    font-size: 13px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cx-motes i {
+    animation: none;
+  }
+
+  .cx-pill,
+  .cx-label,
+  .cx-name {
+    transition: none;
+  }
+}

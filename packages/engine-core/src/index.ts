@@ -37,4 +37,4 @@ export {
   type Store,
   type StoreOptions,
   type TelemetryContext,
-} from "./store.js";
+} from "./store.js";export { seededRandom, type SeededRandom } from "./seeded-random.js";

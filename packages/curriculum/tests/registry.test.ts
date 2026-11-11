@@ -7,7 +7,7 @@ import {
 } from "../src/index.js";
 
 describe("concept registry", () => {
-  it("maps the chemistry concepts to Class 9-10 and the electricity concepts to Classes 10 and 12, on the three boards", () => {
+  it("maps chemistry to Class 9-10, electricity to Classes 10 and 12, and cells to Classes 8-10, on the three boards", () => {
     expect(validateConceptRegistry(concepts)).toEqual([]);
     const chemistry = [
       "sci.chem.atom.structure",
@@ -24,9 +24,16 @@ describe("concept registry", () => {
       "sci.phys.electricity.meters",
       "sci.phys.electricity.non-ohmic",
     ];
-    expect(Object.keys(conceptRegistry)).toEqual([...chemistry, ...electricity]);
+    const cells = [
+      "sci.bio.cell.structure",
+      "sci.bio.cell.plant-vs-animal",
+      "sci.bio.cell.mitochondria",
+      "sci.bio.cell.chloroplast",
+    ];
+    expect(Object.keys(conceptRegistry)).toEqual([...chemistry, ...electricity, ...cells]);
     for (const [id, definition] of Object.entries(conceptRegistry)) {
-      expect(definition.classes).toEqual(chemistry.includes(id) ? [9, 10] : [10, 12]);
+      const classes = chemistry.includes(id) ? [9, 10] : cells.includes(id) ? [8, 9, 10] : [10, 12];
+      expect(definition.classes).toEqual(classes);
       expect(definition.boards).toEqual(["CBSE", "ICSE", "STATE"]);
     }
   });

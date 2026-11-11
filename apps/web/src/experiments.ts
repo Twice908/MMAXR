@@ -1,3 +1,4 @@
+import { manifest as cellExplorer } from "@mma/bio-cell-explorer/manifest";
 import { manifest as atomBuilder } from "@mma/chem-atom-builder/manifest";
 import { manifest as ionicBonding } from "@mma/chem-ionic-bonding/manifest";
 import { manifest as ohmsLaw } from "@mma/physics-ohms-law/manifest";
@@ -60,6 +61,20 @@ export const experiments: readonly Experiment[] = [
         import("virtual:iwsdk-project"),
       ]);
       return (root, context) => mountOhmsLaw(root, { worldOptions: projectOptions, onExit: context.onExit });
+    },
+  },
+  {
+    id: cellExplorer.id,
+    subject: cellExplorer.subject,
+    title: cellExplorer.title.en ?? Object.values(cellExplorer.title)[0] ?? cellExplorer.id,
+    estimatedMinutes: cellExplorer.estimatedMinutes,
+    releaseStatus: cellExplorer.releaseStatus,
+    load: async () => {
+      const [{ mountCellExplorer }, { default: projectOptions }] = await Promise.all([
+        import("@mma/bio-cell-explorer"),
+        import("virtual:iwsdk-project"),
+      ]);
+      return (root, context) => mountCellExplorer(root, { worldOptions: projectOptions, onExit: context.onExit });
     },
   },
 ];
