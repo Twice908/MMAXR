@@ -1,0 +1,249 @@
+/*
+ * Atom Builder, cosmic theme (dark only). Loaded after atom-builder.css and ar-hud.css.
+ *
+ * Every rule repeats a base selector behind `:where(.atom-builder)`, which adds no specificity:
+ * it wins over the base rule by coming later, applies only inside Atom Builder (never leaking
+ * into other lessons), and still loses to the AR HUD rules and their `!important` transparency.
+ *
+ * The sky is `--cosmos-snapshot`, a still of the nebula from the app's cosmos. Without it a
+ * gradient stands in.
+ */
+:root:has(.atom-builder) { background: #05031a; }
+
+.atom-builder {
+  --ink: #eef1ff;
+  --muted: #a9b2d9;
+  --faint: #7d86b3;
+  --line: rgba(196, 204, 255, 0.14);
+  --line-strong: rgba(196, 204, 255, 0.28);
+  --paper: #05031a;
+  --panel: rgba(13, 11, 38, 0.72);
+  --panel-soft: rgba(9, 8, 28, 0.5);
+  --coral: #d64c35;
+  --teal: #287f83;
+  --gold: #f0b323;
+  --violet: #8f7bff;
+  --cyan: #6ff3ff;
+  --focus: #ffd36b;
+  --good: #7fe6b5;
+  --bad: #ff8b97;
+  --cosmic-gradient: linear-gradient(120deg, #4a3bd8 0%, #6a3cff 48%, #1b93b8 100%);
+  --hairline: linear-gradient(90deg, transparent, rgba(143, 123, 255, 0.5) 30%, rgba(111, 243, 255, 0.45) 70%, transparent);
+  --noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --drop-slot-color: #6ff3ff;
+  --drop-slot-active-color: #ffd36b;
+  --drop-slot-opacity: 0.35;
+  --narration-panel-color: 13, 11, 38;
+  --narration-panel-opacity: 0.72;
+  color-scheme: dark;
+  color: var(--ink);
+  background-color: var(--paper);
+  background-image:
+    var(--noise),
+    var(--cosmos-snapshot,
+      radial-gradient(70% 55% at 62% 40%, rgba(106, 60, 255, 0.35), transparent 70%),
+      radial-gradient(50% 40% at 25% 75%, rgba(62, 230, 255, 0.14), transparent 70%),
+      linear-gradient(160deg, #0b0630 0%, #05031a 55%, #020110 100%));
+  /* Two layers with the snapshot, four with the gradient fallback; extra values are ignored. */
+  background-size: 180px 180px, cover, cover, cover;
+  background-repeat: repeat, no-repeat, no-repeat, no-repeat;
+  background-attachment: fixed, fixed, fixed, fixed;
+  background-position: 0 0, center, center, center;
+  font-family: "Avenir Next", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Header: a dark band with a glowing hairline. */
+:where(.atom-builder) .builder-header {
+  position: relative;
+  background: linear-gradient(180deg, rgba(4, 3, 18, 0.88), rgba(4, 3, 18, 0.55));
+  border-bottom: 0;
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+:where(.atom-builder) .builder-header::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: var(--hairline); }
+:where(.atom-builder) .brand-mark { background: var(--cosmic-gradient); font-family: Georgia, serif; box-shadow: 0 0 18px rgba(106, 60, 255, 0.5); }
+:where(.atom-builder) .eyebrow { color: var(--cyan); letter-spacing: 0.24em; text-shadow: 0 0 14px rgba(111, 243, 255, 0.5); }
+:where(.atom-builder) .builder-title h1 {
+  font-family: inherit;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  background: linear-gradient(100deg, #ffffff 0%, #ddd6ff 50%, #a6f6ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Shared button look: dark, hairline border, glow on hover. */
+:where(.atom-builder) .back-to-experiments,
+:where(.atom-builder) .reset-atom,
+:where(.atom-builder) .reset-view,
+:where(.atom-builder) .lesson-controls button,
+:where(.atom-builder) .assessment-continue,
+:where(.atom-builder) .narration-controls button,
+:where(.atom-builder) .narration-controls select,
+:where(.atom-builder) .stepper button {
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.05);
+  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 220ms ease;
+}
+:where(.atom-builder) .back-to-experiments:hover,
+:where(.atom-builder) .reset-atom:hover,
+:where(.atom-builder) .reset-view:hover,
+:where(.atom-builder) .lesson-controls button:hover:not(:disabled),
+:where(.atom-builder) .assessment-continue:hover,
+:where(.atom-builder) .narration-controls button:hover:not(:disabled),
+:where(.atom-builder) .stepper button:hover {
+  border-color: rgba(111, 243, 255, 0.6);
+  background: rgba(111, 243, 255, 0.08);
+  box-shadow: 0 0 18px rgba(111, 243, 255, 0.18);
+}
+:where(.atom-builder) :is(button, select, [tabindex]):focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+:where(.atom-builder) .stepper button:focus-visible { border-color: var(--cyan); outline: 3px solid var(--focus); }
+
+/* Primary actions: the violet-to-cyan gradient. */
+:where(.atom-builder) .lesson-controls [data-command="lesson:check"],
+:where(.atom-builder) .assessment-continue,
+:where(.atom-builder) .narration-controls [data-narration-action="enable"],
+:where(.atom-builder) .ar-start {
+  border-color: transparent;
+  color: #ffffff;
+  background: var(--cosmic-gradient);
+  box-shadow: 0 8px 24px rgba(106, 60, 255, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.12) inset;
+}
+:where(.atom-builder) .ar-start:hover { background: var(--cosmic-gradient); filter: brightness(1.12); }
+:where(.atom-builder) .lesson-controls [data-command="lesson:check"]:disabled { color: var(--muted); background: rgba(255, 255, 255, 0.05); box-shadow: none; }
+
+/* Mission, question, summary and narration bands. */
+:where(.atom-builder) .lesson-panel,
+:where(.atom-builder) .assessment-card,
+:where(.atom-builder) .lesson-summary,
+:where(.atom-builder) .free-play-status,
+:where(.atom-builder) .narration-hud {
+  position: relative;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, var(--panel), var(--panel-soft));
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+:where(.atom-builder) .lesson-step { color: var(--cyan); letter-spacing: 0.2em; }
+:where(.atom-builder) .lesson-copy h2,
+:where(.atom-builder) .assessment-card h2,
+:where(.atom-builder) .lesson-summary h2 { font-family: inherit; font-weight: 600; letter-spacing: -0.01em; color: #ffffff; }
+:where(.atom-builder) .lesson-copy > p:not(.lesson-step):not(.mission-progress) { color: #d6dbff; }
+:where(.atom-builder) .mission-progress { color: var(--faint); letter-spacing: 0.06em; }
+:where(.atom-builder) .hint-feedback { color: var(--cyan); }
+:where(.atom-builder) .mission-feedback { color: #ffb3a7; }
+:where(.atom-builder) .narration-caption { color: var(--ink); }
+:where(.atom-builder) .narration-controls label,
+:where(.atom-builder) .narration-audio-status { color: var(--muted); }
+:where(.atom-builder) .narration-controls select option { color: #111; }
+:where(.atom-builder) .assessment-card { background: linear-gradient(180deg, rgba(40, 22, 70, 0.78), rgba(13, 11, 38, 0.6)); }
+:where(.atom-builder) .assessment-options button {
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.04);
+}
+:where(.atom-builder) .assessment-options button:hover:not(:disabled) { border-color: rgba(111, 243, 255, 0.6); background: rgba(111, 243, 255, 0.07); }
+:where(.atom-builder) .assessment-options button.is-correct,
+:where(.atom-builder) .assessment-options button.is-answer { border-color: var(--good); background: rgba(127, 230, 181, 0.12); }
+:where(.atom-builder) .assessment-options button.is-incorrect { border-color: var(--bad); background: rgba(255, 139, 151, 0.12); }
+:where(.atom-builder) .lesson-summary { background: linear-gradient(180deg, rgba(20, 70, 60, 0.7), rgba(13, 11, 38, 0.6)); }
+:where(.atom-builder) .free-play-status { color: var(--cyan); letter-spacing: 0.08em; }
+
+/* Side rails: deep translucent columns either side of the atom. */
+:where(.atom-builder) .particle-rail,
+:where(.atom-builder) .atom-inspector {
+  background: linear-gradient(180deg, rgba(10, 9, 30, 0.7), rgba(6, 5, 20, 0.45));
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+:where(.atom-builder) .particle-rail { border-right: 1px solid var(--line); }
+:where(.atom-builder) .atom-inspector { border-left: 1px solid var(--line); }
+:where(.atom-builder) .rail-heading,
+:where(.atom-builder) .scene-heading,
+:where(.atom-builder) .inspector-foot { color: var(--muted); letter-spacing: 0.22em; }
+:where(.atom-builder) .rail-rule { background: var(--hairline); }
+:where(.atom-builder) .particle-row { border-bottom: 1px solid var(--line); }
+:where(.atom-builder) .particle-label strong { color: #ffffff; font-weight: 600; }
+:where(.atom-builder) .particle-label span { color: var(--muted); }
+:where(.atom-builder) .rail-footer { color: var(--faint); }
+/* Tray particles glow in their own colour, matching the model. */
+:where(.atom-builder) .tray-particle { box-shadow: inset -4px -5px 8px rgba(0, 0, 0, 0.35), 0 0 14px currentColor; }
+:where(.atom-builder) .proton-dot { color: rgba(214, 76, 53, 0.75); }
+:where(.atom-builder) .neutron-dot { color: rgba(64, 190, 196, 0.6); }
+:where(.atom-builder) .electron-dot { color: rgba(240, 179, 35, 0.75); }
+:where(.atom-builder) .color-key { box-shadow: 0 0 8px currentColor; }
+:where(.atom-builder) .proton-key { color: rgba(214, 76, 53, 0.8); }
+:where(.atom-builder) .neutron-key { color: rgba(64, 190, 196, 0.7); }
+:where(.atom-builder) .electron-key { color: rgba(240, 179, 35, 0.8); }
+
+/* The stage: a window onto the atom, with a soft violet core light. */
+:where(.atom-builder) .atom-workspace { padding-top: 14px; }
+:where(.atom-builder) .scene-viewport {
+  isolation: isolate;
+  min-height: min(70vh, 720px);
+  border: 1px solid rgba(143, 123, 255, 0.28);
+  border-radius: 18px;
+  background: radial-gradient(90% 80% at 50% 50%, transparent 55%, rgba(2, 1, 12, 0.55) 100%);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.03) inset, 0 30px 80px rgba(0, 0, 0, 0.45), 0 0 60px rgba(106, 60, 255, 0.12);
+}
+/* Core light behind the atom, following the outer shell (data-outer-shell, set by the lesson):
+   dim violet when empty, a restless violet glow while reactive, calm cyan once complete. */
+:where(.atom-builder) .scene-viewport::before,
+:where(.atom-builder) .scene-viewport::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 900ms ease;
+}
+:where(.atom-builder) .scene-viewport::before { background: radial-gradient(44% 42% at 50% 50%, rgba(150, 90, 255, 0.36), transparent 72%); }
+:where(.atom-builder) .scene-viewport::after { background: radial-gradient(48% 46% at 50% 50%, rgba(111, 243, 255, 0.3), rgba(106, 60, 255, 0.1) 45%, transparent 75%); }
+:where(.atom-builder) .scene-viewport:not([data-outer-shell])::before,
+:where(.atom-builder) .scene-viewport[data-outer-shell="empty"]::before { opacity: 0.5; }
+:where(.atom-builder) .scene-viewport[data-outer-shell="reactive"]::before { opacity: 0.95; animation: core-restless 2.6s ease-in-out infinite; }
+:where(.atom-builder) .scene-viewport[data-outer-shell="complete"]::after { opacity: 1; }
+@keyframes core-restless { 50% { transform: scale(1.12); filter: brightness(1.3); } }
+.ar-active .scene-viewport::before,
+.ar-active .scene-viewport::after { display: none; }
+
+:where(.atom-builder) .chemistry-feedback { color: #ffc2b8; border-radius: 0 10px 10px 0; }
+:where(.atom-builder) .chemistry-feedback.is-visible { border-left-color: #ff6b5a; background: rgba(255, 107, 90, 0.1); }
+:where(.atom-builder) .ar-support-message { color: var(--muted); }
+
+/* Inspector: a glowing symbol and clean read-outs. */
+:where(.atom-builder) .element-summary { border-bottom: 1px solid var(--line); }
+:where(.atom-builder) .element-symbol {
+  font-family: inherit;
+  font-weight: 600;
+  background: linear-gradient(160deg, #ffffff 0%, #a6f6ff 45%, #8f7bff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 16px rgba(111, 243, 255, 0.35));
+}
+:where(.atom-builder) .element-summary h2 { font-family: inherit; font-weight: 600; color: #ffffff; }
+:where(.atom-builder) .element-summary div span { color: var(--muted); }
+:where(.atom-builder) .property-list div { border-bottom: 1px solid var(--line); }
+:where(.atom-builder) .property-list dt { color: var(--muted); }
+:where(.atom-builder) .property-list dt span { color: var(--faint); }
+:where(.atom-builder) .property-list dd { color: #ffffff; }
+:where(.atom-builder) .live-indicator { background: var(--good); box-shadow: 0 0 10px var(--good); animation: cosmic-live 2.2s ease-in-out infinite; }
+@keyframes cosmic-live { 50% { opacity: 0.35; box-shadow: 0 0 2px var(--good); } }
+
+/* Drag label. */
+:where(.atom-builder) .drag-ghost { border-color: rgba(255, 255, 255, 0.35); background: var(--cosmic-gradient); box-shadow: 0 6px 20px rgba(106, 60, 255, 0.45); }
+
+@media (max-width: 920px) {
+  :where(.atom-builder) .atom-inspector { border-top: 1px solid var(--line); border-left: 0; }
+}
+
+@media (max-width: 620px) {
+  :where(.atom-builder) .particle-rail { border-top: 1px solid var(--line); border-right: 0; }
+  :where(.atom-builder) .scene-viewport { min-height: min(50vh, 440px); border-radius: 14px; }
+}

@@ -47,6 +47,8 @@ export {
   type Position3,
   type SceneRing,
   type ScreenSceneFrame,
+  type AtomStyle,
+  type AtomViewOptions,
   type SphereBatch,
 } from "./atom-view.js";
 export {

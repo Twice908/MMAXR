@@ -7,7 +7,8 @@ import { findExperiment } from "./catalogue.js";
 import { experiments } from "./experiments.js";
 import { parseRoute, resolveRoute, routeHash, type Route } from "./router.js";
 import { createStage, type Stage } from "./stage/stage.js";
-import { planetLook } from "./stage/theme.js";
+import { createArrivalLog, playArrival } from "./stage/arrival.js";
+import { arrivalFor, planetLook } from "./stage/theme.js";
 import { sameRoute } from "./stage/transitions.js";
 import { mountDashboard } from "./views/dashboard.js";
 import { mountLogin } from "./views/login.js";
@@ -40,6 +41,7 @@ function startApp(): void {
   });
   const limiter = createAttemptLimiter({ maxAttempts: 5, lockMs: 30_000, now: () => Date.now() });
   const experimentIds = experiments.map((experiment) => experiment.id);
+  const arrivals = createArrivalLog(readStorage());
   let current: { readonly route: Route; readonly screen: Screen } | null = null;
   // Page changes run one at a time, so an exit animation always finishes before the next page mounts.
   let queue: Promise<void> = Promise.resolve();
@@ -118,23 +120,57 @@ function startApp(): void {
       return closed;
     }
     document.title = `${experiment.title} | Math Maam Academy`;
-    // The veil (already up after the dive, or raised now) covers the load in the planet's colours.
+    const onExit = (): void => navigate({ name: "dashboard" });
+    const leaveToDashboard = async (): Promise<void> => {
+      stage.veil.setLabel("");
+      await stage.veil.show(palette, stage.time(380));
+    };
+    // Lessons can paint the same sky without a running WebGL loop: a still of the nebula in the
+    // planet's colours, offered as the CSS variable --cosmos-snapshot.
+    const paintSky = (): void => {
+      const still = stage.cosmos.snapshot(palette);
+      if (still) app.style.setProperty("--cosmos-snapshot", `url("${still}")`);
+    };
+    const withSky = (teardown: () => void): (() => void) => () => {
+      teardown();
+      app.style.removeProperty("--cosmos-snapshot");
+    };
+
+    // A module with a descent: fall from its planet down to the atom while the lesson loads and
+    // mounts unseen underneath. The full descent plays on a student's first visit, a short one after.
+    const script = arrivalFor(id);
+    const studentRef = sessions.get()?.studentRef;
+    if (script && studentRef && stage.cosmos.supported && !stage.reducedMotion) {
+      const short = arrivals.seen(studentRef, id);
+      stage.veil.setLabel("");
+      const run = playArrival(stage, script, { short, title: experiment.title });
+      void stage.veil.hide(450);
+      try {
+        const [mount] = await Promise.all([experiment.load(), run.arrived]);
+        arrivals.mark(studentRef, id);
+        paintSky();
+        const teardown = mount(app, { onExit });
+        await run.finish(900);
+        return { leave: leaveToDashboard, dispose: withSky(teardown) };
+      } catch (error) {
+        await run.finish(0);
+        showLoadError(error, experiment.title);
+        return closed;
+      }
+    }
+
+    // Otherwise the veil (already up after the dive, or raised now) covers the load in the planet's colours.
     stage.veil.setLabel(`Opening ${experiment.title}`);
     if (!stage.veil.showing) await stage.veil.show(palette, stage.time(300));
     stage.sound.setBedLevel(0, 1.5);
     try {
       const mount = await experiment.load();
+      paintSky();
       stage.setCosmic(false);
-      const teardown = mount(app, { onExit: () => navigate({ name: "dashboard" }) });
+      const teardown = mount(app, { onExit });
       stage.veil.setLabel("");
       void stage.veil.hide(stage.time(650));
-      return {
-        async leave() {
-          stage.veil.setLabel("");
-          await stage.veil.show(palette, stage.time(380));
-        },
-        dispose: teardown,
-      };
+      return { leave: leaveToDashboard, dispose: withSky(teardown) };
     } catch (error) {
       stage.setCosmic(true);
       stage.veil.setLabel("");
@@ -165,4 +201,13 @@ function showLoadError(error: unknown, title = "This page"): void {
   back.textContent = "Back to experiments";
   wrapper.append(message, back);
   app.append(wrapper);
+}
+
+/** `localStorage`, or null where the browser blocks it. */
+function readStorage(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
 }

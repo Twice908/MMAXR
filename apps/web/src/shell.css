@@ -19,5 +19,7 @@ body { min-height: 100dvh; }
 .cosmos-layer[hidden] { display: none; }
 body.is-cosmic { background: #02030a; color-scheme: dark; }
 body.is-cosmic #app { position: relative; z-index: 1; }
+/* During a descent the sky covers the page while the lesson mounts underneath. */
+body.is-journey .cosmos-layer { z-index: 55; }
 body.is-cosmic .shell-error { color: #ffb3bd; }
 body.is-cosmic .shell-error a { color: #c9d4ff; }

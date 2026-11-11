@@ -10,6 +10,8 @@ export {
   type CelestialBody,
   type Cosmos,
   type CosmosOptions,
+  type Journey,
+  type JourneyOptions,
   type Orbit,
   type OrbitOptions,
   type PlanetOptions,
@@ -25,6 +27,7 @@ export {
   type SoundSweep,
 } from "./soundscape.js";
 export { createVeil, type Veil } from "./veil.js";
+export { createJourneyCaptions, type JourneyCaptions, type JourneyCaptionsOptions } from "./captions.js";
 export {
   createSoundToggle,
   departOut,

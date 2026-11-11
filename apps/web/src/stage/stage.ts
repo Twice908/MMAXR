@@ -23,6 +23,10 @@ export interface Stage {
   time(ms: number): number;
   /** Show the cosmos (login, dashboard) or hand the screen to a lesson. */
   setCosmic(on: boolean): void;
+  /** Lift the cosmos above the page for a descent, so a lesson can mount unseen underneath. */
+  beginJourney(): void;
+  /** Fade the descent away, then hand the screen to the lesson. */
+  endJourney(fadeMs: number): Promise<void>;
   dispose(): void;
 }
 
@@ -56,16 +60,38 @@ export function createStage(doc: Document): Stage {
 
   const veil = createVeil(doc.body, "#000000");
 
+  const setCosmic = (on: boolean): void => {
+    doc.body.classList.toggle("is-cosmic", on);
+    layer.hidden = !on;
+    cosmos.setRunning(on);
+  };
+
   return {
     cosmos,
     sound,
     veil,
     reducedMotion,
     time: (ms) => (reducedMotion ? Math.min(ms, 220) : ms),
-    setCosmic(on) {
-      doc.body.classList.toggle("is-cosmic", on);
-      layer.hidden = !on;
-      cosmos.setRunning(on);
+    setCosmic,
+    beginJourney() {
+      setCosmic(true);
+      doc.body.classList.add("is-journey");
+    },
+    async endJourney(fadeMs) {
+      if (fadeMs > 0 && typeof layer.animate === "function") {
+        const fade = layer.animate([{ opacity: 1 }, { opacity: 0 }], {
+          duration: fadeMs,
+          easing: "cubic-bezier(0.4, 0, 0.2, 1)",
+          fill: "forwards",
+        });
+        await fade.finished.catch(() => undefined);
+        doc.body.classList.remove("is-journey");
+        setCosmic(false);
+        fade.cancel();
+        return;
+      }
+      doc.body.classList.remove("is-journey");
+      setCosmic(false);
     },
     dispose() {
       removeUnlock();

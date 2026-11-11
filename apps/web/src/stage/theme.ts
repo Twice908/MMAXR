@@ -176,3 +176,57 @@ export const LOGIN_SUN: StarOptions = {
   spikes: 0.9,
   seed: 9.1,
 };
+
+/** The descent played when a module opens: what it looks like, says and plays. */
+export interface ArrivalScript {
+  /** Colours of the clouds, particles and space on the way down. */
+  readonly palette: CosmosPalette;
+  readonly shellColor: string;
+  readonly nucleusColor: string;
+  /** Electrons per shell in the atom the descent arrives at, innermost first. */
+  readonly shells: readonly number[];
+  /** Status lines for the first visit, in order, spread across the descent. */
+  readonly lines: readonly string[];
+  /** Status lines for later visits (the short descent). */
+  readonly shortLines: readonly string[];
+  /** Shown on arrival. */
+  readonly welcome: string;
+  readonly welcomeBack: string;
+  /** Shown if the lesson is still loading after arrival. */
+  readonly waiting: string;
+  /** Chord the music glides to on the way down. */
+  readonly mood: SoundMood;
+  /** Bell note for the moment of breaking through the clouds. */
+  readonly note: number;
+}
+
+const ARRIVALS: Readonly<Record<string, ArrivalScript>> = {
+  // Atom Builder: fall through the violet planet's clouds, down past everyday scales, into a
+  // solid's packed particles, and arrive at one atom with two shells (2 and 4 electrons, as in
+  // carbon, the first mission).
+  "chem.atom-builder": {
+    palette: { deep: "#05031a", mid: "#1d0f56", glow: "#6a3cff", accent: "#3ee6ff" },
+    shellColor: "#6ff3ff",
+    nucleusColor: "#ffb36b",
+    shells: [2, 4],
+    lines: [
+      "Entering the atmosphere",
+      "Shrinking smaller than a grain of sand",
+      "Smaller than a living cell",
+      "Too small for any light microscope",
+      "Particles packed side by side",
+      "Closing in on a single atom",
+    ],
+    shortLines: ["Shrinking back down", "Closing in on the atom"],
+    welcome: "Welcome inside the atom",
+    welcomeBack: "Welcome back inside the atom",
+    waiting: "Setting up your lab",
+    mood: { rootMidi: 43, intervals: [0, 7, 14, 18, 21], brightness: 0.55 },
+    note: 79,
+  },
+};
+
+/** The descent for a module, or null when it has none yet (it then opens with a colour fade). */
+export function arrivalFor(experimentId: string): ArrivalScript | null {
+  return ARRIVALS[experimentId] ?? null;
+}

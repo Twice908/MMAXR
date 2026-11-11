@@ -18,6 +18,7 @@ import {
   TorusGeometry,
   Vector2,
   Vector3,
+  Vector4,
   WebGLRenderer,
   WebGLRenderTarget,
   type IUniform,
@@ -60,6 +61,7 @@ import {
   STAR_VERTEX,
   SUN_FRAGMENT,
 } from "./glsl.js";
+import { JOURNEY_FRAGMENT } from "./journey-glsl.js";
 
 /** Surface look of a planet. */
 export type PlanetStyle =
@@ -147,6 +149,35 @@ export interface OrbitOptions {
   readonly widen?: number;
 }
 
+/** Options for {@link Cosmos.startJourney}. */
+export interface JourneyOptions {
+  /** Colours of the clouds, particles and space. */
+  readonly palette: CosmosPalette;
+  /** Colour of the shells and electrons of the atom at the end. */
+  readonly shellColor: string;
+  /** Colour of the nucleus. */
+  readonly nucleusColor: string;
+  /** Electrons in each shell of the final atom, innermost first (up to four shells). */
+  readonly shells: readonly number[];
+  /** Time from the start point to the atom. */
+  readonly durationMs: number;
+  /** Where to start: 0 is the full descent from the atmosphere, about 0.5 starts among the particles. */
+  readonly from?: number;
+  /** Called every frame with progress from `from` to 1. */
+  readonly onProgress?: (progress: number) => void;
+}
+
+/** A running descent. It keeps animating at the atom until stopped. */
+export interface Journey {
+  /** Resolves when the descent reaches the atom (or a skip finishes). */
+  readonly arrived: Promise<void>;
+  readonly progress: number;
+  /** Rush to the atom quickly. */
+  skip(): void;
+  /** Leave journey mode; the normal sky returns. */
+  stop(): void;
+}
+
 /** The living space backdrop. */
 export interface Cosmos {
   /** False when WebGL is unavailable; the element then shows a CSS gradient instead. */
@@ -164,6 +195,13 @@ export interface Cosmos {
   addOrbit(star: CelestialBody, planet: CelestialBody, options: OrbitOptions): Orbit;
   /** Light the nebula around a body (or nothing). */
   focus(body: CelestialBody | null): void;
+  /** Replace the sky with a descent from a planet's atmosphere down to a single atom. */
+  startJourney(options: JourneyOptions): Journey;
+  /**
+   * A still image of the sky (nebula and stars, no bodies) in a palette, as a JPEG data URL,
+   * for pages that want the same sky without a running WebGL loop. Null when unavailable.
+   */
+  snapshot(palette: CosmosPalette): string | null;
   /** Pause or resume rendering, for example while a lesson has the screen. */
   setRunning(running: boolean): void;
   dispose(): void;
@@ -333,6 +371,33 @@ function createWebGlCosmos(renderer: WebGLRenderer, options: CosmosOptions): Cos
   compositeMesh.frustumCulled = false;
   compositeScene.add(compositeMesh);
 
+  // Descent: one full-screen pass that replaces the sky while a journey runs.
+  const journeyUniforms: Uniforms = {
+    uProgress: { value: 0 },
+    uZoom: { value: 0 },
+    uTime: { value: 0 },
+    uAspect: { value: 1 },
+    uDeep: { value: new Color() },
+    uMid: { value: new Color() },
+    uGlow: { value: new Color() },
+    uAccent: { value: new Color() },
+    uShellColor: { value: new Color() },
+    uNucleusColor: { value: new Color() },
+    uShells: { value: new Vector4() },
+  };
+  const journeyMaterial = new ShaderMaterial({
+    uniforms: journeyUniforms,
+    vertexShader: FULLSCREEN_VERTEX,
+    fragmentShader: JOURNEY_FRAGMENT,
+    depthTest: false,
+    depthWrite: false,
+  });
+  const journeyScene = new Scene();
+  const journeyMesh = new Mesh(fullscreenGeometry, journeyMaterial);
+  journeyMesh.frustumCulled = false;
+  journeyScene.add(journeyMesh);
+  let journeyState: { progress: number; onProgress: ((progress: number) => void) | undefined } | null = null;
+
   // Star field: instanced quads spread through a deep box in front of the camera.
   const scene = new Scene();
   const starCount = options.quality === "high" ? 2600 : 1400;
@@ -426,6 +491,7 @@ function createWebGlCosmos(renderer: WebGLRenderer, options: CosmosOptions): Cos
     const aspect = width / height;
     nebulaUniforms.uAspect!.value = aspect;
     compositeUniforms.uAspect!.value = aspect;
+    journeyUniforms.uAspect!.value = aspect;
     (starUniforms.uViewport!.value as Vector2).set(width * pixelRatio, height * pixelRatio);
   };
 
@@ -452,6 +518,20 @@ function createWebGlCosmos(renderer: WebGLRenderer, options: CosmosOptions): Cos
     last = now;
     time += dt;
     resize();
+
+    if (journeyState) {
+      // Zoom depth follows a smooth curve, so the fall eases in, races, and settles at the atom.
+      const p = journeyState.progress;
+      journeyUniforms.uProgress!.value = p;
+      journeyUniforms.uZoom!.value = 8 * p * p * (3 - 2 * p);
+      journeyUniforms.uTime!.value = time;
+      journeyState.onProgress?.(p);
+      renderer.setRenderTarget(null);
+      renderer.clear();
+      renderer.render(journeyScene, screenCamera);
+      frameHandle = requestAnimationFrame(frame);
+      return;
+    }
 
     const fov = FOV + warp * 16 * motion;
     if (Math.abs(camera.fov - fov) > 1e-4) {
@@ -935,6 +1015,86 @@ function createWebGlCosmos(renderer: WebGLRenderer, options: CosmosOptions): Cos
     focus(body) {
       focused = (body as BodyInternals | null) ?? null;
     },
+    startJourney(journeyOptions) {
+      const colors = paletteToRgb(journeyOptions.palette);
+      setColor(journeyUniforms.uDeep!, colors.deep);
+      setColor(journeyUniforms.uMid!, colors.mid);
+      setColor(journeyUniforms.uGlow!, colors.glow);
+      setColor(journeyUniforms.uAccent!, colors.accent);
+      setColor(journeyUniforms.uShellColor!, hexToRgb(journeyOptions.shellColor));
+      setColor(journeyUniforms.uNucleusColor!, hexToRgb(journeyOptions.nucleusColor));
+      const shells = journeyOptions.shells;
+      (journeyUniforms.uShells!.value as Vector4).set(shells[0] ?? 0, shells[1] ?? 0, shells[2] ?? 0, shells[3] ?? 0);
+      const from = clamp01(journeyOptions.from ?? 0);
+      const state = { progress: from, onProgress: journeyOptions.onProgress };
+      journeyState = state;
+      let resolve: () => void = () => undefined;
+      const arrived = new Promise<void>((settle) => {
+        resolve = settle;
+      });
+      let progressTween: Tween | null = null;
+      const runTo = (durationMs: number, easing: Easing): void => {
+        progressTween?.cancel();
+        const start = state.progress;
+        progressTween = tween({
+          durationMs,
+          easing,
+          onUpdate: (t) => {
+            state.progress = start + (1 - start) * t;
+            if (t >= 1) resolve();
+          },
+        });
+      };
+      runTo(journeyOptions.durationMs * (1 - from), ease.linear);
+      return {
+        arrived,
+        get progress() {
+          return state.progress;
+        },
+        skip() {
+          if (state.progress < 1) runTo(450, ease.inOutSine);
+        },
+        stop() {
+          progressTween?.cancel();
+          resolve();
+          if (journeyState === state) journeyState = null;
+        },
+      };
+    },
+    snapshot(palette) {
+      try {
+        resize();
+        const colors = paletteToRgb(palette);
+        setColor(nebulaUniforms.uDeep!, colors.deep);
+        setColor(nebulaUniforms.uMid!, colors.mid);
+        setColor(nebulaUniforms.uGlow!, colors.glow);
+        setColor(nebulaUniforms.uAccent!, colors.accent);
+        (nebulaUniforms.uDrift!.value as Vector2).copy(baseDrift);
+        nebulaUniforms.uTime!.value = time * motion;
+        compositeUniforms.uFocusStrength!.value = 0;
+        starUniforms.uWarp!.value = 0;
+        starUniforms.uScroll!.value = 0;
+        setColor(starUniforms.uTint!, colors.glow);
+        renderer.setRenderTarget(nebulaTarget);
+        renderer.clear();
+        renderer.render(nebulaScene, screenCamera);
+        renderer.setRenderTarget(null);
+        renderer.clear();
+        renderer.render(compositeScene, screenCamera);
+        renderer.clearDepth();
+        renderer.render(scene, camera);
+        // Read back in the same task, before the browser presents and clears the buffer.
+        const url = canvas.toDataURL("image/jpeg", 0.86);
+        if (journeyState) {
+          // Put the descent back so this frame never flashes.
+          renderer.clear();
+          renderer.render(journeyScene, screenCamera);
+        }
+        return url;
+      } catch {
+        return null;
+      }
+    },
     setRunning(next) {
       running = next;
       canvas.style.visibility = next ? "visible" : "hidden";
@@ -955,6 +1115,7 @@ function createWebGlCosmos(renderer: WebGLRenderer, options: CosmosOptions): Cos
       orbits.clear();
       nebulaMaterial.dispose();
       compositeMaterial.dispose();
+      journeyMaterial.dispose();
       starMaterial.dispose();
       starGeometry.dispose();
       starBase.dispose();
@@ -1023,6 +1184,8 @@ function createFallbackCosmos(palette: CosmosPalette): Cosmos {
     addStar: () => noopBody,
     addOrbit: () => ({ remove: () => undefined }),
     focus: () => undefined,
+    startJourney: () => ({ arrived: Promise.resolve(), progress: 1, skip: () => undefined, stop: () => undefined }),
+    snapshot: () => null,
     setRunning: (running) => {
       element.style.visibility = running ? "visible" : "hidden";
     },
