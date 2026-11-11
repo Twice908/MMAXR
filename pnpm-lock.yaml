@@ -175,6 +175,9 @@ importers:
 
   modules/chem-ionic-bonding:
     dependencies:
+      '@mma/engine-ambience':
+        specifier: workspace:*
+        version: link:../../packages/engine-ambience
       '@mma/engine-assess':
         specifier: workspace:*
         version: link:../../packages/engine-assess

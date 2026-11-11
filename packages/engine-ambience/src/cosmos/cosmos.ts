@@ -159,6 +159,8 @@ export interface JourneyOptions {
   readonly nucleusColor: string;
   /** Electrons in each shell of the final atom, innermost first (up to four shells). */
   readonly shells: readonly number[];
+  /** When given, a second atom arrives beside the first (for example sodium and chlorine). */
+  readonly secondShells?: readonly number[];
   /** Time from the start point to the atom. */
   readonly durationMs: number;
   /** Where to start: 0 is the full descent from the atmosphere, about 0.5 starts among the particles. */
@@ -384,6 +386,8 @@ function createWebGlCosmos(renderer: WebGLRenderer, options: CosmosOptions): Cos
     uShellColor: { value: new Color() },
     uNucleusColor: { value: new Color() },
     uShells: { value: new Vector4() },
+    uShells2: { value: new Vector4() },
+    uPair: { value: 0 },
   };
   const journeyMaterial = new ShaderMaterial({
     uniforms: journeyUniforms,
@@ -1025,6 +1029,9 @@ function createWebGlCosmos(renderer: WebGLRenderer, options: CosmosOptions): Cos
       setColor(journeyUniforms.uNucleusColor!, hexToRgb(journeyOptions.nucleusColor));
       const shells = journeyOptions.shells;
       (journeyUniforms.uShells!.value as Vector4).set(shells[0] ?? 0, shells[1] ?? 0, shells[2] ?? 0, shells[3] ?? 0);
+      const second = journeyOptions.secondShells;
+      (journeyUniforms.uShells2!.value as Vector4).set(second?.[0] ?? 0, second?.[1] ?? 0, second?.[2] ?? 0, second?.[3] ?? 0);
+      journeyUniforms.uPair!.value = second ? 1 : 0;
       const from = clamp01(journeyOptions.from ?? 0);
       const state = { progress: from, onProgress: journeyOptions.onProgress };
       journeyState = state;

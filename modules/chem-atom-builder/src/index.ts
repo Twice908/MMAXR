@@ -56,7 +56,10 @@ import {
 import { layoutAtom } from "./layout.js";
 import { outerShellState, withOuterShellEmphasis } from "./outer-shell.js";
 import { atomMood, atomSoundEvents, playAtomSounds, type AtomSnapshot } from "./sound-cues.js";
-import { ionBadge, missionMoments, type MomentSnapshot } from "./moments.js";
+import { ionBadge } from "./moments.js";
+import { lessonMomentSnapshot, missionMoments, playMomentSound, type MomentSnapshot } from "@mma/engine-lesson";
+import { createMomentBanner } from "@mma/engine-ui";
+import "@mma/engine-ui/moment-banner.css";
 import type { Soundscape } from "@mma/engine-ambience";
 import { NARRATION_COMMAND, buildXrLessonContent, toModulePanelsContent } from "./xr-lesson.js";
 import "./atom-builder.css";
@@ -193,11 +196,6 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
           <div class="scene-viewport" id="atom-scene"></div>
           <output class="chemistry-feedback" id="chemistry-feedback" aria-live="polite"></output>
           <div class="ion-badge" id="ion-badge" hidden><span class="ion-label" id="ion-label"></span><span class="ion-detail" id="ion-detail"></span></div>
-          <div class="mission-moment" id="mission-moment" role="status" aria-live="polite" hidden>
-            <p class="moment-eyebrow" id="moment-eyebrow"></p>
-            <p class="moment-title" id="moment-title"></p>
-            <p class="moment-line" id="moment-line"></p>
-          </div>
         </section>
         <aside class="atom-inspector" aria-label="Atom properties">
           <div class="element-summary"><span class="element-symbol" id="element-symbol"></span><div><h2 id="element-name" data-empty-label="No element yet">No element yet</h2><span id="element-number"></span></div></div>
@@ -528,48 +526,21 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
 
   // Mission moments: celebrate what the lesson flow decides, with light, words and sound.
   const builder = requiredElement<HTMLElement>(root, ".atom-builder");
-  const momentBox = requiredElement<HTMLElement>(root, "#mission-moment");
+  const momentBanner = createMomentBanner(requiredElement<HTMLElement>(root, ".atom-workspace"));
   const ionBox = requiredElement<HTMLElement>(root, "#ion-badge");
   let lastMoment: MomentSnapshot | null = null;
-  let momentTimer = 0;
-  const showMoment = (tone: "mission" | "lesson" | "ion", eyebrow: string, title: string, line: string): void => {
-    setText(root, "#moment-eyebrow", eyebrow);
-    setText(root, "#moment-title", title);
-    setText(root, "#moment-line", line);
-    momentBox.dataset.tone = tone;
-    momentBox.hidden = false;
-    // Restart the entrance animation for back-to-back moments.
-    momentBox.classList.remove("is-playing");
-    void momentBox.offsetWidth;
-    momentBox.classList.add("is-playing");
-    window.clearTimeout(momentTimer);
-    if (xrSceneBanner && tone !== "ion") {
+  const showMoment = (tone: "mission" | "lesson", eyebrow: string, title: string, line: string): void => {
+    momentBanner.show(tone, eyebrow, title, line);
+    if (xrSceneBanner) {
       renderer.showXrBanner(
         { eyebrow, title, line, accent: tone === "lesson" ? "#ffd36b" : "#6ff3ff" },
         tone === "lesson" ? 4200 : 3200,
       );
     }
-    momentTimer = window.setTimeout(() => {
-      momentBox.hidden = true;
-      momentBox.classList.remove("is-playing");
-    }, tone === "lesson" ? 4200 : 3000);
   };
   const applyMoments = (state: Readonly<AtomBuilderLearningState>, symbol: string | undefined, charge: number): void => {
-    const progress = Object.entries(state.missionProgress);
-    const completed = progress.filter(([, item]) => item.status === "completed").map(([id]) => id);
-    const attempts = progress.reduce((sum, [, item]) => sum + item.attempts, 0);
-    const missionIndex = manifest.missions.findIndex((mission) => mission.id === state.activeMissionId);
-    const finished = state.mode === "mission" && state.activeMissionId === null && completed.length === manifest.missions.length;
-    const next: MomentSnapshot = {
-      missionIndex,
-      completed,
-      misses: attempts - completed.length,
-      hints: progress.reduce((sum, [, item]) => sum + item.hintsUsed, 0),
-      answered: state.questionsAnswered,
-      correct: state.questionsCorrect,
-      finished,
-      charge,
-    };
+    const next = lessonMomentSnapshot(state, manifest.missions.map((mission) => mission.id), charge);
+    const { missionIndex, finished } = next;
     // The sky takes each mission's colour (see atom-builder-cosmic.css).
     builder.dataset.mission = state.mode === "free-play" ? "free" : finished ? "done" : String(Math.max(1, missionIndex + 1));
 
@@ -581,36 +552,16 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
 
     if (lastMoment) {
       for (const moment of missionMoments(lastMoment, next)) {
-        switch (moment.kind) {
-          case "mission-complete": {
-            const mission = manifest.missions.find((item) => item.id === moment.missionId);
-            showMoment("mission", "MISSION COMPLETE", mission?.title ?? "Goal met", "Answer the questions to continue.");
-            sound?.arrive();
-            sound?.chord([79, 83, 86, 90, 93], { spreadSeconds: 0.08, gain: 0.045 });
-            break;
-          }
-          case "lesson-complete":
-            showMoment("lesson", "ALL MISSIONS COMPLETE", "You finished every mission", "Explore freely, or head back to your universe.");
-            sound?.arrive();
-            sound?.chord([67, 74, 79, 83, 86, 91, 95], { spreadSeconds: 0.11, gain: 0.05 });
-            break;
-          case "answer":
-            sound?.cue(moment.correct ? "confirm" : "deny");
-            break;
-          case "check-miss":
-            sound?.cue("deny");
-            break;
-          case "hint":
-            sound?.cue("open");
-            break;
-          case "ion":
-            if (badge) {
-              ionBox.classList.remove("is-new");
-              void ionBox.offsetWidth;
-              ionBox.classList.add("is-new");
-            }
-            sound?.chord(moment.charge > 0 ? [74, 81] : [69, 76], { spreadSeconds: 0.12, gain: 0.04 });
-            break;
+        if (sound) playMomentSound(sound, moment);
+        if (moment.kind === "mission-complete") {
+          const mission = manifest.missions.find((item) => item.id === moment.missionId);
+          showMoment("mission", "MISSION COMPLETE", mission?.title ?? "Goal met", "Answer the questions to continue.");
+        } else if (moment.kind === "lesson-complete") {
+          showMoment("lesson", "ALL MISSIONS COMPLETE", "You finished every mission", "Explore freely, or head back to your universe.");
+        } else if (moment.kind === "ion" && badge) {
+          ionBox.classList.remove("is-new");
+          void ionBox.offsetWidth;
+          ionBox.classList.add("is-new");
         }
       }
     }
@@ -810,7 +761,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
 
   return () => {
     sound?.setDuck(0);
-    window.clearTimeout(momentTimer);
+    momentBanner.dispose();
     disposeZoomControls();
     input?.dispose();
     unsubscribe();

@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { AtomView, type Position3, type ScreenSceneFrame } from "./atom-view.js";
+import { AtomView, type AtomStyle, type Position3, type ScreenSceneFrame } from "./atom-view.js";
 
 /** One atom placed in a multi-atom scene. */
 export interface MoleculeSceneAtom {
@@ -59,6 +59,10 @@ export interface MoleculeLabel {
 export interface MoleculeViewOptions {
   /** Canvas factory for label textures; defaults to `document.createElement("canvas")`. */
   readonly createCanvas?: () => HTMLCanvasElement;
+  /** Look of every atom (see {@link AtomView}). Defaults to `classic`. */
+  readonly atomStyle?: AtomStyle;
+  /** Calms the atoms' animation for reduced-motion users. */
+  readonly reducedMotion?: boolean;
 }
 
 /** Height of an in-scene label in content units (about 7.5 cm at the AR/VR scale of 0.025). */
@@ -106,9 +110,14 @@ export class MoleculeView implements SceneContent {
   private readonly labelGroup = new THREE.Group();
   private readonly labels = new Map<string, { key: string; sprite: THREE.Sprite; texture: THREE.CanvasTexture }>();
   private readonly createCanvas: () => HTMLCanvasElement;
+  private readonly atomStyle: AtomStyle;
+  private readonly reducedMotion: boolean;
+  private orbitHeld = false;
 
   constructor(options: MoleculeViewOptions = {}) {
     this.createCanvas = options.createCanvas ?? (() => document.createElement("canvas"));
+    this.atomStyle = options.atomStyle ?? "classic";
+    this.reducedMotion = options.reducedMotion ?? false;
     this.labelGroup.name = "molecule-labels";
     this.root.name = "molecule-root";
     this.linkGroup.name = "molecule-links";
@@ -157,6 +166,15 @@ export class MoleculeView implements SceneContent {
 
   get interactiveMeshes(): THREE.Object3D[] {
     return [...this.atoms.values()].map((placed) => placed.pick);
+  }
+
+  /**
+   * Hold every atom's orbiting electrons at their layout positions (luminous style), for example
+   * while drag handles sit on them. Release to let them orbit again.
+   */
+  setOrbitHeld(held: boolean): void {
+    this.orbitHeld = held;
+    for (const placed of this.atoms.values()) placed.view.setOrbitHeld(held);
   }
 
   /** Redraw from a new frame, reusing the views of atoms that are still present. */
@@ -214,7 +232,8 @@ export class MoleculeView implements SceneContent {
   private createAtom(id: string): PlacedAtom {
     const group = new THREE.Group();
     group.name = `molecule-atom-${id}`;
-    const view = new AtomView();
+    const view = new AtomView({ style: this.atomStyle, reducedMotion: this.reducedMotion });
+    view.setOrbitHeld(this.orbitHeld);
     const pickMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false });
     const pick = new THREE.Mesh(this.pickGeometry, pickMaterial);
     pick.name = `molecule-pick-${id}`;

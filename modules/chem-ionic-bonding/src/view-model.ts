@@ -9,6 +9,7 @@ import {
   type IonicBondingLayout,
   type IonicBondingState,
   type Point3,
+  withOuterShellEmphasis,
 } from "@mma/kit-chemistry";
 
 /** How an ion's symbol and charge are shown: "Na" with a raised "+", "Cl" with "−". */
@@ -200,14 +201,15 @@ export function outerElectronHandles(layout: IonicBondingLayout): readonly Elect
  * Convert the kit's bonding layout to the renderer's scene frame. While the student
  * carries an electron, `liftedHandle` leaves it out of its atom so it looks picked up.
  */
-export function toSceneFrame(layout: IonicBondingLayout, liftedHandle: string | null = null): MoleculeSceneFrame {
+export function toSceneFrame(
+  layout: IonicBondingLayout,
+  liftedHandle: string | null = null,
+  shellsById?: ReadonlyMap<string, readonly number[]>,
+): MoleculeSceneFrame {
   const [liftedAtom, liftedIndex] = liftedHandle ? liftedHandle.split(":") : [];
   return {
-    atoms: layout.atoms.map((atom) => ({
-      id: atom.id,
-      position: atom.position,
-      radius: atom.radius,
-      atom: atom.id === liftedAtom
+    atoms: layout.atoms.map((atom) => {
+      const frame = atom.id === liftedAtom
         ? {
           ...atom.atom,
           spheres: atom.atom.spheres.map((group) =>
@@ -216,8 +218,17 @@ export function toSceneFrame(layout: IonicBondingLayout, liftedHandle: string | 
               : group,
           ),
         }
-        : atom.atom,
-    })),
+        : atom.atom;
+      // Luminous atoms: the outer shell breathes while reactive and settles once complete
+      // (the same kit rule and look as the Atom Builder).
+      const shells = shellsById?.get(atom.id);
+      return {
+        id: atom.id,
+        position: atom.position,
+        radius: atom.radius,
+        atom: shells ? withOuterShellEmphasis(frame, shells) : frame,
+      };
+    }),
     links: layout.links,
   };
 }

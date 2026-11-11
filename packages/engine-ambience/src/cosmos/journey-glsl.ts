@@ -19,6 +19,8 @@ uniform vec3 uAccent;
 uniform vec3 uShellColor;
 uniform vec3 uNucleusColor;
 uniform vec4 uShells;
+uniform vec4 uShells2;
+uniform float uPair;
 varying vec2 vUv;
 ${NOISE_GLSL}
 
@@ -75,7 +77,7 @@ vec3 lattice(vec2 p, float zoom) {
 }
 
 // One atom: a glowing nucleus and tilted shells with electrons running along them.
-vec3 atom(vec2 p, float s) {
+vec3 atom(vec2 p, float s, vec4 shells) {
   vec3 col = vec3(0.0);
   float r = length(p);
   float nr = 0.05 * s;
@@ -84,7 +86,7 @@ vec3 atom(vec2 p, float s) {
   col += uNucleusColor * core * (1.1 + 0.7 * grains);
   col += uNucleusColor * exp(-r / max(1e-4, nr * 3.2)) * 0.35;
   for (int i = 0; i < 4; i++) {
-    float count = uShells[i];
+    float count = shells[i];
     if (count < 0.5) continue;
     float radius = (0.15 + 0.1 * float(i)) * s;
     float squash = 0.36;
@@ -119,7 +121,13 @@ void main() {
   if (wLattice > 0.001) col += lattice(p, uZoom * 0.9 + 2.0) * wLattice;
   if (wAtom > 0.001) {
     float scale = exp2(clamp((pr - 0.9) / 0.32, -1.0, 0.0) * 8.0);
-    col += atom(p, scale) * wAtom;
+    if (uPair > 0.5) {
+      // Two atoms side by side (stacked on tall screens), slightly smaller.
+      vec2 offset = uAspect >= 1.0 ? vec2(0.24, 0.0) : vec2(0.0, 0.21);
+      col += (atom(p + offset, scale * 0.6, uShells) + atom(p - offset, scale * 0.6, uShells2)) * wAtom;
+    } else {
+      col += atom(p, scale, uShells) * wAtom;
+    }
   }
   // The flash of breaking through the last cloud deck.
   col += mix(uGlow, vec3(1.0), 0.5) * exp(-pow((pr - 0.25) / 0.035, 2.0)) * 0.55;

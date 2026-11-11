@@ -29,3 +29,19 @@ describe("luminous atom", () => {
     view.dispose();
   });
 });
+
+describe("held orbits", () => {
+  it("keeps electrons at their layout positions while held", () => {
+    const view = new AtomView({ style: "luminous" });
+    view.setOrbitHeld(true);
+    view.update(frame);
+    const orbit = view.root.getObjectByName("atom-orbit-1");
+    expect(orbit).toBeDefined();
+    const pick = view.root.getObjectByName("atom-nucleus-target");
+    const tick = (): void => pick?.onBeforeRender({} as never, {} as never, {} as never, {} as never, {} as never, {} as never);
+    tick();
+    tick();
+    expect(orbit?.rotation.z).toBeCloseTo(0, 6);
+    view.dispose();
+  });
+});

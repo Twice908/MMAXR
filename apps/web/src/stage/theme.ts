@@ -200,6 +200,8 @@ export interface ArrivalScript {
   readonly nucleusColor: string;
   /** Electrons per shell in the atom the descent arrives at, innermost first. */
   readonly shells: readonly number[];
+  /** A second atom beside the first, when the lesson starts with two. */
+  readonly secondShells?: readonly number[];
   /** Status lines for the first visit, in order, spread across the descent. */
   readonly lines: readonly string[];
   /** Status lines for later visits (the short descent). */
@@ -238,6 +240,28 @@ const ARRIVALS: Readonly<Record<string, ArrivalScript>> = {
     waiting: "Setting up your lab",
     mood: { rootMidi: 43, intervals: [0, 7, 14, 18, 21], brightness: 0.55 },
     note: 79,
+  },
+  // Ionic Bonding: the same descent, arriving at a sodium atom (2,8,1) and a chlorine atom (2,8,7).
+  "chem.ionic-bonding": {
+    palette: { deep: "#021113", mid: "#073c48", glow: "#12b5a6", accent: "#ff5cc8" },
+    shellColor: "#6ff3ff",
+    nucleusColor: "#ffb36b",
+    shells: [2, 8, 1],
+    secondShells: [2, 8, 7],
+    lines: [
+      "Entering the atmosphere",
+      "Shrinking smaller than a grain of sand",
+      "Smaller than a living cell",
+      "Too small for any light microscope",
+      "Particles packed side by side",
+      "Closing in on two atoms",
+    ],
+    shortLines: ["Shrinking back down", "Closing in on sodium and chlorine"],
+    welcome: "Meet sodium and chlorine",
+    welcomeBack: "Back with sodium and chlorine",
+    waiting: "Setting up your lab",
+    mood: { rootMidi: 43, intervals: [0, 7, 14, 18, 21], brightness: 0.55 },
+    note: 86,
   },
 };
 

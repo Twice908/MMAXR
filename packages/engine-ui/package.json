@@ -6,6 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./lesson-ui.css": "./src/lesson-ui.css",
+    "./lesson-cosmic.css": "./src/lesson-cosmic.css",
+    "./moment-banner.css": "./src/moment-banner.css",
     "./xr-hud.css": "./src/xr-hud.css"
   },
   "scripts": {

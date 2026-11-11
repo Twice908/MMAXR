@@ -5,8 +5,9 @@ import { arrivalFor } from "./theme.js";
 const script = arrivalFor("chem.atom-builder");
 
 describe("module arrival", () => {
-  it("has a descent for Atom Builder only, so far", () => {
+  it("has descents for Atom Builder and Ionic Bonding (two atoms), not Ohm's Law yet", () => {
     expect(script).not.toBeNull();
+    expect(arrivalFor("chem.ionic-bonding")?.secondShells).toEqual([2, 8, 7]);
     expect(arrivalFor("phys.ohms-law")).toBeNull();
   });
 

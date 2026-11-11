@@ -46,3 +46,4 @@ export {
   type XyGraph,
   type XyGraphOptions,
 } from "./xy-graph.js";
+export { createMomentBanner, type MomentBanner } from "./moment-banner.js";

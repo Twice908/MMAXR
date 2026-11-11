@@ -63,3 +63,23 @@ export {
   type ChemistryAction,
   type ChemistryState,
 } from "./rules.js";
+export {
+  outerShellState,
+  withOuterShellEmphasis,
+  type EmphasisedFrame,
+  type OuterShellState,
+  type RingEmphasis,
+} from "./outer-shell-emphasis.js";
+export {
+  atomMood,
+  atomSoundEvents,
+  electronNote,
+  playAtomSounds,
+  COMPLETE_CHORD,
+  SHELL_ROOTS,
+  SHELL_STEPS,
+  type AtomSnapshot,
+  type AtomSoundEvent,
+  type AtomSoundMood,
+  type AtomSoundPlayer,
+} from "./atom-sounds.js";

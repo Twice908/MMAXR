@@ -1,0 +1,114 @@
+/*
+ * Cosmic theme for the shared lesson UI (dark only). Opt in by adding `mma-theme-cosmic` next to
+ * `mma-ui` on a lesson's root, and import this file after lesson-ui.css. It mainly retunes the
+ * --mma-* tokens, so every shared component follows. The sky is `--cosmos-snapshot` (a still of
+ * the app's nebula, set on #app); a gradient stands in without it. Text pairs keep AA contrast.
+ * Lessons can set --mma-cosmic-gradient for their primary buttons.
+ */
+:root:has(.mma-theme-cosmic) { background: #040818; }
+
+.mma-ui.mma-theme-cosmic {
+  --mma-ink: #eef1ff;
+  --mma-muted: #b3bbe0;
+  --mma-line: rgba(196, 204, 255, 0.16);
+  --mma-paper: #040818;
+  --mma-panel: rgba(13, 14, 40, 0.74);
+  --mma-teal: #3fd6c8;
+  --mma-teal-dark: #8ff3e8;
+  --mma-teal-soft: rgba(63, 214, 200, 0.14);
+  --mma-coral: #ff8b97;
+  --mma-coral-soft: rgba(255, 107, 122, 0.14);
+  --mma-gold: #f0b323;
+  --mma-good: #7fe6b5;
+  --mma-good-soft: rgba(127, 230, 181, 0.13);
+  --mma-focus: #ffd36b;
+  --mma-cosmic-gradient: linear-gradient(120deg, #4a3bd8 0%, #6a3cff 48%, #1b93b8 100%);
+  --mma-noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  color-scheme: dark;
+  color: var(--mma-ink);
+  background-color: var(--mma-paper);
+  background-image:
+    var(--mma-noise),
+    var(--cosmos-snapshot,
+      radial-gradient(70% 55% at 62% 40%, rgba(18, 181, 166, 0.28), transparent 70%),
+      radial-gradient(50% 40% at 25% 75%, rgba(255, 92, 200, 0.12), transparent 70%),
+      linear-gradient(160deg, #061a2a 0%, #040818 55%, #02040e 100%));
+  /* Two layers with the snapshot, four with the fallback; extra values are ignored. */
+  background-size: 180px 180px, cover, cover, cover;
+  background-repeat: repeat, no-repeat, no-repeat, no-repeat;
+  background-attachment: fixed, fixed, fixed, fixed;
+  background-position: 0 0, center, center, center;
+}
+
+/* Immersive sessions need a see-through page (the camera or the XR view shows behind it). */
+.mma-theme-cosmic.ar-active,
+.ar-active .mma-theme-cosmic { background: transparent !important; }
+
+/* Cards: deep, translucent, softly lifted. */
+.mma-theme-cosmic .mma-card,
+.mma-theme-cosmic .mma-lesson__mission,
+.mma-theme-cosmic .mma-question {
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+.mma-theme-cosmic .mma-question { border-color: rgba(143, 123, 255, 0.45); }
+.mma-theme-cosmic .mma-eyebrow { letter-spacing: 0.2em; text-shadow: 0 0 14px rgba(111, 243, 255, 0.35); }
+.mma-theme-cosmic :is(h1, h2, h3) { color: #ffffff; }
+
+/* Buttons: dark with a hairline; primary actions use the gradient with white text. */
+.mma-theme-cosmic .mma-button { background: rgba(255, 255, 255, 0.05); border-color: rgba(196, 204, 255, 0.28); }
+.mma-theme-cosmic .mma-button:hover:not(:disabled) { border-color: rgba(111, 243, 255, 0.6); background: rgba(111, 243, 255, 0.08); box-shadow: 0 0 18px rgba(111, 243, 255, 0.16); }
+.mma-theme-cosmic .mma-button--primary,
+.mma-theme-cosmic .mma-button--primary:hover:not(:disabled) {
+  border-color: transparent;
+  color: #ffffff;
+  background: var(--mma-cosmic-gradient);
+  box-shadow: 0 8px 24px rgba(106, 60, 255, 0.32), 0 0 0 1px rgba(255, 255, 255, 0.12) inset;
+}
+.mma-theme-cosmic .mma-button--primary:hover:not(:disabled) { filter: brightness(1.12); }
+.mma-theme-cosmic .mma-button--quiet { background: transparent; border-color: transparent; }
+.mma-theme-cosmic .mma-option { background: rgba(255, 255, 255, 0.04); }
+.mma-theme-cosmic .mma-select { background: rgba(255, 255, 255, 0.05); }
+.mma-theme-cosmic .mma-select option { color: #111; }
+.mma-theme-cosmic .mma-progress__fill { background: var(--mma-cosmic-gradient); }
+.mma-theme-cosmic .mma-feedback { background: rgba(240, 179, 35, 0.12); }
+.mma-theme-cosmic .mma-graph__marker { stroke: #0b0e24; }
+
+/* Each mission tints the sky (data-mission on the lesson root: 1-4, free, done); it fades between. */
+.mma-ui.mma-theme-cosmic { isolation: isolate; }
+.mma-ui.mma-theme-cosmic::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  color: rgba(106, 60, 255, 0.2);
+  background: radial-gradient(80% 65% at 72% 18%, currentColor, transparent 72%);
+  transition: color 1.6s ease;
+}
+.mma-ui.mma-theme-cosmic[data-mission="2"]::before { color: rgba(255, 150, 60, 0.18); }
+.mma-ui.mma-theme-cosmic[data-mission="3"]::before { color: rgba(40, 210, 190, 0.17); }
+.mma-ui.mma-theme-cosmic[data-mission="4"]::before { color: rgba(120, 230, 110, 0.15); }
+.mma-ui.mma-theme-cosmic[data-mission="free"]::before { color: rgba(111, 243, 255, 0.14); }
+.mma-ui.mma-theme-cosmic[data-mission="done"]::before { color: rgba(255, 211, 107, 0.2); }
+.mma-ui.mma-theme-cosmic.ar-active::before,
+.ar-active .mma-ui.mma-theme-cosmic::before { display: none; }
+
+/* Dark phone AR HUD (engine-ui xr-hud.css reads --hud-* tokens; the HUD mounts inside the lesson),
+   the same tokens as the Atom Builder. Text pairs keep at least 4.5:1 contrast. */
+.mma-ui.mma-theme-cosmic {
+  --hud-surface: rgba(10, 9, 30, 0.92);
+  --hud-card: rgba(24, 20, 56, 0.96);
+  --hud-line: rgba(196, 204, 255, 0.2);
+  --hud-ink: #eef1ff;
+  --hud-muted: #b3bbe0;
+  --hud-accent: #6a3cff;
+  --hud-accent-tint: rgba(106, 60, 255, 0.24);
+  --hud-on-accent: #ffffff;
+  --hud-danger: #c7343f;
+  --hud-positive: #5fe0b0;
+  --hud-positive-tint: rgba(95, 224, 176, 0.14);
+  --hud-negative-tint: rgba(255, 107, 122, 0.14);
+  --hud-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(143, 123, 255, 0.18);
+}

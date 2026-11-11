@@ -1,0 +1,37 @@
+/*
+ * Ionic Bonding on the shared cosmic theme (engine-ui lesson-cosmic.css). Only the few colours
+ * the --mma-* tokens cannot reach. Rules sit behind `:where(...)` (no extra specificity), so the
+ * AR rules in ionic-bonding.css still win and keep the page see-through over the camera.
+ */
+.ionic.mma-theme-cosmic {
+  --mma-cosmic-gradient: linear-gradient(120deg, #0f7f8a 0%, #3b52d8 55%, #7a3cff 100%);
+}
+
+:where(.ionic.mma-theme-cosmic) .ionic-header {
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+/* The stage: a window onto the atoms with a soft teal-violet core light. */
+:where(.ionic.mma-theme-cosmic) .ionic-scene {
+  border: 1px solid rgba(95, 240, 224, 0.22);
+  background:
+    radial-gradient(55% 55% at 50% 45%, rgba(18, 181, 166, 0.22), transparent 70%),
+    radial-gradient(90% 80% at 50% 50%, transparent 55%, rgba(2, 4, 14, 0.55) 100%);
+  box-shadow: 0 0 60px rgba(18, 181, 166, 0.1);
+}
+
+/* Small pills that used the (now light) ink colour as their fill. */
+:where(.ionic.mma-theme-cosmic) .ionic-electron__hint { background: rgba(6, 8, 26, 0.88); }
+:where(.ionic.mma-theme-cosmic) .ionic-drag-ghost { color: #1b1300; box-shadow: 0 0 18px rgba(240, 179, 35, 0.6); }
+:where(.ionic.mma-theme-cosmic) .ionic-atom__symbol { text-shadow: 0 0 16px rgba(111, 243, 255, 0.4); }
+
+/* Solid teal buttons with white text become the gradient. */
+.ionic.mma-theme-cosmic .ar-start,
+.ionic.mma-theme-cosmic .narration-controls [data-narration-action="enable"] {
+  border-color: transparent;
+  color: #ffffff;
+  background: var(--mma-cosmic-gradient);
+}
+.ionic.mma-theme-cosmic .ar-start:hover { background: var(--mma-cosmic-gradient); filter: brightness(1.12); }
+.ionic.mma-theme-cosmic .narration-controls :is(button, select) { color: var(--mma-ink); background: rgba(255, 255, 255, 0.05); }

@@ -46,7 +46,11 @@ export const experiments: readonly Experiment[] = [
         import("virtual:iwsdk-project"),
       ]);
       return (root, context) =>
-        mountIonicBonding(root, { worldOptions: projectOptions, onExit: context.onExit });
+        mountIonicBonding(root, {
+          worldOptions: projectOptions,
+          onExit: context.onExit,
+          ...(context.sound ? { sound: context.sound } : {}),
+        });
     },
   },
   {

@@ -47,3 +47,13 @@ export {
   type JourneyMoment,
   type JourneySnapshot,
 } from "./journey-moments.js";
+export {
+  lessonMomentSnapshot,
+  missionMoments,
+  playMomentSound,
+  LESSON_CHORD,
+  MISSION_CHORD,
+  type Moment,
+  type MomentSnapshot,
+  type MomentSoundPlayer,
+} from "./lesson-moments.js";

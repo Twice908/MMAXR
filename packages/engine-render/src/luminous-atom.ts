@@ -77,6 +77,7 @@ export class LuminousAtom {
   private nucleusGlowScale = 1;
   private highlight: string | null = null;
   private slotsVisible = false;
+  private orbitHeld = false;
   private built = false;
   private time = 0;
   private last = 0;
@@ -243,7 +244,7 @@ export class LuminousAtom {
       const memory = this.memory.get(ring.shell);
       if (!memory) continue;
       if (!this.reducedMotion) {
-        if (this.slotsVisible) {
+        if (this.slotsVisible || this.orbitHeld) {
           const home = Math.round(memory.rot / TAU) * TAU;
           memory.rot = home + (memory.rot - home) * Math.exp(-7 * dt);
         } else {
@@ -269,6 +270,14 @@ export class LuminousAtom {
   /** While free slots show, orbiters glide back to their layout positions. */
   setSlotsVisible(visible: boolean): void {
     this.slotsVisible = visible;
+  }
+
+  /**
+   * Hold the orbits at their layout positions (gliding there first), for example while the
+   * page places drag handles on the electrons. Release to let them orbit again.
+   */
+  setOrbitHeld(held: boolean): void {
+    this.orbitHeld = held;
   }
 
   /** Remove everything built by {@link build}; the view's parent group is cleared by the caller. */

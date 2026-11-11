@@ -125,6 +125,7 @@ export function playArrival(
     shellColor: script.shellColor,
     nucleusColor: script.nucleusColor,
     shells: script.shells,
+    ...(script.secondShells ? { secondShells: script.secondShells } : {}),
     durationMs: short ? SHORT_ARRIVAL_MS / (1 - SHORT_ARRIVAL_FROM) : FULL_ARRIVAL_MS,
     from,
     onProgress: (progress) => {

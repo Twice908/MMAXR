@@ -30,6 +30,8 @@ import {
   narrationButtonLabels,
 } from "@mma/engine-ui";
 import "@mma/engine-ui/lesson-ui.css";
+import "@mma/engine-ui/lesson-cosmic.css";
+import "@mma/engine-ui/moment-banner.css";
 import "@mma/engine-ui/xr-hud.css";
 import { telemetryEventSchema } from "@mma/schema";
 import {
@@ -47,7 +49,7 @@ import {
 } from "@mma/kit-chemistry";
 import giveElectronItems from "../assessments/m1-give-electron.json";
 import joinIonsItems from "../assessments/m2-join-ions.json";
-import { createIonicLessonReducer, createIonicLessonState, projectIonicLessonEvents } from "./learning.js";
+import { createIonicLessonReducer, createIonicLessonState, projectIonicLessonEvents, type IonicLessonState } from "./learning.js";
 import { manifest } from "./manifest.js";
 import {
   buildBenchView,
@@ -61,6 +63,11 @@ import {
   type ElectronHandle,
 } from "./view-model.js";
 import "./ionic-bonding.css";
+import type { Soundscape } from "@mma/engine-ambience";
+import { lessonMomentSnapshot, missionMoments, playMomentSound, type MomentSnapshot } from "@mma/engine-lesson";
+import { createMomentBanner } from "@mma/engine-ui";
+import { atomMood, atomSoundEvents, outerShellState, playAtomSounds, type AtomSnapshot, type IonicBondingState } from "@mma/kit-chemistry";
+import "./ionic-cosmic.css";
 
 export { manifest, toSceneFrame };
 
@@ -100,6 +107,11 @@ export interface IonicBondingOptions {
   readonly worldOptions?: WorldOptions;
   /** Called when the student presses "Experiments"; the button is hidden when omitted. */
   readonly onExit?: () => void;
+  /**
+   * The app's shared soundscape. When given, the lesson plays the Atom Builder's atom sounds
+   * (electron notes, complete-shell chord, soft refusals) and quiet pad, lowered under narration.
+   */
+  readonly sound?: Soundscape;
 }
 
 /** Mount the Ionic Bonding experiment in screen (web) view and return its full teardown. */
@@ -107,7 +119,8 @@ export function mountIonicBonding(root: HTMLElement, options: IonicBondingOption
   const compound = ionicCompoundById(COMPOUND_ID);
   if (!compound) throw new Error(`Compound "${COMPOUND_ID}" is missing from the compound table.`);
 
-  const page = el(document, "div", "ionic mma-ui");
+  // Dark cosmic theme (shared engine-ui), on the app's nebula sky.
+  const page = el(document, "div", "ionic mma-ui mma-theme-cosmic");
   page.innerHTML = `
     <header class="ionic-header">
       <button class="mma-button mma-button--quiet ionic-back" type="button" data-app-action="exit" hidden>
@@ -156,6 +169,10 @@ export function mountIonicBonding(root: HTMLElement, options: IonicBondingOption
     return found;
   };
   const sceneHost = slot<HTMLElement>("scene");
+  // Mission moments, as in the Atom Builder: the shared banner over the stage and its sounds.
+  const momentBanner = createMomentBanner(sceneHost);
+  const missionIds = manifest.missions.map((mission) => mission.id);
+  let lastMoment: MomentSnapshot | null = null;
   const labelsLayer = slot<HTMLElement>("labels");
   const handlesLayer = slot<HTMLElement>("handles");
   const statusLine = slot<HTMLElement>("status");
@@ -167,7 +184,11 @@ export function mountIonicBonding(root: HTMLElement, options: IonicBondingOption
   const lessonPanel = createLessonPanel();
   slot<HTMLElement>("lesson").append(lessonPanel.element);
 
-  const molecule = new MoleculeView();
+  // The same luminous atoms as the Atom Builder (glowing nucleus, rings of light, orbiting electrons).
+  const molecule = new MoleculeView({
+    atomStyle: "luminous",
+    reducedMotion: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false,
+  });
   const renderer = new SceneRenderer({
     host: sceneHost,
     content: molecule,
@@ -175,6 +196,8 @@ export function mountIonicBonding(root: HTMLElement, options: IonicBondingOption
     xrContentScale: XR_CONTENT_SCALE,
     handheldOverlay: true,
     xrLift: XR_LIFT,
+    // Headset VR opens onto deep space with a still star dome, as in the Atom Builder.
+    vrBackdrop: "space",
     ...(options.worldOptions === undefined ? {} : { worldOptions: options.worldOptions }),
   });
   renderer.ready
@@ -215,6 +238,70 @@ export function mountIonicBonding(root: HTMLElement, options: IonicBondingOption
   let selectedGiver: string | null = null;
   let lastHintText = "";
   let layout: IonicBondingLayout = layoutIonicBonding(store.getState().bonding);
+  /** Each atom's electron shells, for the outer-shell glow. */
+  const shellsById = (): ReadonlyMap<string, readonly number[]> =>
+    new Map(store.getState().bonding.atoms.map((atom) => [atom.id, atom.atom.shells]));
+
+  // Sound that teaches, reused from the Atom Builder: each atom's changes play the kit's atom
+  // sounds, and the quiet pad stays unresolved until every outer shell is complete.
+  const sound = options.sound;
+  const lastSounds = new Map<string, AtomSnapshot>();
+  let lastMessage = "";
+  let lastMood = "";
+  sound?.setBedLevel(0.24, 3);
+  /** Page banner for web and AR; in VR the same words as the 3D banner above the model. */
+  function showMoment(tone: "mission" | "lesson", eyebrow: string, title: string, line: string): void {
+    momentBanner.show(tone, eyebrow, title, line);
+    if (xrVr) {
+      renderer.showXrBanner(
+        { eyebrow, title, line, accent: tone === "lesson" ? "#ffd36b" : "#6ff3ff" },
+        tone === "lesson" ? 4200 : 3200,
+      );
+    }
+  }
+
+  function playMoments(state: IonicLessonState): void {
+    const next = lessonMomentSnapshot(state, missionIds);
+    // The sky takes each mission's colour (shared engine-ui cosmic theme).
+    page.dataset.mission = state.mode === "free-play" ? "free" : next.finished ? "done" : String(Math.max(1, next.missionIndex + 1));
+    if (lastMoment) {
+      for (const moment of missionMoments(lastMoment, next)) {
+        if (sound) playMomentSound(sound, moment);
+        if (moment.kind === "mission-complete") {
+          const mission = manifest.missions.find((item) => item.id === moment.missionId);
+          showMoment("mission", "MISSION COMPLETE", mission?.title ?? "Goal met", "Answer the questions to continue.");
+        } else if (moment.kind === "lesson-complete") {
+          showMoment("lesson", "ALL MISSIONS COMPLETE", "You finished every mission", "Explore freely, or head back to your universe.");
+        }
+      }
+    }
+    lastMoment = next;
+  }
+
+  function playBondingSounds(bonding: IonicBondingState): void {
+    if (!sound) return;
+    const message = bonding.validationMessages[0] ?? "";
+    bonding.atoms.forEach((atom, index) => {
+      // The refusal belongs to the move, not to an atom: attach it to the first atom only.
+      const next: AtomSnapshot = {
+        protons: atom.atom.protons,
+        neutrons: atom.atom.neutrons,
+        shells: atom.atom.shells,
+        message: index === 0 ? message : "",
+      };
+      const previous = lastSounds.get(atom.id);
+      if (previous) playAtomSounds(sound, atomSoundEvents(index === 0 ? { ...previous, message: lastMessage } : previous, next));
+      lastSounds.set(atom.id, next);
+    });
+    lastMessage = message;
+    const reactive = bonding.atoms.find((atom) => outerShellState(atom.atom.shells) !== "complete");
+    const moodShells = (reactive ?? bonding.atoms[0])?.atom.shells ?? [];
+    const moodKey = outerShellState(moodShells);
+    if (moodKey !== lastMood) {
+      lastMood = moodKey;
+      sound.setMood(atomMood(moodShells), 2.2);
+    }
+  }
   let handles: readonly ElectronHandle[] = [];
   let carried: { readonly key: string; readonly atomId: string; moved: boolean } | null = null;
   let stageGesture: { rotated: boolean } | null = null;
@@ -222,6 +309,8 @@ export function mountIonicBonding(root: HTMLElement, options: IonicBondingOption
   // Immersive session state: phone AR uses the page HUD; headsets and the emulator use panels.
   let xrActive = false;
   let xrPanels = false;
+  // True in VR, where the page sits behind the 3D view: mission banners are drawn in the scene.
+  let xrVr = false;
   let xrExitLabel = "Exit AR";
   let narrationView: NarrationViewState | null = null;
   const labels = new Map<string, HTMLElement>();
@@ -338,7 +427,7 @@ export function mountIonicBonding(root: HTMLElement, options: IonicBondingOption
   /** Show the carried electron at the pointer, and where it can land. */
   const carry = (key: string, atomId: string): void => {
     carried = { key, atomId, moved: false };
-    molecule.update(toSceneFrame(layout, key));
+    molecule.update(toSceneFrame(layout, key, shellsById()));
     molecule.setSlotsVisibleFor(takerIds());
     placeOverlays();
   };
@@ -443,6 +532,8 @@ export function mountIonicBonding(root: HTMLElement, options: IonicBondingOption
     ...createNarrationAssetLoader({ audioUrls: narrationAudioUrls, captions: narrationCaptionFiles }),
     onViewChange: (view) => {
       narrationView = view;
+      // Music steps back while the narrator speaks.
+      options.sound?.setDuck(view.currentCueId !== null && view.audioEnabled && !view.settings.muted ? 1 : 0);
       narrationBar.update(view);
       if (xrPanels) refreshPanels();
     },
@@ -498,6 +589,8 @@ export function mountIonicBonding(root: HTMLElement, options: IonicBondingOption
       xrActive = active;
       // Headsets and the emulator (no DOM overlay) use in-scene panels; phones use the HUD.
       xrPanels = active && info.overlayGranted !== true;
+      xrVr = active && info.mode === "immersive-vr";
+      page.classList.toggle("xr-vr-active", xrVr);
       page.classList.toggle("ionic--xr-panels", xrPanels);
       xrExitLabel = info.mode === "immersive-vr" ? "Exit VR" : "Exit AR";
       // Phone AR keeps touch on the page overlay; headsets and the emulator use IWSDK input.
@@ -510,10 +603,14 @@ export function mountIonicBonding(root: HTMLElement, options: IonicBondingOption
 
   function render(): void {
     const state = store.getState();
+    playBondingSounds(state.bonding);
+    playMoments(state);
     layout = layoutIonicBonding(state.bonding);
     if (selectedGiver && !layout.atoms.some((atom) => atom.id === selectedGiver && atom.canGive)) selectedGiver = null;
     handles = outerElectronHandles(layout);
-    molecule.update(toSceneFrame(layout));
+    // While an electron can be dragged, keep electrons still so the drag handles sit on them.
+    molecule.setOrbitHeld(handles.length > 0);
+    molecule.update(toSceneFrame(layout, null, shellsById()));
     renderer.contentChanged();
     renderer.setHighlight(null);
     molecule.setSlotsVisibleFor(selectedGiver ? takerIds() : []);
@@ -693,6 +790,8 @@ export function mountIonicBonding(root: HTMLElement, options: IonicBondingOption
   frame = requestAnimationFrame(tick);
 
   return () => {
+    options.sound?.setDuck(0);
+    momentBanner.dispose();
     cancelAnimationFrame(frame);
     input.dispose();
     disposeZoom();

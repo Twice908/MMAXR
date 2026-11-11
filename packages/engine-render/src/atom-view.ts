@@ -178,6 +178,11 @@ export class AtomView {
     });
   }
 
+  /** Hold orbiting electrons at their layout positions (luminous style only). */
+  setOrbitHeld(held: boolean): void {
+    this.luminous?.setOrbitHeld(held);
+  }
+
   /** Highlight one drop target (`"nucleus"` or `"shell:<n>"`), or clear with null. */
   setHighlight(target: string | null): void {
     this.highlightTarget = target;

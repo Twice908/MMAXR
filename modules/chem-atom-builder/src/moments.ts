@@ -1,46 +1,5 @@
-/** The parts of the lesson that mission moments react to. */
-export interface MomentSnapshot {
-  /** Index of the active mission, or -1 when none (free play or finished). */
-  readonly missionIndex: number;
-  /** Ids of completed missions. */
-  readonly completed: readonly string[];
-  /** Total Check presses that did not meet the goal, across missions. */
-  readonly misses: number;
-  readonly hints: number;
-  readonly answered: number;
-  readonly correct: number;
-  readonly finished: boolean;
-  /** Atom charge (protons minus electrons). */
-  readonly charge: number;
-}
-
-/** A moment worth marking with light and sound. */
-export type Moment =
-  | { readonly kind: "mission-complete"; readonly missionId: string }
-  | { readonly kind: "lesson-complete" }
-  | { readonly kind: "answer"; readonly correct: boolean }
-  | { readonly kind: "check-miss" }
-  | { readonly kind: "hint" }
-  | { readonly kind: "ion"; readonly charge: number };
-
-/**
- * Moments between two lesson snapshots, in the order they should play. View-only: the moments
- * celebrate what the lesson flow already decided and never change it.
- */
-export function missionMoments(previous: MomentSnapshot, next: MomentSnapshot): readonly Moment[] {
-  const moments: Moment[] = [];
-  for (const missionId of next.completed) {
-    if (!previous.completed.includes(missionId)) moments.push({ kind: "mission-complete", missionId });
-  }
-  if (next.finished && !previous.finished) moments.push({ kind: "lesson-complete" });
-  if (next.answered > previous.answered) moments.push({ kind: "answer", correct: next.correct > previous.correct });
-  if (next.misses > previous.misses) moments.push({ kind: "check-miss" });
-  if (next.hints > previous.hints) moments.push({ kind: "hint" });
-  if (next.charge !== 0 && Math.sign(next.charge) !== Math.sign(previous.charge)) {
-    moments.push({ kind: "ion", charge: next.charge });
-  }
-  return moments;
-}
+/** Mission moments now live in engine-lesson (shared with Ionic Bonding); re-exported here. */
+export { missionMoments, type Moment, type MomentSnapshot } from "@mma/engine-lesson";
 
 const SUPERSCRIPT: Readonly<Record<string, string>> = {
   "0": "⁰",
