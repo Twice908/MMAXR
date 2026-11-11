@@ -151,7 +151,6 @@ export function playArrival(
     arrived,
     async finish(fadeMs) {
       window.clearTimeout(waitTimer);
-      sound.setBedLevel(0, 2.5);
       await Promise.all([captions.finish(Math.round(fadeMs * 0.7)), stage.endJourney(fadeMs)]);
       journey.stop();
     },

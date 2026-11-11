@@ -149,7 +149,9 @@ function startApp(): void {
         const [mount] = await Promise.all([experiment.load(), run.arrived]);
         arrivals.mark(studentRef, id);
         paintSky();
-        const teardown = mount(app, { onExit });
+        // The descent's music fades; a lesson that uses sound raises its own quiet pad on mount.
+        stage.sound.setBedLevel(0, 2.5);
+        const teardown = mount(app, { onExit, sound: stage.sound });
         await run.finish(900);
         return { leave: leaveToDashboard, dispose: withSky(teardown) };
       } catch (error) {
@@ -167,7 +169,7 @@ function startApp(): void {
       const mount = await experiment.load();
       paintSky();
       stage.setCosmic(false);
-      const teardown = mount(app, { onExit });
+      const teardown = mount(app, { onExit, sound: stage.sound });
       stage.veil.setLabel("");
       void stage.veil.hide(stage.time(650));
       return { leave: leaveToDashboard, dispose: withSky(teardown) };

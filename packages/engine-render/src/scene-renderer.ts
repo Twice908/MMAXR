@@ -10,6 +10,7 @@ import {
 } from "@iwsdk/core";
 import * as THREE from "three";
 import { AtomView, type AtomStyle, type Position3, type ScreenSceneFrame } from "./atom-view.js";
+import { XrBanner, type XrBannerContent } from "./xr-banner.js";
 import type { SceneContent } from "./molecule-view.js";
 import { selectSnapTarget } from "./snap-target.js";
 import {
@@ -41,6 +42,11 @@ export interface SceneRendererOptions {
   readonly atomStyle?: AtomStyle;
   /** Calms the default atom's animation for reduced-motion users. */
   readonly reducedMotion?: boolean;
+  /**
+   * What surrounds the student in headset VR: `plain` (the default grey room) or `space`
+   * (deep space with a distant star dome). The floor disc stays in both, for comfort.
+   */
+  readonly vrBackdrop?: "plain" | "space";
   /** Screen-mode camera distances. Defaults to {@link screenZoomConfig}. */
   readonly screenZoom?: ScreenZoomDistances;
   /** Content scale in XR (metres per content unit). Defaults to 0.05. */
@@ -162,6 +168,9 @@ export class SceneRenderer {
   );
   private readonly lights: THREE.Light[] = [];
   private readonly floor = createFloor();
+  private readonly banner = new XrBanner();
+  private readonly vrBackdrop: "plain" | "space";
+  private readonly starDome: THREE.Points | null;
   private world: World | null = null;
   private atomEntity: Entity | null = null;
   private yaw = 0;
@@ -196,6 +205,10 @@ export class SceneRenderer {
     this.xrContentScale = options.xrContentScale ?? XR_ATOM_SCALE;
     this.handheldOverlay = options.handheldOverlay ?? false;
     this.xrLift = options.xrLift ?? 0;
+    this.vrBackdrop = options.vrBackdrop ?? "plain";
+    this.starDome = this.vrBackdrop === "space" ? createStarDome() : null;
+    // A deep violet floor disc reads as part of space while keeping the horizon reference.
+    if (this.starDome) (this.floor.material as THREE.MeshStandardMaterial).color.setHex(0x16123a);
     this.container = document.createElement("div");
     this.container.className = "iwsdk-scene-host";
     this.container.style.cssText = "position:absolute;inset:0;overflow:hidden;";
@@ -450,8 +463,10 @@ export class SceneRenderer {
     this.xrDistance = XR_LAYOUT.atomDistance;
     this.yaw = 0;
     this.pitch = 0;
-    world.scene.background = mode === "immersive-vr" ? new THREE.Color(0x1d2027) : null;
+    const space = this.vrBackdrop === "space";
+    world.scene.background = mode === "immersive-vr" ? new THREE.Color(space ? 0x05031a : 0x1d2027) : null;
     this.floor.visible = mode === "immersive-vr";
+    if (this.starDome) this.starDome.visible = mode === "immersive-vr";
     const adopted = await adoptSession(world, xrSession, mode);
     if (!adopted) {
       this.xrSession = null;
@@ -459,6 +474,13 @@ export class SceneRenderer {
       throw new Error("IWSDK could not start the XR session.");
     }
     this.stopXrFrames = world.onXRFrame(() => this.onXrFrame());
+    // Desktop emulators show the session by moving this canvas into a full-window container and
+    // sizing its buffer to the window, but our pixel width and height (from the screen stage)
+    // would keep it boxed with margins. Fill the window instead; leaving the session calls
+    // onResize, which restores the stage size. Real headsets and phones present through the XR
+    // compositor, where this CSS size is not used.
+    world.renderer.domElement.style.width = "100%";
+    world.renderer.domElement.style.height = "100%";
   }
 
   /** End the XR session (if any) and return to the screen view. */
@@ -470,6 +492,8 @@ export class SceneRenderer {
     this.xrSession = null;
     this.xrMode = null;
     this.floor.visible = false;
+    this.banner.hide();
+    if (this.starDome) this.starDome.visible = false;
     if (this.world) this.world.scene.background = null;
     if (session) {
       try {
@@ -515,8 +539,11 @@ export class SceneRenderer {
     this.atom.dispose();
     this.grabSphere.geometry.dispose();
     this.grabSphere.material.dispose();
+    this.banner.dispose();
     this.floor.geometry.dispose();
     (this.floor.material as THREE.Material).dispose();
+    this.starDome?.geometry.dispose();
+    (this.starDome?.material as THREE.Material | undefined)?.dispose();
     for (const light of this.lights) light.removeFromParent();
     this.world?.destroy();
     this.world = null;
@@ -542,7 +569,11 @@ export class SceneRenderer {
     const key = new THREE.DirectionalLight(0xffffff, 2.2);
     key.position.set(2, 4, 3);
     this.lights.push(hemisphere, key);
-    world.scene.add(hemisphere, key, this.floor);
+    world.scene.add(hemisphere, key, this.floor, this.banner.mesh);
+    if (this.starDome) {
+      this.starDome.visible = false;
+      world.scene.add(this.starDome);
+    }
     world.scene.background = null;
     world.renderer.setClearColor(0x000000, 0);
     this.floor.visible = false;
@@ -646,10 +677,26 @@ export class SceneRenderer {
     this.pivot.scale.setScalar(this.xrSession ? this.xrContentScale * this.xrScale : 1);
   }
 
+  /**
+   * Show a short celebration in the XR scene, above the model and always on top of the panels.
+   * For headsets, where page overlays are not visible. Does nothing outside an XR session.
+   */
+  showXrBanner(content: XrBannerContent, durationMs = 3200): void {
+    if (!this.xrSession) return;
+    this.banner.show(content, durationMs);
+  }
+
   private onXrFrame(): void {
     const world = this.world;
     if (!world) return;
     this.xrFrames += 1;
+    if (this.banner.mesh.visible) {
+      const camera = world.renderer.xr.getCamera();
+      const head = camera.getWorldPosition(new THREE.Vector3());
+      const above = this.content.root.getWorldPosition(new THREE.Vector3());
+      above.y += 0.22;
+      this.banner.update(above, head);
+    }
     if (!this.xrNeedsPlacement) return;
     const camera = world.renderer.xr.getCamera();
     camera.updateMatrixWorld(true);
@@ -728,6 +775,35 @@ export class SceneRenderer {
     const edge = project(centerWorld.clone().addScaledVector(right, nucleusRadius + toleranceWorld));
     return Math.hypot(pointer.x - center.x, pointer.y - center.y) <= Math.hypot(edge.x - center.x, edge.y - center.y);
   }
+}
+
+/**
+ * A distant dome of stars for the VR "space" backdrop: fixed points far away (no motion, so
+ * it adds depth without any comfort cost), spread evenly over the sky with a few brighter ones.
+ */
+function createStarDome(): THREE.Points {
+  const count = 1800;
+  const positions = new Float32Array(count * 3);
+  const colors = new Float32Array(count * 3);
+  // Deterministic spiral spread (no randomness needed for a fixed sky).
+  for (let index = 0; index < count; index += 1) {
+    const y = 1 - (2 * (index + 0.5)) / count;
+    const radius = Math.sqrt(1 - y * y);
+    const angle = index * 2.399963229728653;
+    const distance = 40;
+    positions.set([Math.cos(angle) * radius * distance, y * distance, Math.sin(angle) * radius * distance], index * 3);
+    const bright = (index * 7919) % 11 === 0 ? 1 : 0.45 + ((index * 104729) % 100) / 220;
+    const warm = (index * 31) % 7 === 0;
+    colors.set(warm ? [bright, bright * 0.85, bright * 0.7] : [bright * 0.85, bright * 0.9, bright], index * 3);
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+  const material = new THREE.PointsMaterial({ size: 2, sizeAttenuation: false, vertexColors: true, depthWrite: false });
+  const dome = new THREE.Points(geometry, material);
+  dome.name = "vr-star-dome";
+  dome.frustumCulled = false;
+  return dome;
 }
 
 function createFloor(): THREE.Mesh {

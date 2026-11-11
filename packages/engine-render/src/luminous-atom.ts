@@ -141,6 +141,7 @@ export class LuminousAtom {
         opacity: 0.85,
       });
       const glow = new THREE.Sprite(material);
+      ignoreRaycasts(glow);
       this.nucleusGlowScale = Math.max(frame.nucleusRadius, 0.35) * 4.6;
       glow.scale.setScalar(this.nucleusGlowScale);
       glow.renderOrder = 2;
@@ -172,7 +173,8 @@ export class LuminousAtom {
         { tube: CORE_TUBE, opacity: lit ? 1 : 0.55 },
         { tube: HALO_TUBE, opacity: lit ? 0.26 : 0.14 },
       ].map(({ tube, opacity }) => {
-        const geometry = new THREE.TorusGeometry(ring.radius, tube, 10, 180);
+        // Few radial segments: the ring is thin and additive, so 8 sides look round and keep phones light.
+        const geometry = new THREE.TorusGeometry(ring.radius, tube, 8, tube === CORE_TUBE ? 160 : 120);
         const material = new THREE.ShaderMaterial({
           uniforms: {
             uColor: { value: RING_CALM.clone() },
@@ -215,6 +217,7 @@ export class LuminousAtom {
         });
         for (const position of entry.positions) {
           const glow = new THREE.Sprite(glowMaterial);
+          ignoreRaycasts(glow);
           glow.position.set(position.x, position.y, position.z);
           glow.scale.setScalar(entry.radius * 6);
           glow.renderOrder = 3;
@@ -304,6 +307,15 @@ export class LuminousAtom {
       }
     }
   }
+}
+
+/**
+ * Glow sprites are decoration, never targets. Sprites also cannot be raycast without a camera
+ * on the raycaster, and IWSDK's XR pointer raycasts the whole scene every frame without one:
+ * a raycastable sprite throws there and stops XR rendering. So they opt out of raycasting.
+ */
+function ignoreRaycasts(object: THREE.Object3D): void {
+  object.raycast = () => undefined;
 }
 
 function instanced(

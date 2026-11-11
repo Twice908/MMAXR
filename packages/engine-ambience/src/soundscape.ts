@@ -15,7 +15,11 @@ export type SoundCue =
   /** A panel or menu closed. */
   | "close"
   /** A tiny tactile click. */
-  | "tick";
+  | "tick"
+  /** Something settles into place (a bright mallet landing with a soft thump). */
+  | "place"
+  /** Something light clicks into a slot (a bright pluck at `midi`). */
+  | "snap";
 
 /** Long transition sounds, timed to a visual move. */
 export type SoundSweep =
@@ -56,6 +60,10 @@ export interface Soundscape {
   sweep(name: SoundSweep, seconds: number): void;
   /** A soft landing: low impact and a shimmer of the current chord. */
   arrive(): void;
+  /** Ring a chord of bells, one note after another (`midi` notes, low to high). */
+  chord(midis: readonly number[], options?: { readonly spreadSeconds?: number; readonly gain?: number }): void;
+  /** Lower all ambient sound (0 = normal, 1 = nearly silent), for example while a narrator speaks. */
+  setDuck(amount: number): void;
   dispose(): void;
 }
 
@@ -74,6 +82,7 @@ type AudioContextConstructor = new (options?: AudioContextOptions) => AudioConte
 interface Engine {
   readonly ctx: AudioContext;
   readonly master: GainNode;
+  readonly duck: GainNode;
   readonly bed: GainNode;
   readonly cues: GainNode;
   readonly reverbIn: GainNode;
@@ -99,6 +108,7 @@ export function createSoundscape(options: SoundscapeOptions): Soundscape {
   let enabled = options.enabled;
   let mood = options.mood;
   let bedLevel = 1;
+  let duckAmount = 0;
   let suspended = false;
   let engine: Engine | null = null;
   let shimmerTimer: ReturnType<typeof setTimeout> | undefined;
@@ -168,6 +178,7 @@ export function createSoundscape(options: SoundscapeOptions): Soundscape {
         engine.bed.gain.setValueAtTime(0, engine.ctx.currentTime);
         engine.bed.gain.setTargetAtTime(BED_LEVEL * bedLevel, engine.ctx.currentTime + 0.1, 1.2);
         engine.master.gain.setValueAtTime(enabled ? MASTER_LEVEL : 0, engine.ctx.currentTime);
+        engine.duck.gain.setValueAtTime(1 - duckAmount * 0.8, engine.ctx.currentTime);
         scheduleShimmer();
       }
       if (enabled && !suspended && engine.ctx.state !== "running") void engine.ctx.resume();
@@ -214,6 +225,21 @@ export function createSoundscape(options: SoundscapeOptions): Soundscape {
     arrive() {
       if (!audible() || !engine) return;
       playArrival(engine, moodNotes(mood));
+    },
+    chord(midis, chordOptions = {}) {
+      if (!audible() || !engine) return;
+      const at = engine.ctx.currentTime + 0.01;
+      const spread = chordOptions.spreadSeconds ?? 0.07;
+      const gain = chordOptions.gain ?? 0.04;
+      midis.forEach((midi, index) => {
+        const pan = midis.length > 1 ? -0.5 + index / (midis.length - 1) : 0;
+        bell(engine as Engine, at + index * spread, midi, gain, pan, 0.75, 2.6, 0.22);
+      });
+    },
+    setDuck(amount) {
+      duckAmount = Math.min(1, Math.max(0, amount));
+      if (!engine) return;
+      engine.duck.gain.setTargetAtTime(1 - duckAmount * 0.8, engine.ctx.currentTime, duckAmount > 0 ? 0.12 : 0.6);
     },
     dispose() {
       disposed = true;
@@ -267,7 +293,9 @@ function buildEngine(random: () => number): Engine | null {
   limiter.release.value = 0.12;
   const master = ctx.createGain();
   master.gain.value = 0;
-  glue.connect(limiter).connect(master).connect(ctx.destination);
+  // Ducking sits after the glue, so it lowers everything ambient at once (narration is separate).
+  const duck = ctx.createGain();
+  glue.connect(duck).connect(limiter).connect(master).connect(ctx.destination);
 
   // Hall reverb: pre-delay, then a generated impulse that darkens as it decays.
   const reverbIn = ctx.createGain();
@@ -395,7 +423,7 @@ function buildEngine(random: () => number): Engine | null {
   wind.start();
   sources.push(wind);
 
-  return { ctx, master, bed, cues, reverbIn, echoIn, noise, voices, sub, air, padFilter, sources };
+  return { ctx, master, duck, bed, cues, reverbIn, echoIn, noise, voices, sub, air, padFilter, sources };
 }
 
 /** A stereo impulse response: decaying noise that loses high frequencies as it fades. */
@@ -603,6 +631,21 @@ function playCue(engine: Engine, name: SoundCue, midi: number, pan: number, note
       return;
     case "tick":
       noiseSweep(engine, at, 0.012, { type: "highpass", fromHz: 2600, toHz: 2600, peak: 0.03, attack: 0.002, release: 0.02, pan, wet: 0.1 });
+      return;
+    case "place": {
+      // A bright mallet landing: a clear tone with a quick glassy overtone (marimba-like), a soft
+      // thump an octave below for weight, and a small sparkle on top.
+      const hz = midiToHz(midi);
+      blip(engine, at, "sine", hz * 1.03, hz, 0.5, 0.085, { cutoff: 7000, pan, wet: 0.35 });
+      blip(engine, at, "sine", hz * 4.02, hz * 3.99, 0.11, 0.028, { cutoff: 10000, pan, wet: 0.3 });
+      blip(engine, at, "sine", hz * 0.7, hz * 0.5, 0.16, 0.055, { cutoff: 520, pan, wet: 0.12 });
+      bell(engine, at + 0.025, midi + 12, 0.02, pan, 0.6, 0.9, 0.22);
+      return;
+    }
+    case "snap":
+      // A glassy pluck with a crisp click on top.
+      bell(engine, at, midi, 0.06, pan, 0.5, 1.5, 0.28);
+      noiseSweep(engine, at, 0.015, { type: "highpass", fromHz: 4200, toHz: 4200, peak: 0.028, attack: 0.002, release: 0.025, pan, wet: 0.15 });
       return;
   }
 }

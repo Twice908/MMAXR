@@ -247,3 +247,137 @@
   :where(.atom-builder) .particle-rail { border-top: 1px solid var(--line); border-right: 0; }
   :where(.atom-builder) .scene-viewport { min-height: min(50vh, 440px); border-radius: 14px; }
 }
+
+/* ---- Phase 5: mission moments ---- */
+
+/* Each mission tints the sky (data-mission on .atom-builder). The tint fades between missions. */
+.atom-builder { isolation: isolate; }
+.atom-builder::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  color: rgba(106, 60, 255, 0.2);
+  background: radial-gradient(80% 65% at 72% 18%, currentColor, transparent 72%);
+  transition: color 1.6s ease;
+}
+.atom-builder[data-mission="2"]::before { color: rgba(255, 150, 60, 0.18); }
+.atom-builder[data-mission="3"]::before { color: rgba(40, 210, 190, 0.17); }
+.atom-builder[data-mission="4"]::before { color: rgba(120, 230, 110, 0.15); }
+.atom-builder[data-mission="free"]::before { color: rgba(111, 243, 255, 0.14); }
+.atom-builder[data-mission="done"]::before { color: rgba(255, 211, 107, 0.2); }
+.ar-active .atom-builder::before,
+.ar-active .ion-badge { display: none !important; }
+/* In VR the page sits behind the 3D view, so the banner is drawn in the scene instead. */
+.xr-vr-active .mission-moment { display: none !important; }
+/* In phone AR the mission banner floats in the upper middle of the camera view, clear of the HUD. */
+.ar-active :where(.atom-builder) .mission-moment { top: 30%; }
+
+:where(.atom-builder) .atom-workspace { position: relative; }
+
+/* Ion badge: Na⁺ / Cl⁻ with the reason, top-right of the stage. */
+:where(.atom-builder) .ion-badge {
+  position: absolute;
+  top: 62px;
+  right: 36px;
+  z-index: 4;
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  padding: 10px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 14px;
+  background: rgba(8, 7, 26, 0.72);
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+:where(.atom-builder) .ion-label { font-size: 30px; font-weight: 700; line-height: 1; color: #ffffff; }
+:where(.atom-builder) .ion-detail { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: var(--muted); }
+:where(.atom-builder) .ion-badge[data-sign="positive"] { border-color: rgba(255, 150, 90, 0.55); box-shadow: 0 0 24px rgba(255, 140, 70, 0.3); }
+:where(.atom-builder) .ion-badge[data-sign="positive"] .ion-label { text-shadow: 0 0 18px rgba(255, 140, 70, 0.8); }
+:where(.atom-builder) .ion-badge[data-sign="negative"] { border-color: rgba(111, 243, 255, 0.55); box-shadow: 0 0 24px rgba(111, 243, 255, 0.3); }
+:where(.atom-builder) .ion-badge[data-sign="negative"] .ion-label { text-shadow: 0 0 18px rgba(111, 243, 255, 0.8); }
+:where(.atom-builder) .ion-badge.is-new { animation: ion-arrive 900ms cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes ion-arrive {
+  0% { opacity: 0; transform: scale(0.6); filter: blur(6px) brightness(2); }
+  60% { opacity: 1; transform: scale(1.08); filter: blur(0) brightness(1.6); }
+  100% { transform: scale(1); filter: none; }
+}
+
+/* Mission moment: a burst of light and a title over the stage. */
+:where(.atom-builder) .mission-moment {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  z-index: 5;
+  width: min(86%, 440px);
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 26px 24px;
+  border-radius: 24px;
+  text-align: center;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(closest-side, rgba(12, 10, 36, 0.86), rgba(12, 10, 36, 0.6) 70%, transparent);
+}
+:where(.atom-builder) .mission-moment p { margin: 0; }
+:where(.atom-builder) .moment-eyebrow { font-size: 12px; font-weight: 800; letter-spacing: 0.32em; color: var(--cyan); text-shadow: 0 0 14px rgba(111, 243, 255, 0.7); }
+:where(.atom-builder) .moment-title { font-size: clamp(24px, 4vw, 34px); font-weight: 700; line-height: 1.15; color: #ffffff; text-shadow: 0 0 28px rgba(143, 123, 255, 0.8); }
+:where(.atom-builder) .moment-line { font-size: 14px; color: #d6dbff; }
+:where(.atom-builder) .mission-moment[data-tone="lesson"] .moment-eyebrow { color: #ffd36b; text-shadow: 0 0 14px rgba(255, 211, 107, 0.8); }
+:where(.atom-builder) .mission-moment::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: -1;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: 2px solid rgba(111, 243, 255, 0.8);
+  box-shadow: 0 0 40px rgba(111, 243, 255, 0.6), inset 0 0 40px rgba(143, 123, 255, 0.5);
+  transform: translate(-50%, -50%) scale(0.2);
+  opacity: 0;
+}
+:where(.atom-builder) .mission-moment.is-playing { animation: moment-in 3000ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+:where(.atom-builder) .mission-moment[data-tone="lesson"].is-playing { animation-duration: 4200ms; }
+:where(.atom-builder) .mission-moment.is-playing::before { animation: moment-ring 1400ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+@keyframes moment-in {
+  0% { opacity: 0; filter: blur(8px); transform: translate(-50%, -42%) scale(0.94); }
+  14% { opacity: 1; filter: blur(0); transform: translate(-50%, -50%) scale(1); }
+  82% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -54%); }
+}
+@keyframes moment-ring {
+  0% { opacity: 0.9; transform: translate(-50%, -50%) scale(0.2); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(4.5); }
+}
+
+@media (max-width: 620px) {
+  :where(.atom-builder) .ion-badge { top: 112px; right: 22px; padding: 8px 10px; }
+  :where(.atom-builder) .ion-label { font-size: 24px; }
+}
+
+/* ---- Phase 6: dark phone AR HUD for Atom Builder ----
+   The shared HUD (engine-ui xr-hud.css) reads --hud-* tokens from :root; redefining them on
+   .atom-builder themes only this lesson's HUD. Text pairs keep at least 4.5:1 contrast. */
+.atom-builder {
+  --hud-surface: rgba(10, 9, 30, 0.92);
+  --hud-card: rgba(24, 20, 56, 0.96);
+  --hud-line: rgba(196, 204, 255, 0.2);
+  --hud-ink: #eef1ff;
+  --hud-muted: #b3bbe0;
+  --hud-accent: #6a3cff;
+  --hud-accent-tint: rgba(106, 60, 255, 0.24);
+  --hud-on-accent: #ffffff;
+  --hud-danger: #c7343f;
+  --hud-positive: #5fe0b0;
+  --hud-positive-tint: rgba(95, 224, 176, 0.14);
+  --hud-negative-tint: rgba(255, 107, 122, 0.14);
+  --hud-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(143, 123, 255, 0.18);
+}
+/* Danger red is a button fill on dark; as text on dark it needs a lighter tone. */
+.atom-builder .ar-hud .assessment-options button.is-incorrect { color: #ff9aa5; }

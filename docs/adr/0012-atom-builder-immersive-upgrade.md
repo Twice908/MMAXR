@@ -1,6 +1,6 @@
 # ADR 0012: Atom Builder immersive upgrade (phased)
 
-Status: In progress (Phases 1-3 of 6 done)
+Status: Accepted (all 6 phases done; device checks pending)
 
 ## Context
 
@@ -88,6 +88,77 @@ the limit of light microscopes, then packed particles, then one atom. The final 
 - The stage light behind the atom follows `data-outer-shell` (`empty`, `reactive` or
   `complete`) with two cross-fading CSS glow layers. These are hidden in AR.
 - The 30 fps check on a phone was skipped at the owner's request; the owner checks it manually.
+
+## Phase 4: sound that teaches
+
+- `@mma/engine-ambience` soundscape gains three things:
+  - two cues, `place` (a soft low landing) and `snap` (a glassy pluck at a given note);
+  - `chord()`, a rolled bell chord;
+  - `setDuck()`, a gain stage after the glue compressor that lowers all ambient sound together.
+    Narration plays outside this graph, so ducking never affects the voice.
+- The app passes its single soundscape to lessons through `ExperimentContext.sound`. A lesson
+  therefore shares the dashboard's on/off switch and audio unlock. Atom Builder accepts an
+  optional `sound`; without it the lesson stays silent apart from narration.
+- Atom Builder (`sound-cues.ts`, pure and unit-tested) compares each new atom with the last:
+  - protons and neutrons land with their own low tones;
+  - each electron plucks the next note of its shell's scale. Shells K, L, M and N have rising
+    home notes, so filling a shell climbs a scale;
+  - a newly complete outer shell rings a resolved G major 9 chord;
+  - a new rejection message plays a soft two-note "no";
+  - clearing the atom plays one short sweep, not many.
+- A quiet pad (bed level 0.24) follows the outer shell, using the kit's rule through
+  `outerShellState`: open fifths when empty, a suspended (unresolved) chord while reactive,
+  and a resolved chord once complete.
+- The pad and cues duck while a narration cue plays (audio enabled and not muted).
+- Every sound repeats something already shown on screen, so muting loses no information.
+- After an arrival the descent music fades. A lesson that uses sound raises its own pad on mount.
+
+## Phase 5: mission moments
+
+- `moments.ts` (pure, unit-tested) compares lesson snapshots and finds the moments to mark:
+  a mission newly completed, all missions done, a question answered (right or wrong), a missed
+  Check, a hint, and an atom becoming an ion (charge turning non-zero or changing sign).
+  Moments only celebrate what the lesson flow already decided. Missions, rules, questions and
+  telemetry are unchanged.
+- Light and words: a "MISSION COMPLETE" or "ALL MISSIONS COMPLETE" banner over the stage,
+  with an expanding ring of light. It is announced politely to screen readers and fades on its
+  own after 3 seconds (4.2 seconds for the lesson finish).
+- Ion badge: the symbol with a raised charge (Na⁺, Cl⁻) and a plain reason ("Positive ion:
+  1 electron lost"), glowing warm for positive ions and cool for negative ones. It appears with
+  a bright arrival when the atom first becomes an ion.
+- The sky's tint follows the mission (violet, amber, teal, green; cyan in free play, gold when
+  done) through `data-mission` on `.atom-builder`, fading between missions.
+- Sound, through the shared soundscape:
+  - a mission landing chord, and a longer chord when the lesson is finished;
+  - "confirm" or "deny" for answers, "deny" for a missed Check, "open" for a hint;
+  - a two-note chime when the atom becomes an ion.
+- The moments, badge and tint are hidden in AR. Under reduced motion only the animations are
+  shortened.
+- The planned camera pull-back was replaced by the ring of light over the stage. It needs no
+  renderer change and never moves the student's view.
+
+## Phase 6: AR, VR and polish
+
+- Phone AR: the shared HUD reads `--hud-*` tokens. Atom Builder redefines them on
+  `.atom-builder`, so only its HUD turns dark (violet accent, readable at 4.5:1 or better).
+  Ionic Bonding and Ohm's Law keep the light HUD. Wrong answers use a lighter red as text.
+  The mission banner now shows in AR, floating in the upper middle of the camera view. The ion
+  badge and sky tint stay hidden there, since the Element tab already shows the charge.
+- Headset VR: `SceneRenderer` takes an opt-in `vrBackdrop: "space"`. VR then opens onto deep
+  violet space with a still dome of stars 40 m away (no motion, so no comfort cost) and a
+  violet floor disc that keeps the horizon reference. The default `plain` room is unchanged
+  for other lessons.
+- Headset panels: mission moments ("Mission complete: Build carbon-12") and the ion badge text
+  ("Na⁺ · Positive ion: 1 electron lost") appear in the side panel's status line, so headset
+  students see what the screen celebrates.
+- Fix: IWSDK's XR pointer raycasts the whole scene every frame without a camera, and three.js sprites throw when raycast that way. That stopped XR rendering, so AR and VR showed nothing. The luminous atom's glow sprites now opt out of raycasting (they are never targets), with a regression test.
+- VR mission banner: the page banner sat behind the 3D view in VR. `engine-render` now has `XrBanner` (`SceneRenderer.showXrBanner`), a camera-facing panel drawn from a canvas texture just above the model, always on top (no depth test, last render order), fading in and out, and skipped by pointer raycasts. Atom Builder uses it in VR only (AR keeps the page banner, so there is never a double banner), and hides the page banner while VR is active.
+- Headset side-panel status line removed. It came and went (resizing the panel), and the panel font cannot draw raised charges (Na⁺ showed as boxes). Moments show as the 3D banner, and the element card already shows the charge.
+- Emulator full screen: IWER moves the app canvas into its full-window container, but the renderer had pinned the canvas CSS size to the screen stage, which boxed the view with margins. `SceneRenderer` now sets the canvas to 100% while a session runs (all lessons), and leaving restores the stage size. Real devices present through the XR compositor and are unaffected.
+- The luminous atom works the same in AR and VR (same `AtomView`). Its rings use fewer
+  segments to stay light on phones.
+- Not done here (owner's manual checks): 30 fps on a mid-range Android phone, ring legibility
+  over a bright camera view, and the VR star dome on a real headset.
 
 ## Consequences
 

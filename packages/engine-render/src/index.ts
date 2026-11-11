@@ -42,6 +42,7 @@ export {
   type ProjectedSnapSelection,
   type ScreenPoint,
 } from "./screen-snap.js";
+export { XrBanner, type XrBannerContent } from "./xr-banner.js";
 export {
   AtomView,
   type Position3,
