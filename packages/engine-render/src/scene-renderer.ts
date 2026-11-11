@@ -189,6 +189,12 @@ export class SceneRenderer {
   private xrCard: { card: XrCard; holder: THREE.Group; onPress: (id: string) => void } | null = null;
   /** While set, a controller press on the model picks what it points at. */
   private xrPick: ((target: string) => void) | null = null;
+  /**
+   * The screen camera before an XR session. While a session renders, three.js copies the
+   * device's head pose and lens into this camera; it is put back when the session ends, or the
+   * web view would keep looking from the last head pose (model shifted up and tilted).
+   */
+  private screenCamera: { position: THREE.Vector3; quaternion: THREE.Quaternion; fov: number; near: number; far: number; zoom: number } | null = null;
   private xrPickRestore: (() => void) | null = null;
   /** Invisible sphere that receives drag-to-rotate pointer events. */
   private readonly grabSphere = new THREE.Mesh(
@@ -546,6 +552,17 @@ export class SceneRenderer {
     world.scene.background = mode === "immersive-vr" ? new THREE.Color(space ? 0x05031a : 0x1d2027) : null;
     this.floor.visible = mode === "immersive-vr";
     if (this.starDome) this.starDome.visible = mode === "immersive-vr";
+    const camera = world.camera;
+    this.screenCamera ??= {
+      position: camera.position.clone(),
+      quaternion: camera.quaternion.clone(),
+      fov: camera.fov,
+      near: camera.near,
+      far: camera.far,
+      zoom: camera.zoom,
+    };
+    // Also when the device ends the session itself (for example the headset's home button).
+    xrSession.addEventListener("end", () => this.restoreScreenCamera(), { once: true });
     const adopted = await adoptSession(world, xrSession, mode);
     if (!adopted) {
       this.xrSession = null;
@@ -584,10 +601,29 @@ export class SceneRenderer {
         // Already ended by the browser or the user.
       }
     }
+    this.restoreScreenCamera();
     this.yaw = 0;
     this.pitch = 0;
     this.applyScreenAnchor();
     this.applyPivot();
+    this.onResize();
+  }
+
+  /** Put the screen camera back where it was before XR: eye height, looking ahead, own lens. */
+  private restoreScreenCamera(): void {
+    const saved = this.screenCamera;
+    const world = this.world;
+    if (!saved || !world) return;
+    this.screenCamera = null;
+    const camera = world.camera;
+    camera.position.copy(saved.position);
+    camera.quaternion.copy(saved.quaternion);
+    camera.fov = saved.fov;
+    camera.near = saved.near;
+    camera.far = saved.far;
+    camera.zoom = saved.zoom;
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld(true);
     this.onResize();
   }
 

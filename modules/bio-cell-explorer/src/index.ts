@@ -729,6 +729,8 @@ export function mountCellExplorer(root: HTMLElement, options: CellExplorerOption
       xrMode = active ? info.mode : null;
       headset = active && info.overlayGranted !== true;
       page.classList.toggle("is-xr", active);
+      // Headsets (and the emulator) use the 3D card and banners; the page's words would double them.
+      page.classList.toggle("is-xr-headset", headset);
       // Phone AR keeps touch on the page overlay; headsets use their controllers.
       input.setEnabled(!active || info.overlayGranted === true);
       if (!headset) {

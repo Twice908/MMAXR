@@ -791,3 +791,33 @@
   color: #ffffff;
   background: var(--cx-leaf);
 }
+
+/* Phone AR: nothing behind the page may cover the camera view (as in the other modules). */
+html.ar-active,
+html.ar-active body,
+html.ar-active #app {
+  background: transparent !important;
+  background-image: none !important;
+}
+
+.cell-explorer.ar-active {
+  background: transparent !important;
+  background-image: none !important;
+}
+
+.cell-explorer.ar-active :is(.cx-tints, .cx-motes, .cx-path, .cx-back, .cx-xr-entry, .cx-intro, .ar-support-message) {
+  display: none !important;
+}
+
+.cell-explorer.ar-active .cx-stage {
+  background: transparent;
+}
+
+/* Headsets and the emulator: the 3D card and banners carry the lesson, so the page shows nothing. */
+.cell-explorer.is-xr-headset {
+  background: transparent !important;
+}
+
+.cell-explorer.is-xr-headset :is(.cx-tints, .cx-motes, .cx-labels, .cx-top, .cx-intro, .cx-ask, .cx-caption, .cx-name, .cx-rings, .cx-moment, .cx-dock) {
+  display: none !important;
+}
