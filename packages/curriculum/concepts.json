@@ -42,5 +42,21 @@
   "sci.phys.electricity.non-ohmic": {
     "classes": [10, 12],
     "boards": ["CBSE", "ICSE", "STATE"]
+  },
+  "sci.bio.cell.structure": {
+    "classes": [8, 9, 10],
+    "boards": ["CBSE", "ICSE", "STATE"]
+  },
+  "sci.bio.cell.plant-vs-animal": {
+    "classes": [8, 9, 10],
+    "boards": ["CBSE", "ICSE", "STATE"]
+  },
+  "sci.bio.cell.mitochondria": {
+    "classes": [8, 9, 10],
+    "boards": ["CBSE", "ICSE", "STATE"]
+  },
+  "sci.bio.cell.chloroplast": {
+    "classes": [8, 9, 10],
+    "boards": ["CBSE", "ICSE", "STATE"]
   }
 }

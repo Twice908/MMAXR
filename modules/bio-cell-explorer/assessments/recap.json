@@ -1,0 +1,59 @@
+[
+  {
+    "id": "assess.cell.recap.01",
+    "prompt": "A cell has mitochondria, but no cell wall and no chloroplasts. Which kind of cell is it?",
+    "options": [
+      {
+        "id": "a",
+        "text": "An animal cell"
+      },
+      {
+        "id": "b",
+        "text": "A plant cell"
+      },
+      {
+        "id": "c",
+        "text": "A cell from a green leaf"
+      },
+      {
+        "id": "d",
+        "text": "We cannot tell"
+      }
+    ],
+    "correctOptionIndex": 0,
+    "explanation": "Plant cells have a cell wall, and green plant cells have chloroplasts. A cell with neither is an animal cell.",
+    "conceptIds": [
+      "sci.bio.cell.plant-vs-animal"
+    ],
+    "reviewStatus": "pending"
+  },
+  {
+    "id": "assess.cell.recap.02",
+    "prompt": "Why do plant cells need chloroplasts?",
+    "options": [
+      {
+        "id": "a",
+        "text": "To make food using sunlight"
+      },
+      {
+        "id": "b",
+        "text": "To release energy from food"
+      },
+      {
+        "id": "c",
+        "text": "To store water"
+      },
+      {
+        "id": "d",
+        "text": "To give the cell its shape"
+      }
+    ],
+    "correctOptionIndex": 0,
+    "explanation": "Chloroplasts use sunlight to make food. Mitochondria release energy from that food.",
+    "conceptIds": [
+      "sci.bio.cell.chloroplast",
+      "sci.bio.cell.plant-vs-animal"
+    ],
+    "reviewStatus": "pending"
+  }
+]

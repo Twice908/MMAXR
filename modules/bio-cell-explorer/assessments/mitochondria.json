@@ -1,0 +1,58 @@
+[
+  {
+    "id": "assess.cell.mito.01",
+    "prompt": "Which organelle is called the powerhouse of the cell?",
+    "options": [
+      {
+        "id": "a",
+        "text": "Mitochondrion"
+      },
+      {
+        "id": "b",
+        "text": "Chloroplast"
+      },
+      {
+        "id": "c",
+        "text": "Nucleus"
+      },
+      {
+        "id": "d",
+        "text": "Vacuole"
+      }
+    ],
+    "correctOptionIndex": 0,
+    "explanation": "Mitochondria release energy from food, so they are called the powerhouse of the cell.",
+    "conceptIds": [
+      "sci.bio.cell.mitochondria"
+    ],
+    "reviewStatus": "pending"
+  },
+  {
+    "id": "assess.cell.mito.02",
+    "prompt": "What are cristae?",
+    "options": [
+      {
+        "id": "a",
+        "text": "Folds of the inner membrane of a mitochondrion"
+      },
+      {
+        "id": "b",
+        "text": "Stacks of discs inside a chloroplast"
+      },
+      {
+        "id": "c",
+        "text": "The fluid inside a mitochondrion"
+      },
+      {
+        "id": "d",
+        "text": "The outer covering of a cell"
+      }
+    ],
+    "correctOptionIndex": 0,
+    "explanation": "Cristae are the folds of a mitochondrion's inner membrane. The fluid inside is the matrix.",
+    "conceptIds": [
+      "sci.bio.cell.mitochondria"
+    ],
+    "reviewStatus": "pending"
+  }
+]

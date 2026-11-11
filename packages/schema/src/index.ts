@@ -1,5 +1,9 @@
 export {
   moduleManifestSchema,
+  type JourneyBeat,
+  type JourneyChapter,
+  type JourneyCheckpoint,
+  type JourneyDefinition,
   type ModuleManifest,
 } from "./module-manifest.js";
 export {

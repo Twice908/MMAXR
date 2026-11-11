@@ -1,0 +1,59 @@
+[
+  {
+    "id": "assess.cell.chloro.01",
+    "prompt": "Which cells have chloroplasts?",
+    "options": [
+      {
+        "id": "a",
+        "text": "Plant cells only"
+      },
+      {
+        "id": "b",
+        "text": "Animal cells only"
+      },
+      {
+        "id": "c",
+        "text": "Both plant and animal cells"
+      },
+      {
+        "id": "d",
+        "text": "Neither"
+      }
+    ],
+    "correctOptionIndex": 0,
+    "explanation": "Chloroplasts are found in plant cells. Animal cells do not have them.",
+    "conceptIds": [
+      "sci.bio.cell.chloroplast",
+      "sci.bio.cell.plant-vs-animal"
+    ],
+    "reviewStatus": "pending"
+  },
+  {
+    "id": "assess.cell.chloro.02",
+    "prompt": "In a chloroplast, what are the grana?",
+    "options": [
+      {
+        "id": "a",
+        "text": "Stacks of thylakoids"
+      },
+      {
+        "id": "b",
+        "text": "The fluid around the stacks"
+      },
+      {
+        "id": "c",
+        "text": "Folds of the inner membrane"
+      },
+      {
+        "id": "d",
+        "text": "The outer membrane"
+      }
+    ],
+    "correctOptionIndex": 0,
+    "explanation": "The grana are stacks of thylakoids. The fluid around them is the stroma.",
+    "conceptIds": [
+      "sci.bio.cell.chloroplast"
+    ],
+    "reviewStatus": "pending"
+  }
+]

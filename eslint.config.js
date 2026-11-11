@@ -182,7 +182,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["packages/kits/physics/**/*.ts"],
+    files: ["packages/kits/physics/**/*.ts", "packages/kits/biology/**/*.ts"],
     rules: {
       "no-restricted-imports": [
         "error",
@@ -194,6 +194,7 @@ export default tseslint.config(
                 "@mma/modules/*",
                 "@mma/chem-*",
                 "@mma/physics-*",
+                "@mma/bio-*",
                 "@mma/web",
                 "@mma/engine-render",
                 "@mma/engine-ui",
@@ -203,7 +204,7 @@ export default tseslint.config(
                 "three",
                 "three/*",
               ],
-              message: "kit-physics holds pure subject rules: no apps, modules, other kits, renderers, UI or Three.js.",
+              message: "Physics and biology kits hold pure subject rules: no apps, modules, other kits, renderers, UI or Three.js.",
             },
           ],
         },

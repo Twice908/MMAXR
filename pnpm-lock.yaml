@@ -42,6 +42,9 @@ importers:
       '@iwsdk/core':
         specifier: 1.0.1
         version: 1.0.1(@opentelemetry/core@2.12.0(@opentelemetry/api@1.9.1))(react@19.3.1)
+      '@mma/bio-cell-explorer':
+        specifier: workspace:*
+        version: link:../../modules/bio-cell-explorer
       '@mma/chem-atom-builder':
         specifier: workspace:*
         version: link:../../modules/chem-atom-builder
@@ -51,9 +54,27 @@ importers:
       '@mma/engine-ambience':
         specifier: workspace:*
         version: link:../../packages/engine-ambience
+      '@mma/engine-core':
+        specifier: workspace:*
+        version: link:../../packages/engine-core
+      '@mma/engine-lesson':
+        specifier: workspace:*
+        version: link:../../packages/engine-lesson
+      '@mma/engine-render':
+        specifier: workspace:*
+        version: link:../../packages/engine-render
+      '@mma/engine-voice':
+        specifier: workspace:*
+        version: link:../../packages/engine-voice
+      '@mma/kit-biology':
+        specifier: workspace:*
+        version: link:../../packages/kits/biology
       '@mma/physics-ohms-law':
         specifier: workspace:*
         version: link:../../modules/physics-ohms-law
+      '@mma/schema':
+        specifier: workspace:*
+        version: link:../../packages/schema
       '@pmndrs/uikit':
         specifier: 1.0.78
         version: 1.0.78(super-three@0.181.0)
@@ -91,6 +112,30 @@ importers:
       wasm-media-encoders:
         specifier: 0.7.0
         version: 0.7.0
+
+  modules/bio-cell-explorer:
+    dependencies:
+      '@mma/engine-assess':
+        specifier: workspace:*
+        version: link:../../packages/engine-assess
+      '@mma/engine-core':
+        specifier: workspace:*
+        version: link:../../packages/engine-core
+      '@mma/engine-lesson':
+        specifier: workspace:*
+        version: link:../../packages/engine-lesson
+      '@mma/engine-render':
+        specifier: workspace:*
+        version: link:../../packages/engine-render
+      '@mma/engine-voice':
+        specifier: workspace:*
+        version: link:../../packages/engine-voice
+      '@mma/kit-biology':
+        specifier: workspace:*
+        version: link:../../packages/kits/biology
+      '@mma/schema':
+        specifier: workspace:*
+        version: link:../../packages/schema
 
   modules/chem-atom-builder:
     dependencies:
@@ -227,7 +272,6 @@ importers:
       '@mma/engine-core':
         specifier: workspace:*
         version: link:../engine-core
-    devDependencies:
       '@mma/schema':
         specifier: workspace:*
         version: link:../schema
@@ -289,6 +333,12 @@ importers:
       '@mma/engine-core':
         specifier: workspace:*
         version: link:../engine-core
+
+  packages/kits/biology:
+    dependencies:
+      '@mma/engine-core':
+        specifier: workspace:*
+        version: link:../../engine-core
 
   packages/kits/chemistry:
     dependencies:

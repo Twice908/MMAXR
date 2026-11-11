@@ -11,6 +11,7 @@ import {
 import * as THREE from "three";
 import { AtomView, type AtomStyle, type Position3, type ScreenSceneFrame } from "./atom-view.js";
 import { XrBanner, type XrBannerContent } from "./xr-banner.js";
+import { interpolateShot, shotDurationMs, type CameraShot } from "./camera-shot.js";
 import type { SceneContent } from "./molecule-view.js";
 import { selectSnapTarget } from "./snap-target.js";
 import {
@@ -161,6 +162,11 @@ export class SceneRenderer {
   private readonly anchor = new THREE.Group();
   /** Applies view rotation and scale without touching the anchor. */
   private readonly pivot = new THREE.Group();
+  /** Shifts the content so a camera shot's focus point sits at the pivot (screen mode only). */
+  private readonly focusGroup = new THREE.Group();
+  private readonly reducedMotion: boolean;
+  /** The running camera move, if any. */
+  private shotMove: { from: CameraShot; to: CameraShot; startedAt: number; durationMs: number; frame: number } | null = null;
   /** Invisible sphere that receives drag-to-rotate pointer events. */
   private readonly grabSphere = new THREE.Mesh(
     new THREE.SphereGeometry(1, 24, 16),
@@ -218,7 +224,10 @@ export class SceneRenderer {
     this.pivot.name = "atom-pivot";
     this.grabSphere.name = "atom-grab-sphere";
     this.anchor.add(this.pivot);
-    this.pivot.add(this.content.root, this.grabSphere);
+    this.focusGroup.name = "content-focus";
+    this.focusGroup.add(this.content.root);
+    this.pivot.add(this.focusGroup, this.grabSphere);
+    this.reducedMotion = options.reducedMotion ?? false;
     this.ready = World.create(this.container, options.worldOptions ?? DEFAULT_WORLD_OPTIONS).then((world) => {
       if (this.disposed) {
         world.destroy();
@@ -252,7 +261,44 @@ export class SceneRenderer {
 
   /** Call after updating custom content so rotation picking matches its new size. */
   contentChanged(): void {
-    this.grabSphere.scale.setScalar(this.content.boundingRadius);
+    this.grabSphere.scale.setScalar(this.content.boundingRadius + this.focusGroup.position.length());
+  }
+
+  /** The current screen framing: focus point, distance, yaw and pitch. */
+  get currentShot(): CameraShot {
+    const offset = this.focusGroup.position;
+    return { focus: { x: -offset.x, y: -offset.y, z: -offset.z }, distance: this.distance, yaw: this.yaw, pitch: this.pitch };
+  }
+
+  /**
+   * Move the screen view to a shot: centre `focus` (content units) and view it from
+   * `distance` at `yaw` and `pitch`. The move eases over `durationMs` (by default a length
+   * that suits the move), and is instant with reduced motion or a duration of 0. A drag,
+   * zoom or reset by the student stops it. Ignored during XR sessions. View-only.
+   */
+  focusOn(shot: CameraShot, options: { readonly durationMs?: number } = {}): void {
+    if (this.xrSession) return;
+    this.stopShotMove();
+    const target: CameraShot = {
+      ...shot,
+      distance: THREE.MathUtils.clamp(shot.distance, this.zoom.minDistance, this.zoom.maxDistance),
+      pitch: THREE.MathUtils.clamp(shot.pitch, -PITCH_LIMIT, PITCH_LIMIT),
+    };
+    const from = this.currentShot;
+    const durationMs = this.reducedMotion ? 0 : options.durationMs ?? shotDurationMs(from, target);
+    if (durationMs <= 0 || typeof requestAnimationFrame !== "function") {
+      this.applyShot(target);
+      return;
+    }
+    const step = (time: number): void => {
+      const move = this.shotMove;
+      if (!move || this.disposed) return;
+      const t = (time - move.startedAt) / move.durationMs;
+      this.applyShot(interpolateShot(move.from, move.to, t));
+      if (t >= 1) this.shotMove = null;
+      else move.frame = requestAnimationFrame(step);
+    };
+    this.shotMove = { from, to: target, startedAt: performance.now(), durationMs, frame: requestAnimationFrame(step) };
   }
 
   /**
@@ -285,12 +331,14 @@ export class SceneRenderer {
 
   /** Rotate the screen view from a drag in CSS pixels, without changing atom state. */
   rotate(deltaX: number, deltaY: number): void {
+    this.stopShotMove();
     // Web view: the model's front follows the pointer (drag right, model turns right).
     this.rotateBy(deltaX * ROTATE_SPEED, deltaY * ROTATE_SPEED);
   }
 
   /** Zoom the screen view by a log-scale delta. */
   scale(delta: number): void {
+    this.stopShotMove();
     this.setDistance(this.distance * Math.exp(delta));
   }
 
@@ -342,7 +390,7 @@ export class SceneRenderer {
       const ndc = new THREE.Vector2((clientX / overlay.width) * 2 - 1, -(clientY / overlay.height) * 2 + 1);
       const raycaster = new THREE.Raycaster();
       raycaster.setFromCamera(ndc, overlay.camera);
-      const hits = raycaster.intersectObjects(this.content.interactiveMeshes, false);
+      const hits = preferForeground(raycaster.intersectObjects(this.content.interactiveMeshes, false));
       return selectSnapTarget(hits.flatMap((hit) => {
         const target = hit.object.userData.interactionTarget;
         return typeof target === "string" ? [{ target, distance: hit.distance }] : [];
@@ -369,7 +417,7 @@ export class SceneRenderer {
     const ndc = new THREE.Vector2((pointer.x / bounds.width) * 2 - 1, -(pointer.y / bounds.height) * 2 + 1);
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(ndc, camera);
-    const hits = raycaster.intersectObjects(this.content.interactiveMeshes, false);
+    const hits = preferForeground(raycaster.intersectObjects(this.content.interactiveMeshes, false));
     return selectSnapTarget(hits.flatMap((hit) => {
       const target = hit.object.userData.interactionTarget;
       return typeof target === "string"
@@ -398,6 +446,7 @@ export class SceneRenderer {
 
   /** Restore the default view; in XR, also re-place the atom and panels in front of the user. */
   resetView(): void {
+    this.stopShotMove();
     this.yaw = 0;
     this.pitch = 0;
     if (this.xrSession) {
@@ -455,6 +504,10 @@ export class SceneRenderer {
     const world = this.world;
     if (!world || this.disposed) throw new Error("The XR scene is not ready.");
     const xrSession = session as XRSession;
+    // XR places the whole model in the room, so screen framing is dropped.
+    this.stopShotMove();
+    this.focusGroup.position.set(0, 0, 0);
+    this.contentChanged();
     this.xrSession = xrSession;
     this.xrMode = mode;
     this.xrNeedsPlacement = true;
@@ -530,6 +583,7 @@ export class SceneRenderer {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.stopShotMove();
     this.stopXrFrames?.();
     window.removeEventListener("resize", this.onResize);
     this.resizeObserver?.disconnect();
@@ -670,6 +724,21 @@ export class SceneRenderer {
     // The IWSDK camera stays at eye height looking down -Z; the atom moves instead.
     this.anchor.position.set(SCREEN_EYE.x, SCREEN_EYE.y, SCREEN_EYE.z - this.distance);
     this.anchor.quaternion.identity();
+  }
+
+  private applyShot(shot: CameraShot): void {
+    this.focusGroup.position.set(-shot.focus.x, -shot.focus.y, -shot.focus.z);
+    this.distance = shot.distance;
+    this.yaw = shot.yaw;
+    this.pitch = shot.pitch;
+    this.applyScreenAnchor();
+    this.applyPivot();
+    this.contentChanged();
+  }
+
+  private stopShotMove(): void {
+    if (this.shotMove && typeof cancelAnimationFrame === "function") cancelAnimationFrame(this.shotMove.frame);
+    this.shotMove = null;
   }
 
   private applyPivot(): void {
@@ -844,4 +913,13 @@ async function adoptSession(world: World, session: XRSession, mode: XRSessionMod
     if (world.session === session) world.session = undefined;
   }, { once: true });
   return true;
+}
+
+/**
+ * Drop hits on see-through shells (`userData.pickBackdrop`, such as a cell membrane) when
+ * the ray also hits something solid, so a tap reaches what is visible inside the shell.
+ */
+export function preferForeground<T extends { readonly object: THREE.Object3D }>(hits: readonly T[]): readonly T[] {
+  const solid = hits.filter((hit) => hit.object.userData.pickBackdrop !== true);
+  return solid.length > 0 ? solid : hits;
 }

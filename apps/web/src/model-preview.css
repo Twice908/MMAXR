@@ -1,0 +1,190 @@
+.model-preview {
+  position: fixed;
+  inset: 0;
+  color: #1d3b2a;
+  background:
+    radial-gradient(120% 90% at 50% 35%, #ffffff 0%, #f1f9ec 45%, #dcefd2 100%);
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+}
+
+.model-preview-stage {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+}
+
+.model-preview-bar {
+  position: absolute;
+  top: 12px;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.model-preview-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  pointer-events: auto;
+}
+
+.model-preview-tools button {
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid #b9dcaa;
+  border-radius: 999px;
+  color: #1d3b2a;
+  background: rgb(255 255 255 / 80%);
+  font: inherit;
+  cursor: pointer;
+}
+
+.model-preview-tools button[aria-pressed="true"] {
+  color: #ffffff;
+  background: #3d8b4a;
+  border-color: #3d8b4a;
+}
+
+.model-preview-pick {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  margin: 0;
+  text-align: center;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.journey-preview-head {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  max-width: calc(100% - 32px);
+  pointer-events: none;
+}
+
+.journey-preview-label {
+  margin: 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  color: #3d8b4a;
+}
+
+.journey-preview-title {
+  display: block;
+  margin: 2px 0 8px;
+  font-size: 1.25rem;
+}
+
+.journey-preview-chapters {
+  display: flex;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  pointer-events: auto;
+}
+
+.journey-preview-chapters button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #b9dcaa;
+  border-radius: 50%;
+  color: #1d3b2a;
+  background: #ffffff;
+  font: inherit;
+}
+
+.journey-preview-chapters button[data-state="current"] {
+  color: #ffffff;
+  background: #3d8b4a;
+}
+
+.journey-preview-chapters button[data-state="done"] {
+  background: #d7efcd;
+}
+
+.journey-preview-caption {
+  position: absolute;
+  left: 50%;
+  bottom: 84px;
+  width: min(640px, calc(100% - 32px));
+  margin: 0;
+  transform: translateX(-50%);
+  text-align: center;
+  font-size: 1.125rem;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.journey-preview-controls {
+  position: absolute;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+}
+
+.journey-preview-card {
+  position: absolute;
+  top: 50%;
+  right: 16px;
+  display: grid;
+  gap: 8px;
+  width: min(320px, calc(100% - 32px));
+  padding: 16px;
+  border-radius: 20px;
+  background: rgb(255 255 255 / 88%);
+  box-shadow: 0 12px 40px rgb(30 80 40 / 15%);
+  transform: translateY(-50%);
+}
+
+.journey-preview-card[hidden] {
+  display: none;
+}
+
+.journey-preview-card button {
+  min-height: 40px;
+  border: 1px solid #b9dcaa;
+  border-radius: 12px;
+  color: #1d3b2a;
+  background: #ffffff;
+  font: inherit;
+  text-align: left;
+  padding: 0 12px;
+  cursor: pointer;
+}
+
+.journey-preview-card button[data-state="correct"] {
+  border-color: #3d8b4a;
+  background: #d7efcd;
+}
+
+.journey-preview-card button[data-state="incorrect"] {
+  border-color: #c4643f;
+  background: #fbe3d8;
+}
+
+.journey-preview-prompt {
+  margin: 0;
+  font-weight: 700;
+}
+
+.journey-preview-feedback,
+.journey-preview-note {
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .journey-preview-card {
+    top: auto;
+    right: 16px;
+    bottom: 140px;
+    transform: none;
+  }
+}

@@ -1,0 +1,567 @@
+{
+  "schemaVersion": "1.0",
+  "releaseStatus": "draft",
+  "id": "bio.cell-explorer",
+  "title": {
+    "en": "Plant vs Animal Cell"
+  },
+  "subject": "biology",
+  "kit": "biology",
+  "concepts": [
+    "sci.bio.cell.structure",
+    "sci.bio.cell.plant-vs-animal",
+    "sci.bio.cell.mitochondria",
+    "sci.bio.cell.chloroplast"
+  ],
+  "boards": [
+    "CBSE",
+    "ICSE",
+    "STATE"
+  ],
+  "levels": [
+    {
+      "id": "cells",
+      "classes": [
+        8,
+        9,
+        10
+      ],
+      "features": [
+        "plant-vs-animal",
+        "mitochondria",
+        "chloroplasts"
+      ]
+    }
+  ],
+  "modes": [
+    "screen"
+  ],
+  "estimatedMinutes": 8,
+  "assets": [],
+  "interactions": {
+    "manipulate": [
+      "orbit-camera",
+      "tap-organelle"
+    ],
+    "simulate": [
+      "highlight-organelle",
+      "open-organelle"
+    ],
+    "missions": [
+      "cx-two-cells",
+      "cx-mitochondria",
+      "cx-chloroplasts",
+      "cx-recap"
+    ],
+    "check": [
+      "assess.cell.mito.01",
+      "assess.cell.mito.02",
+      "assess.cell.chloro.01",
+      "assess.cell.chloro.02",
+      "assess.cell.recap.01",
+      "assess.cell.recap.02"
+    ]
+  },
+  "missions": [
+    {
+      "id": "cx-two-cells",
+      "title": "Two cells",
+      "goalText": "Meet the plant cell and the animal cell.",
+      "goal": {
+        "chapter": "two-cells"
+      },
+      "hints": [
+        "One cell has a thick wall around it.",
+        "The plant cell is the box-shaped one."
+      ]
+    },
+    {
+      "id": "cx-mitochondria",
+      "title": "Mitochondria",
+      "goalText": "Find the parts of a mitochondrion.",
+      "goal": {
+        "chapter": "mitochondria"
+      },
+      "hints": [
+        "Look inside the opened mitochondrion.",
+        "The cristae are the shelves that fold in from the inner membrane."
+      ],
+      "onComplete": {
+        "triggerAssessments": [
+          "assess.cell.mito.01",
+          "assess.cell.mito.02"
+        ]
+      }
+    },
+    {
+      "id": "cx-chloroplasts",
+      "title": "Chloroplasts",
+      "goalText": "Find a chloroplast.",
+      "goal": {
+        "chapter": "chloroplasts"
+      },
+      "hints": [
+        "Chloroplasts are green.",
+        "Look in the box-shaped plant cell."
+      ],
+      "onComplete": {
+        "triggerAssessments": [
+          "assess.cell.chloro.01",
+          "assess.cell.chloro.02"
+        ]
+      }
+    },
+    {
+      "id": "cx-recap",
+      "title": "Recap",
+      "goalText": "Compare the two cells.",
+      "goal": {
+        "chapter": "recap"
+      },
+      "hints": [
+        "Chloroplasts are only in plant cells."
+      ],
+      "onComplete": {
+        "triggerAssessments": [
+          "assess.cell.recap.01",
+          "assess.cell.recap.02"
+        ]
+      }
+    }
+  ],
+  "rulesPlugin": "./src/index.ts",
+  "narration": {
+    "languages": [
+      "en"
+    ],
+    "cues": [
+      {
+        "id": "two-cells-arrive",
+        "trigger": "journey_beat",
+        "script": "narration/en/two-cells-arrive.json",
+        "audio": "narration/en/generated/two-cells-arrive.mp3",
+        "captions": "narration/en/generated/two-cells-arrive.vtt",
+        "captionText": "Welcome to the world of cells. Every living thing is made of cells.",
+        "interruptible": true
+      },
+      {
+        "id": "two-cells-plant",
+        "trigger": "journey_beat",
+        "script": "narration/en/two-cells-plant.json",
+        "audio": "narration/en/generated/two-cells-plant.mp3",
+        "captions": "narration/en/generated/two-cells-plant.vtt",
+        "captionText": "This is a plant cell. A firm cell wall surrounds it, so it keeps a box-like shape.",
+        "interruptible": true
+      },
+      {
+        "id": "two-cells-animal",
+        "trigger": "journey_beat",
+        "script": "narration/en/two-cells-animal.json",
+        "audio": "narration/en/generated/two-cells-animal.mp3",
+        "captions": "narration/en/generated/two-cells-animal.vtt",
+        "captionText": "This is an animal cell. It has no cell wall, only a soft cell membrane, so its shape is rounder.",
+        "interruptible": true
+      },
+      {
+        "id": "two-cells-inside",
+        "trigger": "journey_beat",
+        "script": "narration/en/two-cells-inside.json",
+        "audio": "narration/en/generated/two-cells-inside.mp3",
+        "captions": "narration/en/generated/two-cells-inside.vtt",
+        "captionText": "Both cells are full of tiny parts called organelles. Each organelle has its own job.",
+        "interruptible": true
+      },
+      {
+        "id": "mito-spot",
+        "trigger": "journey_beat",
+        "script": "narration/en/mito-spot.json",
+        "audio": "narration/en/generated/mito-spot.mp3",
+        "captions": "narration/en/generated/mito-spot.vtt",
+        "captionText": "See the orange, bean-shaped parts? They are mitochondria.",
+        "interruptible": true
+      },
+      {
+        "id": "mito-plant",
+        "trigger": "journey_beat",
+        "script": "narration/en/mito-plant.json",
+        "audio": "narration/en/generated/mito-plant.mp3",
+        "captions": "narration/en/generated/mito-plant.vtt",
+        "captionText": "The plant cell has mitochondria too. Both cells need them.",
+        "interruptible": true
+      },
+      {
+        "id": "mito-power",
+        "trigger": "journey_beat",
+        "script": "narration/en/mito-power.json",
+        "audio": "narration/en/generated/mito-power.mp3",
+        "captions": "narration/en/generated/mito-power.vtt",
+        "captionText": "A mitochondrion is the powerhouse of the cell. It releases energy from food so the cell can do its work.",
+        "interruptible": true
+      },
+      {
+        "id": "mito-outer",
+        "trigger": "journey_beat",
+        "script": "narration/en/mito-outer.json",
+        "audio": "narration/en/generated/mito-outer.mp3",
+        "captions": "narration/en/generated/mito-outer.vtt",
+        "captionText": "A mitochondrion has two membranes. This is the outer membrane.",
+        "interruptible": true
+      },
+      {
+        "id": "mito-inner",
+        "trigger": "journey_beat",
+        "script": "narration/en/mito-inner.json",
+        "audio": "narration/en/generated/mito-inner.mp3",
+        "captions": "narration/en/generated/mito-inner.vtt",
+        "captionText": "The inner membrane folds inwards again and again. These folds are called cristae.",
+        "interruptible": true
+      },
+      {
+        "id": "mito-matrix",
+        "trigger": "journey_beat",
+        "script": "narration/en/mito-matrix.json",
+        "audio": "narration/en/generated/mito-matrix.mp3",
+        "captions": "narration/en/generated/mito-matrix.vtt",
+        "captionText": "The fluid inside the inner membrane is called the matrix.",
+        "interruptible": true
+      },
+      {
+        "id": "chloro-spot",
+        "trigger": "journey_beat",
+        "script": "narration/en/chloro-spot.json",
+        "audio": "narration/en/generated/chloro-spot.mp3",
+        "captions": "narration/en/generated/chloro-spot.vtt",
+        "captionText": "Now look for the green, oval parts in the plant cell. They are chloroplasts.",
+        "interruptible": true
+      },
+      {
+        "id": "chloro-none",
+        "trigger": "journey_beat",
+        "script": "narration/en/chloro-none.json",
+        "audio": "narration/en/generated/chloro-none.mp3",
+        "captions": "narration/en/generated/chloro-none.vtt",
+        "captionText": "The animal cell has no chloroplasts. Only plant cells have them.",
+        "interruptible": true
+      },
+      {
+        "id": "chloro-food",
+        "trigger": "journey_beat",
+        "script": "narration/en/chloro-food.json",
+        "audio": "narration/en/generated/chloro-food.mp3",
+        "captions": "narration/en/generated/chloro-food.vtt",
+        "captionText": "A chloroplast holds a green pigment called chlorophyll. It uses sunlight to make food for the plant.",
+        "interruptible": true
+      },
+      {
+        "id": "chloro-membranes",
+        "trigger": "journey_beat",
+        "script": "narration/en/chloro-membranes.json",
+        "audio": "narration/en/generated/chloro-membranes.mp3",
+        "captions": "narration/en/generated/chloro-membranes.vtt",
+        "captionText": "Like a mitochondrion, it has an outer membrane and an inner membrane.",
+        "interruptible": true
+      },
+      {
+        "id": "chloro-grana",
+        "trigger": "journey_beat",
+        "script": "narration/en/chloro-grana.json",
+        "audio": "narration/en/generated/chloro-grana.mp3",
+        "captions": "narration/en/generated/chloro-grana.vtt",
+        "captionText": "Inside are stacks of flat discs called thylakoids. These stacks are the grana.",
+        "interruptible": true
+      },
+      {
+        "id": "chloro-stroma",
+        "trigger": "journey_beat",
+        "script": "narration/en/chloro-stroma.json",
+        "audio": "narration/en/generated/chloro-stroma.mp3",
+        "captions": "narration/en/generated/chloro-stroma.vtt",
+        "captionText": "The fluid around the grana is called the stroma.",
+        "interruptible": true
+      },
+      {
+        "id": "chloro-back",
+        "trigger": "journey_beat",
+        "script": "narration/en/chloro-back.json",
+        "audio": "narration/en/generated/chloro-back.mp3",
+        "captions": "narration/en/generated/chloro-back.vtt",
+        "captionText": "Now let's go back to both cells.",
+        "interruptible": true
+      },
+      {
+        "id": "recap-compare",
+        "trigger": "journey_beat",
+        "script": "narration/en/recap-compare.json",
+        "audio": "narration/en/generated/recap-compare.mp3",
+        "captions": "narration/en/generated/recap-compare.vtt",
+        "captionText": "Let's compare. Mitochondria are in both cells. Chloroplasts are only in plant cells.",
+        "interruptible": true
+      },
+      {
+        "id": "recap-why",
+        "trigger": "journey_beat",
+        "script": "narration/en/recap-why.json",
+        "audio": "narration/en/generated/recap-why.mp3",
+        "captions": "narration/en/generated/recap-why.vtt",
+        "captionText": "Plants make their own food using sunlight, so they need chloroplasts. Every cell needs energy, so every cell has mitochondria.",
+        "interruptible": true
+      }
+    ],
+    "guide": {
+      "enabled": false,
+      "allowedActions": [],
+      "groundingDocs": []
+    }
+  },
+  "journey": {
+    "chapters": [
+      {
+        "id": "two-cells",
+        "title": "Two cells",
+        "missionId": "cx-two-cells",
+        "beats": [
+          {
+            "id": "two-cells-arrive",
+            "cueId": "two-cells-arrive",
+            "captionText": "Welcome to the world of cells. Every living thing is made of cells.",
+            "shot": "wide",
+            "durationMs": 5500
+          },
+          {
+            "id": "two-cells-plant",
+            "cueId": "two-cells-plant",
+            "captionText": "This is a plant cell. A firm cell wall surrounds it, so it keeps a box-like shape.",
+            "shot": "plant",
+            "highlight": "cell:plant:cell-wall",
+            "durationMs": 6500
+          },
+          {
+            "id": "two-cells-animal",
+            "cueId": "two-cells-animal",
+            "captionText": "This is an animal cell. It has no cell wall, only a soft cell membrane, so its shape is rounder.",
+            "shot": "animal",
+            "highlight": "cell:animal:cell-membrane",
+            "durationMs": 6500
+          },
+          {
+            "id": "two-cells-inside",
+            "cueId": "two-cells-inside",
+            "captionText": "Both cells are full of tiny parts called organelles. Each organelle has its own job.",
+            "shot": "wide",
+            "durationMs": 5500
+          }
+        ],
+        "checkpoint": {
+          "kind": "tap",
+          "id": "tap-plant-cell",
+          "prompt": "Tap the plant cell.",
+          "explanation": "Yes. The plant cell has a cell wall, which gives it a box-like shape.",
+          "defaultFeedback": "That is the animal cell. Look for the cell with a thick wall around it.",
+          "correctTargets": [
+            "cell:plant:cell-wall",
+            "cell:plant:cell-membrane",
+            "cell:plant:nucleus",
+            "cell:plant:endoplasmic-reticulum",
+            "cell:plant:golgi-apparatus",
+            "cell:plant:vacuole",
+            "cell:plant:chloroplast",
+            "cell:plant:mitochondrion",
+            "cell:plant:lysosome",
+            "cell:plant:ribosome"
+          ],
+          "wrongFeedback": {}
+        }
+      },
+      {
+        "id": "mitochondria",
+        "title": "Mitochondria",
+        "missionId": "cx-mitochondria",
+        "beats": [
+          {
+            "id": "mito-spot",
+            "cueId": "mito-spot",
+            "captionText": "See the orange, bean-shaped parts? They are mitochondria.",
+            "shot": "animal",
+            "highlight": "cell:animal:mitochondrion",
+            "durationMs": 5500
+          },
+          {
+            "id": "mito-plant",
+            "cueId": "mito-plant",
+            "captionText": "The plant cell has mitochondria too. Both cells need them.",
+            "shot": "plant",
+            "highlight": "cell:plant:mitochondrion",
+            "durationMs": 5000
+          },
+          {
+            "id": "mito-power",
+            "cueId": "mito-power",
+            "captionText": "A mitochondrion is the powerhouse of the cell. It releases energy from food so the cell can do its work.",
+            "shot": "mito-detail",
+            "durationMs": 7500
+          },
+          {
+            "id": "mito-outer",
+            "cueId": "mito-outer",
+            "captionText": "A mitochondrion has two membranes. This is the outer membrane.",
+            "shot": "mito-detail",
+            "highlight": "detail:mitochondrion:outer-membrane",
+            "durationMs": 5000
+          },
+          {
+            "id": "mito-inner",
+            "cueId": "mito-inner",
+            "captionText": "The inner membrane folds inwards again and again. These folds are called cristae.",
+            "shot": "mito-detail",
+            "highlight": "detail:mitochondrion:cristae",
+            "durationMs": 6500
+          },
+          {
+            "id": "mito-matrix",
+            "cueId": "mito-matrix",
+            "captionText": "The fluid inside the inner membrane is called the matrix.",
+            "shot": "mito-detail",
+            "highlight": "detail:mitochondrion:matrix",
+            "durationMs": 5000
+          }
+        ],
+        "checkpoint": {
+          "kind": "tap",
+          "id": "tap-cristae",
+          "prompt": "Tap the cristae.",
+          "explanation": "Yes. Cristae are the folds of the inner membrane.",
+          "defaultFeedback": "Look inside the opened mitochondrion for the folds.",
+          "correctTargets": [
+            "detail:mitochondrion:cristae"
+          ],
+          "wrongFeedback": {
+            "detail:mitochondrion:outer-membrane": "That is the outer membrane. The cristae are the folds inside it.",
+            "detail:mitochondrion:inner-membrane": "Close. That is the inner membrane. Tap one of its folds.",
+            "detail:mitochondrion:matrix": "That is the matrix, the fluid inside. The cristae are the folds."
+          }
+        }
+      },
+      {
+        "id": "chloroplasts",
+        "title": "Chloroplasts",
+        "missionId": "cx-chloroplasts",
+        "beats": [
+          {
+            "id": "chloro-spot",
+            "cueId": "chloro-spot",
+            "captionText": "Now look for the green, oval parts in the plant cell. They are chloroplasts.",
+            "shot": "plant",
+            "highlight": "cell:plant:chloroplast",
+            "durationMs": 6000
+          },
+          {
+            "id": "chloro-none",
+            "cueId": "chloro-none",
+            "captionText": "The animal cell has no chloroplasts. Only plant cells have them.",
+            "shot": "animal",
+            "durationMs": 5500
+          },
+          {
+            "id": "chloro-food",
+            "cueId": "chloro-food",
+            "captionText": "A chloroplast holds a green pigment called chlorophyll. It uses sunlight to make food for the plant.",
+            "shot": "chloro-detail",
+            "durationMs": 7500
+          },
+          {
+            "id": "chloro-membranes",
+            "cueId": "chloro-membranes",
+            "captionText": "Like a mitochondrion, it has an outer membrane and an inner membrane.",
+            "shot": "chloro-detail",
+            "highlight": "detail:chloroplast:outer-membrane",
+            "durationMs": 5500
+          },
+          {
+            "id": "chloro-grana",
+            "cueId": "chloro-grana",
+            "captionText": "Inside are stacks of flat discs called thylakoids. These stacks are the grana.",
+            "shot": "chloro-detail",
+            "highlight": "detail:chloroplast:grana",
+            "durationMs": 6500
+          },
+          {
+            "id": "chloro-stroma",
+            "cueId": "chloro-stroma",
+            "captionText": "The fluid around the grana is called the stroma.",
+            "shot": "chloro-detail",
+            "highlight": "detail:chloroplast:stroma",
+            "durationMs": 5000
+          },
+          {
+            "id": "chloro-back",
+            "cueId": "chloro-back",
+            "captionText": "Now let's go back to both cells.",
+            "shot": "wide",
+            "durationMs": 3500
+          }
+        ],
+        "checkpoint": {
+          "kind": "tap",
+          "id": "tap-chloroplast",
+          "prompt": "Find a chloroplast and tap it.",
+          "explanation": "Yes. Chloroplasts are found only in the plant cell.",
+          "defaultFeedback": "Look for the green, oval parts.",
+          "correctTargets": [
+            "cell:plant:chloroplast"
+          ],
+          "wrongFeedback": {
+            "cell:plant:mitochondrion": "That is a mitochondrion. Chloroplasts are green.",
+            "cell:animal:mitochondrion": "That is a mitochondrion in the animal cell. Animal cells have no chloroplasts."
+          }
+        }
+      },
+      {
+        "id": "recap",
+        "title": "Recap",
+        "missionId": "cx-recap",
+        "beats": [
+          {
+            "id": "recap-compare",
+            "cueId": "recap-compare",
+            "captionText": "Let's compare. Mitochondria are in both cells. Chloroplasts are only in plant cells.",
+            "shot": "wide",
+            "durationMs": 6500
+          },
+          {
+            "id": "recap-why",
+            "cueId": "recap-why",
+            "captionText": "Plants make their own food using sunlight, so they need chloroplasts. Every cell needs energy, so every cell has mitochondria.",
+            "shot": "wide",
+            "durationMs": 8000
+          }
+        ],
+        "checkpoint": {
+          "kind": "choice",
+          "id": "which-has-both",
+          "prompt": "Which cell has both mitochondria and chloroplasts?",
+          "explanation": "The plant cell has both: mitochondria to release energy, and chloroplasts to make food.",
+          "defaultFeedback": "Look again at both cells.",
+          "options": [
+            {
+              "id": "plant",
+              "text": "The plant cell"
+            },
+            {
+              "id": "animal",
+              "text": "The animal cell"
+            },
+            {
+              "id": "neither",
+              "text": "Neither cell"
+            }
+          ],
+          "correctOptionId": "plant",
+          "wrongFeedback": {
+            "animal": "The animal cell has mitochondria but no chloroplasts.",
+            "neither": "Look again: the plant cell has both."
+          }
+        }
+      }
+    ]
+  }
+}

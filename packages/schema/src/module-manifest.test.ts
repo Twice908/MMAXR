@@ -185,3 +185,97 @@ describe("moduleManifestSchema", () => {
     expect(result.success).toBe(false);
   });
 });
+describe("journey", () => {
+  const journeyManifest = (journey: unknown, extra: Record<string, unknown> = {}) => ({
+    ...validManifest,
+    interactions: { ...validManifest.interactions, missions: ["chapter-one", "chapter-two"] },
+    missions: [
+      { id: "chapter-one", title: "One", goalText: "Watch.", goal: { chapter: "one" }, hints: ["Look left."] },
+      { id: "chapter-two", title: "Two", goalText: "Watch.", goal: { chapter: "two" }, hints: [] },
+    ],
+    narration: {
+      languages: ["en"],
+      cues: [{ id: "beat-cue", trigger: "journey_beat", script: "Hello.", captionText: "Hello." }],
+      guide: { enabled: false, allowedActions: [], groundingDocs: [] },
+    },
+    journey,
+    ...extra,
+  });
+  const chapters = [
+    {
+      id: "one",
+      title: "One",
+      missionId: "chapter-one",
+      beats: [{ id: "b1", cueId: "beat-cue", shot: "wide", durationMs: 3000 }],
+      checkpoint: {
+        kind: "tap",
+        id: "find-it",
+        prompt: "Tap it.",
+        explanation: "That is it.",
+        defaultFeedback: "Not that one.",
+        correctTargets: ["cell:plant:chloroplast"],
+        wrongFeedback: { "cell:plant:vacuole": "That stores water." },
+      },
+    },
+    {
+      id: "two",
+      title: "Two",
+      missionId: "chapter-two",
+      beats: [{ id: "b2", captionText: "Look.", durationMs: 2000 }],
+      checkpoint: {
+        kind: "choice",
+        id: "pick-it",
+        prompt: "Which?",
+        explanation: "Because.",
+        defaultFeedback: "Try again.",
+        options: [{ id: "a", text: "A" }, { id: "b", text: "B" }],
+        correctOptionId: "a",
+      },
+    },
+  ];
+
+  it("accepts chapters with beats, tap and choice checkpoints", () => {
+    const parsed = moduleManifestSchema.parse(journeyManifest({ chapters }));
+    expect(parsed.journey?.chapters).toHaveLength(2);
+    expect(parsed.journey?.chapters[1]?.checkpoint?.wrongFeedback).toEqual({});
+  });
+
+  it("rejects a beat with neither a cue nor caption text", () => {
+    const bad = [{ ...chapters[0], beats: [{ id: "b1", durationMs: 1000 }] }];
+    expect(moduleManifestSchema.safeParse(journeyManifest({ chapters: bad })).success).toBe(false);
+  });
+
+  it("rejects a cue that is missing or not a journey cue", () => {
+    const bad = [{ ...chapters[0], beats: [{ id: "b1", cueId: "nope", durationMs: 1000 }] }];
+    const result = moduleManifestSchema.safeParse(journeyManifest({ chapters: bad }));
+    expect(result.error?.issues.map((issue) => issue.message)).toContain(
+      "Journey beat needs a narration cue \"nope\" with trigger journey_beat",
+    );
+  });
+
+  it("requires each chapter mission to exist and have the chapter goal", () => {
+    const wrongGoal = journeyManifest({ chapters }, {
+      missions: [
+        { id: "chapter-one", title: "One", goalText: "Watch.", goal: { chapter: "two" }, hints: [] },
+        { id: "chapter-two", title: "Two", goalText: "Watch.", goal: { chapter: "two" }, hints: [] },
+      ],
+    });
+    expect(moduleManifestSchema.safeParse(wrongGoal).error?.issues.map((issue) => issue.message)).toContain(
+      "Mission \"chapter-one\" must have the goal { \"chapter\": \"one\" }",
+    );
+    const missing = [{ ...chapters[0], missionId: "ghost" }, chapters[1]];
+    expect(moduleManifestSchema.safeParse(journeyManifest({ chapters: missing })).success).toBe(false);
+  });
+
+  it("rejects duplicate beats, a correct option outside the options, and feedback on right answers", () => {
+    const duplicate = [chapters[0], { ...chapters[1], beats: [{ id: "b1", captionText: "Again.", durationMs: 1000 }] }];
+    expect(moduleManifestSchema.safeParse(journeyManifest({ chapters: duplicate })).success).toBe(false);
+    const badChoice = [chapters[0], { ...chapters[1], checkpoint: { ...chapters[1]!.checkpoint, correctOptionId: "z" } }];
+    expect(moduleManifestSchema.safeParse(journeyManifest({ chapters: badChoice })).success).toBe(false);
+    const badTap = [{
+      ...chapters[0],
+      checkpoint: { ...chapters[0]!.checkpoint, wrongFeedback: { "cell:plant:chloroplast": "Wrong?" } },
+    }, chapters[1]];
+    expect(moduleManifestSchema.safeParse(journeyManifest({ chapters: badTap })).success).toBe(false);
+  });
+});

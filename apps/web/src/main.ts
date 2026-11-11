@@ -34,6 +34,14 @@ if (import.meta.env.DEV && new URLSearchParams(window.location.search).has("narr
   void import("./narration-generator.js")
     .then(({ mountNarrationGenerator }) => mountNarrationGenerator(app))
     .catch((error: unknown) => showLoadError(error));
+} else if (import.meta.env.DEV && new URLSearchParams(window.location.search).has("model-preview")) {
+  // Developer tool for checking 3D models before a module uses them.
+  app.innerHTML = '<div class="shell-loading" role="status">Loading model preview...</div>';
+  const preview = new URLSearchParams(window.location.search).get("model-preview") === "journey"
+    ? import("./journey-preview.js").then(({ mountJourneyPreview }) => mountJourneyPreview(app))
+    : import("./model-preview.js").then(({ mountModelPreview }) => mountModelPreview(app));
+  void preview
+    .catch((error: unknown) => showLoadError(error));
 } else {
   startApp();
 }
