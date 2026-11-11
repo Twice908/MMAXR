@@ -1,7 +1,11 @@
+import type { Soundscape } from "@mma/engine-ambience";
+
 /** Context the app gives an experiment when it mounts. */
 export interface ExperimentContext {
   /** Return to the dashboard. */
   readonly onExit: () => void;
+  /** The app's shared soundscape (same on/off switch as the dashboard), for lessons that use it. */
+  readonly sound?: Soundscape;
 }
 
 /** One experiment that can be opened from the dashboard. */

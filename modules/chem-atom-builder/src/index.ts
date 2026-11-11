@@ -55,6 +55,9 @@ import {
 } from "./learning.js";
 import { layoutAtom } from "./layout.js";
 import { outerShellState, withOuterShellEmphasis } from "./outer-shell.js";
+import { atomMood, atomSoundEvents, playAtomSounds, type AtomSnapshot } from "./sound-cues.js";
+import { ionBadge, missionMoments, type MomentSnapshot } from "./moments.js";
+import type { Soundscape } from "@mma/engine-ambience";
 import { NARRATION_COMMAND, buildXrLessonContent, toModulePanelsContent } from "./xr-lesson.js";
 import "./atom-builder.css";
 import "./ar-hud.css";
@@ -116,6 +119,13 @@ export interface AtomBuilderOptions {
    * when omitted the button is hidden.
    */
   readonly onExit?: () => void;
+  /**
+   * The app's shared soundscape. When given, the lesson plays a quiet pad that follows the outer
+   * shell, a note for each particle placed, a chord for a complete outer shell, and a soft "no"
+   * for refused moves, and lowers it all while narration speaks. Without it the lesson is silent
+   * apart from narration.
+   */
+  readonly sound?: Soundscape;
 }
 
 /** Mount the Class 9-10 atom builder and return its complete teardown. */
@@ -182,6 +192,12 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
           <div class="scene-heading"><span>INSIDE THE ATOM</span><button type="button" class="reset-view" data-command="reset-view">Reset view</button></div>
           <div class="scene-viewport" id="atom-scene"></div>
           <output class="chemistry-feedback" id="chemistry-feedback" aria-live="polite"></output>
+          <div class="ion-badge" id="ion-badge" hidden><span class="ion-label" id="ion-label"></span><span class="ion-detail" id="ion-detail"></span></div>
+          <div class="mission-moment" id="mission-moment" role="status" aria-live="polite" hidden>
+            <p class="moment-eyebrow" id="moment-eyebrow"></p>
+            <p class="moment-title" id="moment-title"></p>
+            <p class="moment-line" id="moment-line"></p>
+          </div>
         </section>
         <aside class="atom-inspector" aria-label="Atom properties">
           <div class="element-summary"><span class="element-symbol" id="element-symbol"></span><div><h2 id="element-name" data-empty-label="No element yet">No element yet</h2><span id="element-number"></span></div></div>
@@ -222,6 +238,8 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     host: sceneHost,
     // Glowing nucleus, rings of light and orbiting electrons (Ionic Bonding keeps the classic atom).
     atomStyle: "luminous",
+    // Headset VR opens onto deep space with a still star dome, matching the lesson's sky.
+    vrBackdrop: "space",
     reducedMotion: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false,
     ...(options.worldOptions === undefined ? {} : { worldOptions: options.worldOptions }),
     ...(options.diagnostics === undefined ? {} : { diagnostics: options.diagnostics }),
@@ -236,6 +254,9 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   let narrationCaption = "";
   let narrationView = { audioEnabled: false, muted: false, captionsEnabled: true };
   let refreshXrLesson: () => void = () => undefined;
+  // True in VR, where the page sits behind the 3D view: mission banners are drawn inside the
+  // scene instead. AR keeps the page banner only (it floats over the whole view).
+  let xrSceneBanner = false;
   let onXrCommand: (command: string) => void = () => undefined;
   const disposeZoomControls = installZoomControls(
     sceneHost,
@@ -402,6 +423,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
       // headsets use IWSDK input instead.
       input?.setEnabled(!active || sessionInfo.overlayGranted === true);
       root.classList.toggle("xr-session-active", active);
+      xrSceneBanner = active && sessionInfo.mode === "immersive-vr";
       root.classList.toggle(
         "xr-vr-active",
         active && sessionInfo.mode === "immersive-vr",
@@ -429,6 +451,8 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     }),
     onViewChange: (state) => {
       narrationBar.update(state);
+      // Music steps back while the narrator speaks.
+      options.sound?.setDuck(state.currentCueId !== null && state.audioEnabled && !state.settings.muted ? 1 : 0);
       narrationCaption = state.settings.captionsEnabled ? state.captionText : "";
       narrationView = {
         audioEnabled: state.audioEnabled,
@@ -453,6 +477,9 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     narration: narrationView,
   });
   refreshXrLesson = () => {
+    // No status line on the headset side panel: it appeared and disappeared (resizing the panel),
+    // and its font cannot draw raised charges. Moments show as the 3D banner; the element card
+    // already shows the charge.
     if (xrLessonVisible) renderer.setModulePanels(toModulePanelsContent(xrLessonContent()), (command) => onXrCommand(command));
   };
   onXrCommand = (command) => {
@@ -477,8 +504,122 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   };
 
 
+  // Sound that teaches: compare each new atom with the last one and play what changed.
+  const sound = options.sound;
+  let lastSound: AtomSnapshot | null = null;
+  let lastOuterState = "";
+  sound?.setBedLevel(0.24, 3);
+  const playChanges = (chemistry: AtomBuilderLearningState["chemistry"]): void => {
+    if (!sound) return;
+    const next: AtomSnapshot = {
+      protons: chemistry.protons,
+      neutrons: chemistry.neutrons,
+      shells: chemistry.shells,
+      message: chemistry.validationMessages[0] ?? "",
+    };
+    if (lastSound) playAtomSounds(sound, atomSoundEvents(lastSound, next));
+    lastSound = next;
+    const outer = outerShellState(chemistry.shells);
+    if (outer !== lastOuterState) {
+      lastOuterState = outer;
+      sound.setMood(atomMood(chemistry.shells), 2.2);
+    }
+  };
+
+  // Mission moments: celebrate what the lesson flow decides, with light, words and sound.
+  const builder = requiredElement<HTMLElement>(root, ".atom-builder");
+  const momentBox = requiredElement<HTMLElement>(root, "#mission-moment");
+  const ionBox = requiredElement<HTMLElement>(root, "#ion-badge");
+  let lastMoment: MomentSnapshot | null = null;
+  let momentTimer = 0;
+  const showMoment = (tone: "mission" | "lesson" | "ion", eyebrow: string, title: string, line: string): void => {
+    setText(root, "#moment-eyebrow", eyebrow);
+    setText(root, "#moment-title", title);
+    setText(root, "#moment-line", line);
+    momentBox.dataset.tone = tone;
+    momentBox.hidden = false;
+    // Restart the entrance animation for back-to-back moments.
+    momentBox.classList.remove("is-playing");
+    void momentBox.offsetWidth;
+    momentBox.classList.add("is-playing");
+    window.clearTimeout(momentTimer);
+    if (xrSceneBanner && tone !== "ion") {
+      renderer.showXrBanner(
+        { eyebrow, title, line, accent: tone === "lesson" ? "#ffd36b" : "#6ff3ff" },
+        tone === "lesson" ? 4200 : 3200,
+      );
+    }
+    momentTimer = window.setTimeout(() => {
+      momentBox.hidden = true;
+      momentBox.classList.remove("is-playing");
+    }, tone === "lesson" ? 4200 : 3000);
+  };
+  const applyMoments = (state: Readonly<AtomBuilderLearningState>, symbol: string | undefined, charge: number): void => {
+    const progress = Object.entries(state.missionProgress);
+    const completed = progress.filter(([, item]) => item.status === "completed").map(([id]) => id);
+    const attempts = progress.reduce((sum, [, item]) => sum + item.attempts, 0);
+    const missionIndex = manifest.missions.findIndex((mission) => mission.id === state.activeMissionId);
+    const finished = state.mode === "mission" && state.activeMissionId === null && completed.length === manifest.missions.length;
+    const next: MomentSnapshot = {
+      missionIndex,
+      completed,
+      misses: attempts - completed.length,
+      hints: progress.reduce((sum, [, item]) => sum + item.hintsUsed, 0),
+      answered: state.questionsAnswered,
+      correct: state.questionsCorrect,
+      finished,
+      charge,
+    };
+    // The sky takes each mission's colour (see atom-builder-cosmic.css).
+    builder.dataset.mission = state.mode === "free-play" ? "free" : finished ? "done" : String(Math.max(1, missionIndex + 1));
+
+    const badge = ionBadge(symbol, charge);
+    ionBox.hidden = badge === null;
+    ionBox.dataset.sign = charge > 0 ? "positive" : "negative";
+    setText(root, "#ion-label", badge?.label ?? "");
+    setText(root, "#ion-detail", badge?.detail ?? "");
+
+    if (lastMoment) {
+      for (const moment of missionMoments(lastMoment, next)) {
+        switch (moment.kind) {
+          case "mission-complete": {
+            const mission = manifest.missions.find((item) => item.id === moment.missionId);
+            showMoment("mission", "MISSION COMPLETE", mission?.title ?? "Goal met", "Answer the questions to continue.");
+            sound?.arrive();
+            sound?.chord([79, 83, 86, 90, 93], { spreadSeconds: 0.08, gain: 0.045 });
+            break;
+          }
+          case "lesson-complete":
+            showMoment("lesson", "ALL MISSIONS COMPLETE", "You finished every mission", "Explore freely, or head back to your universe.");
+            sound?.arrive();
+            sound?.chord([67, 74, 79, 83, 86, 91, 95], { spreadSeconds: 0.11, gain: 0.05 });
+            break;
+          case "answer":
+            sound?.cue(moment.correct ? "confirm" : "deny");
+            break;
+          case "check-miss":
+            sound?.cue("deny");
+            break;
+          case "hint":
+            sound?.cue("open");
+            break;
+          case "ion":
+            if (badge) {
+              ionBox.classList.remove("is-new");
+              void ionBox.offsetWidth;
+              ionBox.classList.add("is-new");
+            }
+            sound?.chord(moment.charge > 0 ? [74, 81] : [69, 76], { spreadSeconds: 0.12, gain: 0.04 });
+            break;
+        }
+      }
+    }
+    lastMoment = next;
+  };
+
   const renderState = (state: Readonly<AtomBuilderLearningState>): void => {
     const chemistry = state.chemistry;
+    playChanges(chemistry);
     const element = elementByAtomicNumber(chemistry.protons);
     const electrons = chemistry.shells.reduce((sum, count) => sum + count, 0);
     setText(root, "#proton-count", String(chemistry.protons));
@@ -502,6 +643,7 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
     // The light behind the atom follows the outer shell: dim, restless violet, or calm cyan.
     sceneHost.dataset.outerShell = outerShellState(chemistry.shells);
     renderLearningState(root, state, assessmentItems, assessmentsById, lastHintText);
+    applyMoments(state, element?.symbol, calculateCharge(chemistry.protons, electrons));
     refreshXrLesson();
   };
 
@@ -667,6 +809,8 @@ export function mountAtomBuilder(root: HTMLElement, options: AtomBuilderOptions 
   store.dispatch({ type: "mission/start", payload: { missionId: manifest.missions[0]?.id ?? "" } });
 
   return () => {
+    sound?.setDuck(0);
+    window.clearTimeout(momentTimer);
     disposeZoomControls();
     input?.dispose();
     unsubscribe();

@@ -28,6 +28,7 @@ export const experiments: readonly Experiment[] = [
           diagnostics: import.meta.env.DEV,
           worldOptions: projectOptions,
           onExit: context.onExit,
+          ...(context.sound ? { sound: context.sound } : {}),
         });
       };
     },
