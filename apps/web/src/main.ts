@@ -13,6 +13,12 @@ import { sameRoute } from "./stage/transitions.js";
 import { mountDashboard } from "./views/dashboard.js";
 import { mountLogin } from "./views/login.js";
 import type { Screen } from "./views/screen.js";
+import { reloadForStaleBuild } from "./stale-build.js";
+
+// Vite reports a failed chunk preload here; recover the same way as a failed lesson load.
+window.addEventListener("vite:preloadError", (event) => {
+  if (recoverFromStaleBuild((event as Event & { payload?: unknown }).payload)) event.preventDefault();
+});
 
 const appRoot = document.querySelector<HTMLElement>("#app");
 
@@ -191,7 +197,22 @@ function startApp(): void {
   schedule();
 }
 
+/** After a redeploy, an open page may ask for code that no longer exists: reload once to fix it. */
+function recoverFromStaleBuild(error: unknown): boolean {
+  return reloadForStaleBuild(error, { storage: readSessionStorage(), now: Date.now(), reload: () => window.location.reload() });
+}
+
+/** `sessionStorage`, or null where the browser blocks it. */
+function readSessionStorage(): Storage | null {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
 function showLoadError(error: unknown, title = "This page"): void {
+  if (recoverFromStaleBuild(error)) return;
   app.replaceChildren();
   const wrapper = document.createElement("div");
   wrapper.className = "shell-error";
