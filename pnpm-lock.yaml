@@ -115,6 +115,9 @@ importers:
 
   modules/bio-cell-explorer:
     dependencies:
+      '@mma/engine-ambience':
+        specifier: workspace:*
+        version: link:../../packages/engine-ambience
       '@mma/engine-assess':
         specifier: workspace:*
         version: link:../../packages/engine-assess
@@ -127,6 +130,9 @@ importers:
       '@mma/engine-render':
         specifier: workspace:*
         version: link:../../packages/engine-render
+      '@mma/engine-ui':
+        specifier: workspace:*
+        version: link:../../packages/engine-ui
       '@mma/engine-voice':
         specifier: workspace:*
         version: link:../../packages/engine-voice

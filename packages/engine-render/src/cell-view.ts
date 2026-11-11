@@ -74,8 +74,12 @@ export interface CellSceneFrame {
 
 /** Options for {@link CellView}. */
 export interface CellViewOptions {
-  /** `low` uses fewer polygons, for phones. Defaults to `high`. */
+  /** `low` uses fewer polygons and moves fewer small parts, for phones. Defaults to `high`. */
   readonly quality?: "high" | "low";
+  /** Keep everything still: no swaying, breathing or pulsing highlight. */
+  readonly reducedMotion?: boolean;
+  /** Milliseconds clock for the living motion, read each time the scene is drawn. Defaults to `performance.now`. */
+  readonly now?: () => number;
 }
 
 /** Pick target for a structure inside one cell (for example its mitochondria). */
@@ -131,8 +135,58 @@ const COLOR = {
   stroma: 0xd8f0bc,
   grana: 0x2c7a2e,
   lamella: 0x3f8f39,
-  highlight: 0xffd23f,
+  /** Magenta sits opposite the greens and oranges of the cells, so the highlight always stands out. */
+  highlight: 0xe0218a,
+  /** Everything else fades towards this pale tone while something is highlighted. */
+  dim: 0xf3f7f0,
 } as const;
+
+/** Outline width as a share of the viewing distance, so it looks the same size at any zoom. */
+const OUTLINE_WIDTH = 0.0065;
+/** How far the rest of the cell fades while something is highlighted (0 = not at all). */
+const DIM_AMOUNT = 0.42;
+
+const OUTLINE_VERTEX = /* glsl */ `
+uniform float uWidth;
+void main() {
+  vec4 local = vec4(position, 1.0);
+  vec3 bent = normal;
+  #ifdef USE_INSTANCING
+    local = instanceMatrix * local;
+    bent = mat3(instanceMatrix) * bent;
+  #endif
+  vec4 view = modelViewMatrix * local;
+  // Push the back faces out along the normal by a share of the distance: an even outline.
+  view.xyz += normalize(normalMatrix * bent) * uWidth * max(0.25, -view.z);
+  gl_Position = projectionMatrix * view;
+}
+`;
+
+const OUTLINE_FRAGMENT = /* glsl */ `
+uniform vec3 uColor;
+uniform float uOpacity;
+void main() {
+  gl_FragColor = vec4(uColor, uOpacity);
+}
+`;
+
+/** Gentle sway of one instanced batch of organelles, so the cell looks alive. */
+interface SwayingBatch {
+  readonly mesh: THREE.InstancedMesh;
+  readonly items: readonly {
+    readonly position: THREE.Vector3;
+    readonly rotation: THREE.Quaternion;
+    readonly scale: THREE.Vector3;
+    readonly phase: number;
+    readonly spin: THREE.Vector3;
+  }[];
+  /** Largest drift, in content units. */
+  readonly drift: number;
+  /** Instances that ride inside another batch's instances (grana inside chloroplasts). */
+  readonly follow?: { readonly parent: SwayingBatch; readonly parentIndex: readonly number[]; readonly local: readonly THREE.Matrix4[] };
+  /** Matrices from the last animation step, read by followers. */
+  current: THREE.Matrix4[];
+}
 
 /** Wedge left open by a cut-away, in radians. */
 const CUTAWAY_GAP = Math.PI * 0.62;
@@ -141,6 +195,9 @@ const ALONG = new THREE.Vector3(1, 0, 0);
 
 interface Highlightable {
   readonly material: THREE.MeshStandardMaterial;
+  /** A see-through shell (wall, membrane, vacuole): highlighted by its rim, never filled in. */
+  readonly shell: boolean;
+  readonly color: THREE.Color;
   readonly emissive: THREE.Color;
   readonly emissiveIntensity: number;
   readonly opacity: number;
@@ -153,6 +210,11 @@ interface Highlightable {
  * models of a mitochondrion or chloroplast, cut open to show their parts. Every structure
  * is a pick target ({@link cellOrganelleTarget}, {@link organelleDetailTarget}); the see-
  * through shells (wall, membrane, vacuole) yield to anything picked inside them.
+ *
+ * The highlighted structure gets a pulsing magenta outline and glow while the rest fades
+ * back. The cells look alive: organelles sway, cells breathe and opened models float, a
+ * little each time the scene is drawn (also in XR). Motion is view-only and never moves a
+ * structure far from its place; reduced motion keeps everything still.
  */
 export class CellView implements SceneContent {
   readonly root = new THREE.Group();
@@ -164,10 +226,46 @@ export class CellView implements SceneContent {
   private frame: CellSceneFrame | null = null;
   private highlightTarget: string | null = null;
   private unitSphere: THREE.BufferGeometry | null = null;
+  private readonly lowQuality: boolean;
+  private readonly reducedMotion: boolean;
+  private readonly now: () => number;
+  /** Drawn objects of each pick target, for outlining. */
+  private readonly targetObjects = new Map<string, THREE.Mesh[]>();
+  private readonly outlineMaterial = new THREE.ShaderMaterial({
+    uniforms: { uColor: { value: new THREE.Color(COLOR.highlight) }, uOpacity: { value: 0.95 }, uWidth: { value: OUTLINE_WIDTH } },
+    vertexShader: OUTLINE_VERTEX,
+    fragmentShader: OUTLINE_FRAGMENT,
+    side: THREE.BackSide,
+    transparent: true,
+    depthWrite: false,
+  });
+  private outlines: THREE.Mesh[] = [];
+  private swaying: SwayingBatch[] = [];
+  private breathing: { readonly object: THREE.Object3D; readonly amount: number; readonly phase: number }[] = [];
+  private floating: { readonly object: THREE.Object3D; readonly base: THREE.Vector3; readonly rise: number; readonly phase: number }[] = [];
+  private lastAnimated: number | null = null;
+  /** Invisible mesh whose draw call advances the motion once per rendered frame. */
+  private readonly driver: THREE.Mesh;
 
   constructor(options: CellViewOptions = {}) {
-    this.segments = options.quality === "low" ? 20 : 36;
+    this.lowQuality = options.quality === "low";
+    this.segments = this.lowQuality ? 20 : 36;
+    this.reducedMotion = options.reducedMotion ?? false;
+    this.now = options.now ?? (() => performance.now());
     this.root.name = "cell-root";
+    const driverGeometry = new THREE.BufferGeometry();
+    driverGeometry.setAttribute("position", new THREE.Float32BufferAttribute([0, 0, 0, 0, 0, 0, 0, 0, 0], 3));
+    this.driver = new THREE.Mesh(driverGeometry, new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false }));
+    this.driver.name = "cell-motion-driver";
+    this.driver.frustumCulled = false;
+    this.driver.raycast = () => undefined;
+    this.driver.onBeforeRender = () => {
+      const time = this.now();
+      // Both eyes of a stereo frame share one step.
+      if (this.lastAnimated !== null && Math.abs(time - this.lastAnimated) < 1) return;
+      this.lastAnimated = time;
+      this.animate(time);
+    };
   }
 
   /** The latest frame, or null before the first update. */
@@ -201,7 +299,55 @@ export class CellView implements SceneContent {
       if (detail.organelle === "mitochondrion") this.drawMitochondrionDetail(detail);
       else this.drawChloroplastDetail(detail);
     }
+    this.root.add(this.driver);
     this.applyHighlight();
+    this.animate(this.lastAnimated ?? 0);
+  }
+
+  /**
+   * Advance the living motion and the highlight pulse to `timeMs`. Called each time the scene
+   * is drawn; call it directly to show a given moment. With reduced motion everything rests.
+   */
+  animate(timeMs: number): void {
+    const t = this.reducedMotion ? 0 : timeMs / 1000;
+    const still = this.reducedMotion;
+    // Every wave is measured from its start, so at time 0 (and with reduced motion) all rests in place.
+    const wave = (speed: number, phase: number): number => Math.sin(t * speed + phase) - Math.sin(phase);
+    for (const breath of this.breathing) {
+      const k = still ? 0 : breath.amount;
+      breath.object.scale.set(1 + k * wave(0.9, breath.phase), 1 + k * wave(0.9, breath.phase + 1.3), 1 + k * wave(0.9, breath.phase + 2.6));
+    }
+    for (const float of this.floating) {
+      const k = still ? 0 : float.rise;
+      float.object.position.set(float.base.x, float.base.y + k * wave(0.8, float.phase), float.base.z);
+      float.object.rotation.z = still ? 0 : 0.04 * wave(0.5, float.phase);
+    }
+    const offset = new THREE.Vector3();
+    const turn = new THREE.Quaternion();
+    const rotation = new THREE.Quaternion();
+    for (const batch of this.swaying) {
+      if (batch.follow) {
+        const { parent, parentIndex, local } = batch.follow;
+        batch.current = local.map((matrix, index) => (parent.current[parentIndex[index] as number] ?? new THREE.Matrix4()).clone().multiply(matrix));
+      } else {
+        batch.current = batch.items.map((item) => {
+          const k = still ? 0 : batch.drift;
+          offset.set(wave(0.7, item.phase), wave(0.55, item.phase * 1.7), wave(0.63, item.phase * 2.3)).multiplyScalar(k);
+          turn.setFromAxisAngle(item.spin, still ? 0 : 0.2 * wave(0.45, item.phase));
+          rotation.copy(item.rotation).premultiply(turn);
+          return new THREE.Matrix4().compose(offset.add(item.position), rotation, item.scale);
+        });
+      }
+      batch.current.forEach((matrix, index) => batch.mesh.setMatrixAt(index, matrix));
+      batch.mesh.instanceMatrix.needsUpdate = true;
+    }
+    // The highlight breathes too, so the eye finds it.
+    const pulse = still ? 1 : 0.5 + 0.5 * Math.sin(timeMs / 1000 * 4.2);
+    const uniforms = this.outlineMaterial.uniforms as { uWidth: { value: number }; uOpacity: { value: number } };
+    uniforms.uWidth.value = OUTLINE_WIDTH * (0.8 + 0.45 * pulse);
+    uniforms.uOpacity.value = 0.7 + 0.3 * pulse;
+    const lit = this.highlightTarget ? this.targets.get(this.highlightTarget) : undefined;
+    for (const entry of lit ?? []) entry.material.emissiveIntensity = (entry.shell ? 0.1 : 0.28) + (entry.shell ? 0.12 : 0.3) * pulse;
   }
 
   setHighlight(target: string | null): void {
@@ -214,6 +360,9 @@ export class CellView implements SceneContent {
 
   dispose(): void {
     this.clear();
+    this.outlineMaterial.dispose();
+    this.driver.geometry.dispose();
+    (this.driver.material as THREE.Material).dispose();
     this.root.removeFromParent();
   }
 
@@ -226,6 +375,8 @@ export class CellView implements SceneContent {
     this.root.add(group);
     const target = (organelle: string) => cellOrganelleTarget(cell.id, organelle);
     const plant = cell.body.shape === "rounded-box";
+    // A soft animal cell breathes more than a plant cell held in its wall.
+    this.breathing.push({ object: group, amount: plant ? 0.005 : 0.016, phase: cell.body.seed % 7 });
     const { size, wallThickness } = cell.body;
 
     if (plant) {
@@ -295,6 +446,7 @@ export class CellView implements SceneContent {
     holder.position.set(position.x, position.y, position.z);
     holder.add(nucleolus, envelope);
     group.add(holder);
+    this.floating.push({ object: holder, base: holder.position.clone(), rise: radius * 0.03, phase: cell.body.seed % 5 });
   }
 
   /** Folded sheets wrapped part-way round the nucleus, studded with ribosomes. */
@@ -366,14 +518,33 @@ export class CellView implements SceneContent {
       list.push(organelle);
       byKind.set(organelle.organelle, list);
     }
+    const random = seededRandom(cell.body.seed + 29);
     for (const [kind, organelles] of byKind) {
       const { geometry, material } = this.scatteredLook(kind);
       const batch = this.instanced(geometry, material, organelles.length, target(kind));
       batch.name = `cell-${cell.id}-${kind}`;
-      organelles.forEach((organelle, index) => batch.setMatrixAt(index, placement(organelle)));
+      const matrices = organelles.map(placement);
+      matrices.forEach((matrix, index) => batch.setMatrixAt(index, matrix));
       group.add(batch);
-      if (kind === "chloroplast") group.add(this.chloroplastGrana(cell, organelles, target(kind)));
+      // Phones skip moving the many tiny ribosomes.
+      const sway = kind === "ribosome" && this.lowQuality ? null : this.addSway(batch, matrices, SWAY_DRIFT[kind], random);
+      if (kind === "chloroplast") group.add(this.chloroplastGrana(cell, organelles, target(kind), sway));
     }
+  }
+
+  /** Make an instanced batch drift and turn gently around its placements. */
+  private addSway(mesh: THREE.InstancedMesh, matrices: readonly THREE.Matrix4[], drift: number, random: () => number): SwayingBatch {
+    const items = matrices.map((matrix) => {
+      const position = new THREE.Vector3();
+      const rotation = new THREE.Quaternion();
+      const scale = new THREE.Vector3();
+      matrix.decompose(position, rotation, scale);
+      const spin = new THREE.Vector3(random() * 2 - 1, random() * 2 - 1, random() * 2 - 1).normalize();
+      return { position, rotation, scale, phase: random() * Math.PI * 2, spin };
+    });
+    const batch: SwayingBatch = { mesh, items, drift, current: matrices.map((matrix) => matrix.clone()) };
+    this.swaying.push(batch);
+    return batch;
   }
 
   private scatteredLook(kind: CellSceneOrganelleKind): { geometry: THREE.BufferGeometry; material: THREE.Material } {
@@ -398,20 +569,26 @@ export class CellView implements SceneContent {
     }
   }
 
-  /** Dark grana showing through each small chloroplast. */
-  private chloroplastGrana(cell: CellSceneCell, chloroplasts: readonly CellSceneOrganelle[], target: string): THREE.InstancedMesh {
+  /** Dark grana showing through each small chloroplast; they ride along as the chloroplasts sway. */
+  private chloroplastGrana(cell: CellSceneCell, chloroplasts: readonly CellSceneOrganelle[], target: string, sway: SwayingBatch | null): THREE.InstancedMesh {
     const spots = [-0.26, 0, 0.26];
     const geometry = this.own(new THREE.CylinderGeometry(0.5, 0.5, 1, 10));
     const batch = this.instanced(geometry, this.solid(COLOR.grana, { roughness: 0.6 }), chloroplasts.length * spots.length, target);
     batch.name = `cell-${cell.id}-chloroplast-grana`;
-    const local = new THREE.Matrix4();
+    const locals: THREE.Matrix4[] = [];
+    const parentIndex: number[] = [];
     chloroplasts.forEach((chloroplast, index) => {
       const outer = placement(chloroplast);
       spots.forEach((spot, offset) => {
-        local.compose(new THREE.Vector3(spot, 0, 0), new THREE.Quaternion(), new THREE.Vector3(0.16, 0.55, 0.32));
+        const local = new THREE.Matrix4().compose(new THREE.Vector3(spot, 0, 0), new THREE.Quaternion(), new THREE.Vector3(0.16, 0.55, 0.32));
+        locals.push(local);
+        parentIndex.push(index);
         batch.setMatrixAt(index * spots.length + offset, outer.clone().multiply(local));
       });
     });
+    if (sway) {
+      this.swaying.push({ mesh: batch, items: [], drift: 0, follow: { parent: sway, parentIndex, local: locals }, current: [] });
+    }
     return batch;
   }
 
@@ -507,11 +684,16 @@ export class CellView implements SceneContent {
   }
 
   private detailHolder(detail: CellSceneDetail): THREE.Group {
+    // The floating part moves; the holder keeps the model's place and turn.
+    const anchor = new THREE.Group();
+    anchor.name = `detail-${detail.id}-place`;
+    anchor.position.set(detail.position.x, detail.position.y, detail.position.z);
+    anchor.rotation.y = detail.yaw;
     const holder = new THREE.Group();
     holder.name = `detail-${detail.id}`;
-    holder.position.set(detail.position.x, detail.position.y, detail.position.z);
-    holder.rotation.y = detail.yaw;
-    this.root.add(holder);
+    anchor.add(holder);
+    this.root.add(anchor);
+    this.floating.push({ object: holder, base: new THREE.Vector3(), rise: detail.length * 0.012, phase: detail.length * 7 });
     return holder;
   }
 
@@ -644,28 +826,70 @@ export class CellView implements SceneContent {
     object.userData.interactionTarget = target;
     if (backdrop) object.userData.pickBackdrop = true;
     this.picks.push(object);
+    const objects = this.targetObjects.get(target) ?? [];
+    objects.push(object);
+    this.targetObjects.set(target, objects);
     const list = this.targets.get(target) ?? [];
     if (!list.some((entry) => entry.material === material)) {
-      list.push({ material, emissive: material.emissive.clone(), emissiveIntensity: material.emissiveIntensity, opacity: material.opacity });
+      list.push({
+        material,
+        shell: material.transparent && !material.depthWrite,
+        color: material.color.clone(),
+        emissive: material.emissive.clone(),
+        emissiveIntensity: material.emissiveIntensity,
+        opacity: material.opacity,
+      });
     }
     this.targets.set(target, list);
   }
 
+  /** Outline and light the highlighted structure, and fade everything else back. */
   private applyHighlight(): void {
+    for (const outline of this.outlines) outline.removeFromParent();
+    this.outlines = [];
+    const active = this.highlightTarget !== null && this.targets.has(this.highlightTarget);
+    const dim = new THREE.Color(COLOR.dim);
+    const glow = new THREE.Color(COLOR.highlight);
     for (const [target, entries] of this.targets) {
       const on = target === this.highlightTarget;
       for (const entry of entries) {
-        entry.material.emissive.copy(on ? new THREE.Color(COLOR.highlight) : entry.emissive);
-        entry.material.emissiveIntensity = on ? 0.45 : entry.emissiveIntensity;
-        entry.material.opacity = on ? Math.min(1, entry.opacity + 0.2) : entry.opacity;
+        const material = entry.material;
+        material.color.copy(entry.color);
+        if (active && !on) material.color.lerp(dim, DIM_AMOUNT);
+        material.emissive.copy(on ? glow : entry.emissive);
+        material.emissiveIntensity = on ? (entry.shell ? 0.18 : 0.5) : entry.emissiveIntensity;
+        material.opacity = on ? Math.min(1, entry.opacity + (entry.shell ? 0.08 : 0.25)) : active ? entry.opacity * 0.6 : entry.opacity;
+        // A lit shell writes depth, so its outline shows only at the rim and not through it.
+        if (entry.shell) material.depthWrite = on;
       }
+    }
+    if (!active) return;
+    for (const object of this.targetObjects.get(this.highlightTarget as string) ?? []) {
+      const outline = object instanceof THREE.InstancedMesh
+        ? Object.assign(new THREE.InstancedMesh(object.geometry, this.outlineMaterial, object.count), { instanceMatrix: object.instanceMatrix })
+        : new THREE.Mesh(object.geometry, this.outlineMaterial);
+      if (outline instanceof THREE.InstancedMesh) outline.count = (object as THREE.InstancedMesh).count;
+      outline.name = "cell-highlight-outline";
+      outline.frustumCulled = false;
+      outline.raycast = () => undefined;
+      outline.renderOrder = 4;
+      object.add(outline);
+      this.outlines.push(outline);
     }
   }
 
   private clear(): void {
+    // Outlines share their batch's matrices, so they are only detached, never disposed.
+    for (const outline of this.outlines) outline.removeFromParent();
+    this.outlines = [];
     this.root.traverse((object) => {
       if (object instanceof THREE.InstancedMesh) object.dispose();
     });
+    this.driver.removeFromParent();
+    this.targetObjects.clear();
+    this.swaying = [];
+    this.breathing = [];
+    this.floating = [];
     for (const child of [...this.root.children]) child.removeFromParent();
     for (const geometry of this.geometries) geometry.dispose();
     for (const material of this.materials) material.dispose();
@@ -676,6 +900,14 @@ export class CellView implements SceneContent {
     this.targets.clear();
   }
 }
+
+/** How far each kind of scattered organelle drifts as it sways, in content units. */
+const SWAY_DRIFT: Readonly<Record<CellSceneOrganelleKind, number>> = {
+  mitochondrion: 0.045,
+  chloroplast: 0.032,
+  lysosome: 0.05,
+  ribosome: 0.035,
+};
 
 /** Transform for a scattered organelle: unit shapes stretched to size, length along its axis. */
 function placement(organelle: CellSceneOrganelle): THREE.Matrix4 {

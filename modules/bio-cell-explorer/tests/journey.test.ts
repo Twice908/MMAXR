@@ -76,7 +76,8 @@ describe("Cell Explorer content", () => {
   });
 
   it("speaks every beat: one journey cue each, whose script matches the caption", async () => {
-    const cues = new Map((manifest.narration?.cues ?? []).map((cue) => [cue.id, cue]));
+    // Cues starting "answer-" read out a scored question's correct answer, not a beat.
+    const cues = new Map((manifest.narration?.cues ?? []).filter((cue) => !cue.id.startsWith("answer-")).map((cue) => [cue.id, cue]));
     const beats = journey.chapters.flatMap((chapter) => chapter.beats);
     expect(cues.size).toBe(beats.length);
     for (const beat of beats) {
